@@ -145,8 +145,7 @@ def _expire_stale_digest_if_needed():
     if age_seconds < expiry_hours * 3600:
         return
 
-    firestore_service.update_batch_status(batch_id, "skipped")
-    firestore_service.set_pipeline_state(batch_id, "skipped")
+    firestore_service.set_pipeline_and_batch_state(batch_id, "skipped")
 
 
 def send_daily_digest():
@@ -256,8 +255,7 @@ def retry_failed_pipeline() -> str | None:
     firestore_service.save_news_batch(batch_id, (genre or "general").lower(), {
         code: {"code": code, "headline": topic, "context": details, "rating": 4.5, "genre": genre}
     })
-    firestore_service.update_batch_status(batch_id, "processing")
-    firestore_service.set_pipeline_state(batch_id, "processing")
+    firestore_service.set_pipeline_and_batch_state(batch_id, "processing")
 
     from app.agents import whatsapp_agent
     task_name = whatsapp_agent._task_name(batch_id, code)
@@ -270,8 +268,7 @@ def retry_failed_pipeline() -> str | None:
         public_id=public_id, genre=genre, details=details, source="retry",
     )
     if not enqueued:
-        firestore_service.update_batch_status(batch_id, "failed")
-        firestore_service.set_pipeline_state(batch_id, "failed")
+        firestore_service.set_pipeline_and_batch_state(batch_id, "failed")
         return None
 
     return batch_id
@@ -295,6 +292,7 @@ def run() -> str | None:
     domain_results: dict[str, list[dict]] = {}
 
     top_performers = firestore_service.get_top_performers(n=3)
+    recently_covered = firestore_service.get_recently_suggested_headlines(days=14, limit=20)
 
     for domain, cfg in domains.items():
         # One search call per domain (sorted by publishedAt already covers top headlines).
@@ -311,7 +309,7 @@ def run() -> str | None:
         if not candidates:
             domain_results[domain] = []
             continue
-        rated = rate_and_select_news(candidates, top_performers=top_performers)[:5]
+        rated = rate_and_select_news(candidates, top_performers=top_performers, recently_covered=recently_covered)[:5]
         enriched = []
         for item in rated:
             h = item.get("headline", "")
@@ -343,15 +341,31 @@ def run() -> str | None:
     today_posted = firestore_service.get_domains_posted_today()
     missing_domains = [d for d in domains.keys() if d.lower() not in today_posted]
 
+    # Weekly genre performance — avg views per genre over last 7 days.
+    # Used to weight domain selection probability; every missing domain stays eligible.
+    genre_perf = firestore_service.get_genre_performance_weekly()
+    # Baseline weight 1.0 ensures domains with no history are always selectable.
+    # Add 1.0 to the avg-view score so even a 0-view genre gets weight 1.0, not 0.
+    _BASE = 1.0
+
     selected_domain = ""
     selected_item = None
     import random
-    for d in random.sample(missing_domains, len(missing_domains)):
-        if domain_results.get(d):
-            selected_domain = d
-            selected_item = domain_results[d][0]
+
+    # Phase 1: weighted selection from domains not yet posted today (mandatory coverage).
+    # Build a weighted-shuffle by repeatedly picking with weights, without replacement.
+    pool = [(d, _BASE + genre_perf.get(d.lower(), 0.0)) for d in missing_domains]
+    while pool:
+        domains_list, w_list = zip(*pool)
+        pick = random.choices(domains_list, weights=w_list, k=1)[0]
+        pool = [(d, w) for d, w in pool if d != pick]
+        if domain_results.get(pick):
+            selected_domain = pick
+            selected_item = domain_results[pick][0]
             break
 
+    # Phase 2: all domains covered today — pick extra video weighted by
+    # blended score (rigorous_score * genre performance multiplier).
     if not selected_item:
         all_candidates = []
         for d, rows in domain_results.items():
@@ -359,9 +373,11 @@ def run() -> str | None:
                 all_candidates.append((d, rows[0]))
         if not all_candidates:
             return None
+        perf_max = max(genre_perf.values(), default=1.0) or 1.0
         selected_domain, selected_item = sorted(
             all_candidates,
-            key=lambda pair: pair[1].get("rigorous_score", 0),
+            key=lambda pair: pair[1].get("rigorous_score", 0)
+            * (1 + genre_perf.get(pair[0].lower(), 0.0) / perf_max),
             reverse=True,
         )[0]
 
@@ -372,8 +388,7 @@ def run() -> str | None:
     items = _assign_codes(domain_results.get(selected_domain, [selected_item]), prefix)
 
     firestore_service.save_news_batch(batch_id, selected_domain.lower(), items)
-    firestore_service.update_batch_status(batch_id, "processing")
-    firestore_service.set_pipeline_state(batch_id, "processing")
+    firestore_service.set_pipeline_and_batch_state(batch_id, "processing")
 
     from app.agents import whatsapp_agent
     task_name = whatsapp_agent._task_name(batch_id, code)  # shared deterministic id
@@ -403,8 +418,7 @@ def run() -> str | None:
         source="researcher",
     )
     if not enqueued:
-        firestore_service.update_batch_status(batch_id, "failed")
-        firestore_service.set_pipeline_state(batch_id, "failed")
+        firestore_service.set_pipeline_and_batch_state(batch_id, "failed")
         return None
 
     firestore_service.mark_headline_suggested(

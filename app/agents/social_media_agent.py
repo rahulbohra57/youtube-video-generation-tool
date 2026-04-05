@@ -94,7 +94,6 @@ def _finalize_pipeline_state(job_id: str):
         state = firestore_service.get_pipeline_state()
         batch_id = state.get("active_batch_id")
         if batch_id:
-            firestore_service.update_batch_status(batch_id, "completed")
-            firestore_service.set_pipeline_state(batch_id, "completed")
+            firestore_service.set_pipeline_and_batch_state(batch_id, "completed")
     except Exception as e:
         logger.warning(f"Failed to finalize pipeline state: {e}")

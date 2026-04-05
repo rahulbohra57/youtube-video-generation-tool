@@ -2,7 +2,7 @@
 
 from google.cloud import firestore
 from google.api_core.exceptions import AlreadyExists
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import hashlib
 
 _db = None
@@ -41,6 +41,25 @@ def set_pipeline_state(batch_id: str, state: str):
     })
 
 
+def set_pipeline_and_batch_state(batch_id: str, state: str):
+    """Atomically update pipeline_state and news_batches status in a single Firestore batch write."""
+    db = _get_db()
+    wb = db.batch()
+    wb.update(
+        db.collection("news_batches").document(batch_id),
+        {"status": state},
+    )
+    wb.set(
+        db.collection("pipeline_state").document("current"),
+        {
+            "active_batch_id": batch_id,
+            "last_run_at": datetime.now(timezone.utc).isoformat(),
+            "state": state,
+        },
+    )
+    wb.commit()
+
+
 def get_pipeline_state() -> dict:
     doc = _get_db().collection("pipeline_state").document("current").get()
     return doc.to_dict() if doc.exists else {}
@@ -61,10 +80,11 @@ def _parse_iso(ts: str | None) -> datetime | None:
         return None
 
 
-def acquire_video_lock(owner: str, ttl_seconds: int = 1800) -> bool:
+def acquire_video_lock(owner: str, ttl_seconds: int = 1800, force: bool = False) -> bool:
     """Acquire a cross-instance video generation lock.
 
     Returns True only when this caller owns the lock.
+    When force=True, unconditionally overwrites any existing lock (used by force_run).
     """
     db = _get_db()
     doc_ref = db.collection("locks").document("video_generation")
@@ -75,6 +95,10 @@ def acquire_video_lock(owner: str, ttl_seconds: int = 1800) -> bool:
         "acquired_at": now.isoformat(),
         "expires_at": expires_at,
     }
+
+    if force:
+        doc_ref.set(payload)
+        return True
 
     try:
         doc_ref.create(payload)
@@ -139,10 +163,22 @@ def _headline_key(headline: str) -> str:
     return hashlib.sha1(normalized.encode("utf-8")).hexdigest()
 
 
-def is_headline_already_suggested(headline: str) -> bool:
+def is_headline_already_suggested(headline: str, ttl_days: int = 14) -> bool:
+    """Return True only if this headline was suggested within the last ttl_days.
+
+    Headlines older than ttl_days are treated as fresh so the topic can be
+    revisited if there's a new development.
+    """
     key = _headline_key(headline)
     doc = _get_db().collection("suggested_headlines").document(key).get()
-    return bool(doc.exists)
+    if not doc.exists:
+        return False
+    data = doc.to_dict() or {}
+    suggested_at = _parse_iso(data.get("suggested_at"))
+    if suggested_at is None:
+        return True  # legacy doc without timestamp — treat as still blocked
+    age_days = (_utc_now() - suggested_at).total_seconds() / 86400
+    return age_days < ttl_days
 
 
 def mark_headline_suggested(headline: str, genre: str = ""):
@@ -152,6 +188,31 @@ def mark_headline_suggested(headline: str, genre: str = ""):
         "genre": genre,
         "suggested_at": datetime.now(timezone.utc).isoformat(),
     }, merge=True)
+
+
+def get_recently_suggested_headlines(days: int = 14, limit: int = 20) -> list[str]:
+    """Return headlines suggested within the last `days` days, newest first.
+
+    Used to detect content fatigue — passed to the LLM so it can penalize
+    articles that cover the same story as something recently produced.
+    """
+    try:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        docs = (
+            _get_db()
+            .collection("suggested_headlines")
+            .where("suggested_at", ">=", cutoff)
+            .order_by("suggested_at", direction=firestore.Query.DESCENDING)
+            .limit(limit)
+            .stream()
+        )
+        return [
+            (d.to_dict() or {}).get("headline", "")
+            for d in docs
+            if (d.to_dict() or {}).get("headline")
+        ]
+    except Exception:
+        return []
 
 
 def create_or_update_job(job_id: str, payload: dict):
@@ -568,3 +629,31 @@ def mark_domain_posted_today(domain: str, job_id: str = "", headline: str = ""):
         )
     except Exception:
         return
+
+
+def get_genre_performance_weekly() -> dict[str, float]:
+    """Return average view_count per genre over the last 7 days.
+
+    Only considers completed jobs that have analytics data.
+    Returns {genre_lower: avg_views}. Genres with no data are absent from the dict.
+    """
+    try:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        docs = (
+            _get_db()
+            .collection("jobs")
+            .where("status", "==", "completed")
+            .where("updated_at", ">=", cutoff)
+            .stream()
+        )
+        totals: dict[str, list[int]] = {}
+        for d in docs:
+            data = d.to_dict() or {}
+            genre = (data.get("genre") or "").strip().lower()
+            analytics = data.get("analytics") or {}
+            views = int(analytics.get("view_count", 0))
+            if genre:
+                totals.setdefault(genre, []).append(views)
+        return {g: sum(v) / len(v) for g, v in totals.items()}
+    except Exception:
+        return {}

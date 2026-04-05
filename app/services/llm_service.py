@@ -117,7 +117,7 @@ VISUAL PROMPT RULES:
 - Avoid copyrighted fictional characters/franchises (e.g., superheroes, movie/cartoon characters, game mascots), trademarked logos, or branded products.
 
 FACTUAL / COPYRIGHT SAFETY:
-- TODAY'S DATE: {today_str}. Never present a past event as if it just happened.
+- TODAY'S DATE: {today_str}. Use this to determine verb tense. Events that occurred before today MUST be written in past tense ("launched", "announced", "was approved"). Do NOT write "will", "is expected to", "is set to", or "is scheduled to" for any event that has already taken place as of {today_str}. If uncertain whether an event has occurred, hedge with "reportedly" or "as of [date]" — never assume it is still upcoming.
 - If context articles are provided above, prefer those facts. For any fact NOT in the provided context, only include it if you are confident it occurred. Phrase uncertain claims as "reportedly", "according to reports", or "as of [year]".
 - Do NOT fabricate specific dates, statistics, or event details. If uncertain, omit or hedge explicitly.
 - Do not include direct quotes longer than 8 words from songs, books, movies, or articles.
@@ -222,7 +222,7 @@ VISUAL PROMPT RULES:
 - Avoid copyrighted fictional characters/franchises (e.g., superheroes, movie/cartoon characters, game mascots), trademarked logos, or branded products.
 
 FACTUAL / COPYRIGHT SAFETY:
-- TODAY'S DATE: {today_str}. Never present a past event as if it just happened.
+- TODAY'S DATE: {today_str}. Use this to determine verb tense. Events that occurred before today MUST be written in past tense ("launched", "announced", "was approved"). Do NOT write "will", "is expected to", "is set to", or "is scheduled to" for any event that has already taken place as of {today_str}. If uncertain whether an event has occurred, hedge with "reportedly" or "as of [date]" — never assume it is still upcoming.
 - Prefer facts retrieved via search. For any fact NOT confirmed by search results, only include it if you are confident it occurred. Phrase uncertain claims as "reportedly", "according to reports", or "as of [year]".
 - Do NOT fabricate specific dates, statistics, or event details. If uncertain, omit or hedge explicitly.
 - Do not include direct quotes longer than 8 words from songs, books, movies, or articles.
@@ -391,7 +391,14 @@ Reply with ONLY the single mood name from the list above. Nothing else."""
         return "general"
 
 
-def rate_and_select_news(articles: list[dict], top_performers: list[dict] | None = None) -> list[dict]:
+def rate_and_select_news(
+    articles: list[dict],
+    top_performers: list[dict] | None = None,
+    recently_covered: list[str] | None = None,
+) -> list[dict]:
+    from datetime import date
+    today_str = date.today().isoformat()
+
     articles_text = "\n".join(
         f"{i + 1}. {a['headline']}"
         + (f" — {a['description']}" if a.get("description") else "")
@@ -409,14 +416,25 @@ def rate_and_select_news(articles: list[dict], top_performers: list[dict] | None
             "Prefer stories with similar themes, depth, or audience appeal.\n"
         )
 
+    fatigue_block = ""
+    if recently_covered:
+        lines = "\n".join(f"  - {h}" for h in recently_covered)
+        fatigue_block = (
+            f"\nCONTENT FATIGUE — these topics were already covered in the last 14 days. "
+            f"Heavily penalise any article that covers the same event, story, or angle as one below. "
+            f"A fresh development on the same story is acceptable only if it introduces genuinely new facts:\n{lines}\n"
+        )
+
     prompt = f"""You are a senior news editor selecting stories for short educational videos.
+TODAY'S DATE: {today_str}. Only select stories that are genuinely recent as of today. Penalise articles about events that have fully concluded weeks ago with no new angle.
 
 Rate each article on a combined 1–5 scale using these criteria:
 - Virality & public interest (will people share this?)
 - Educational value (does it teach something specific and useful?)
-- Freshness (is this breaking or very recent news?)
+- Freshness (is this breaking or very recent news as of {today_str}?)
 - Story depth (is there a concrete fact, number, or consequence — not just a vague headline?)
-{performers_block}
+- Content fatigue: heavily penalise stories already covered recently (see list below if present)
+{performers_block}{fatigue_block}
 Select the top 5 articles. For each, write a 2–3 sentence context summary that captures ALL key facts, angles, and notable details — including surprising, unusual, or quirky elements that make the story interesting. Do NOT drop secondary details; they may be the most viral element. This summary will be used directly to write the video script.
 
 Return ONLY a valid JSON array, no markdown, no explanation:

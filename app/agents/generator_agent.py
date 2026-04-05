@@ -56,8 +56,7 @@ def _set_batch_terminal_state(batch_id: str | None, status: str):
     try:
         current = firestore_service.get_pipeline_state() or {}
         if current.get("active_batch_id") == batch_id:
-            firestore_service.update_batch_status(batch_id, status)
-            firestore_service.set_pipeline_state(batch_id, status)
+            firestore_service.set_pipeline_and_batch_state(batch_id, status)
     except Exception:
         return
 
@@ -87,7 +86,7 @@ def run(
     ensure_dir(OUTPUT_DIR)
     cleanup_files_older_than(TEMP_DIR, TMP_RETENTION_DAYS)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    lock_owner = f"task:{batch_id or 'manual'}:{code}:{uuid4().hex}" if not force_run else ""
+    lock_owner = f"task:{batch_id or 'manual'}:{code}:{uuid4().hex}"
     effective_job_id = job_id or f"task-{uuid4().hex}"
 
     firestore_service.create_or_update_job(
@@ -116,7 +115,9 @@ def run(
         },
     )
 
-    if (not force_run) and (not firestore_service.acquire_video_lock(lock_owner)):
+    if force_run:
+        firestore_service.acquire_video_lock(lock_owner, force=True)
+    elif not firestore_service.acquire_video_lock(lock_owner):
         logger.warning("Rejected generation because video lock is held by another run")
         firestore_service.create_or_update_job(
             effective_job_id,
@@ -299,10 +300,6 @@ def run(
                         f"❌ Image generation failed for *{code}* after 3 attempts "
                         f"(Imagen quota may be exhausted). Please try again later."
                     )
-                    # Reset pipeline state so user can retry
-                    if batch_id:
-                        firestore_service.update_batch_status(batch_id, "failed")
-                        firestore_service.set_pipeline_state(batch_id, "failed")
                     firestore_service.create_or_update_job(
                         effective_job_id,
                         {
@@ -327,9 +324,6 @@ def run(
                 f"❌ Video generation failed for *{code}* — no scenes could be generated. "
                 f"Please try again later."
             )
-            if batch_id:
-                firestore_service.update_batch_status(batch_id, "failed")
-                firestore_service.set_pipeline_state(batch_id, "failed")
             firestore_service.create_or_update_job(
                 effective_job_id,
                 {
@@ -441,5 +435,4 @@ def run(
         _set_batch_terminal_state(batch_id, "failed")
         raise
     finally:
-        if lock_owner:
-            firestore_service.release_video_lock(lock_owner)
+        firestore_service.release_video_lock(lock_owner)

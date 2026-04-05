@@ -74,8 +74,7 @@ def _refresh_pipeline_after_stop(job: dict):
         return
     state = firestore_service.get_pipeline_state() or {}
     if state.get("active_batch_id") == batch_id and state.get("state") == "processing":
-        firestore_service.update_batch_status(batch_id, "failed")
-        firestore_service.set_pipeline_state(batch_id, "failed")
+        firestore_service.set_pipeline_and_batch_state(batch_id, "failed")
 
 
 def _delete_queued_task(task_name: str):
@@ -340,8 +339,7 @@ def handle_reply(chat_id: str, body: str):
             firestore_service.save_news_batch(redo_batch_id, genre or "direct", {
                 code: {"code": code, "headline": title, "context": details, "rating": 5.0, "genre": genre}
             })
-            firestore_service.update_batch_status(redo_batch_id, "processing")
-            firestore_service.set_pipeline_state(redo_batch_id, "processing")
+            firestore_service.set_pipeline_and_batch_state(redo_batch_id, "processing")
             task_name = _task_name(redo_batch_id, code)
             public_id = _public_video_id(task_name)
             enqueued = _enqueue_generate(
@@ -460,8 +458,7 @@ def handle_reply(chat_id: str, body: str):
                 }
             },
         )
-        firestore_service.update_batch_status(direct_batch_id, "processing")
-        firestore_service.set_pipeline_state(direct_batch_id, "processing")
+        firestore_service.set_pipeline_and_batch_state(direct_batch_id, "processing")
         task_name = _task_name(direct_batch_id, "DIRECT01")
         public_id = _public_video_id(task_name)
         enqueued = _enqueue_generate(
@@ -508,15 +505,13 @@ def handle_reply(chat_id: str, body: str):
         return
 
     if text == "NONE":
-        firestore_service.update_batch_status(batch_id, "skipped")
-        firestore_service.set_pipeline_state(batch_id, "skipped")
+        firestore_service.set_pipeline_and_batch_state(batch_id, "skipped")
         telegram_service.send_message(chat_id, "Got it! See you in the next digest.")
         return
 
     batch = firestore_service.get_news_batch(batch_id)
     if state.get("state") == "awaiting_reply" and _is_digest_expired(batch):
-        firestore_service.update_batch_status(batch_id, "skipped")
-        firestore_service.set_pipeline_state(batch_id, "skipped")
+        firestore_service.set_pipeline_and_batch_state(batch_id, "skipped")
         telegram_service.send_message(
             chat_id,
             "This digest expired after 2 hours and has been skipped. Please wait for the next digest, or use CREATE <topic>.",
@@ -530,8 +525,7 @@ def handle_reply(chat_id: str, body: str):
         if current_state in ("processing", "completed"):
             telegram_service.send_message(chat_id, "A video is already being processed. Please wait for it to finish.")
             return
-        firestore_service.update_batch_status(batch_id, "processing")
-        firestore_service.set_pipeline_state(batch_id, "processing")
+        firestore_service.set_pipeline_and_batch_state(batch_id, "processing")
         task_name = _task_name(batch_id, text)
         public_id = _public_video_id(task_name)
         enqueued = _enqueue_generate(item["headline"], text, batch_id, public_id=public_id)

@@ -8,7 +8,7 @@ import os
 import random
 
 MUSIC_DIR  = "assets/music"
-BG_VOLUME  = 0.09   # Keep ambience subtle so VO stays dominant.
+BG_VOLUME  = 0.15   # Keep ambience subtle so VO stays dominant.
 VO_GAIN    = 1.08   # Slight boost to narration clarity.
 
 AUDIO_FADE_IN  = 0.15

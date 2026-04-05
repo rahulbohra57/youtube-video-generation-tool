@@ -347,8 +347,7 @@ def generate_task(payload: dict):
             try:
                 current = firestore_service.get_pipeline_state() or {}
                 if current.get("active_batch_id") == batch_id:
-                    firestore_service.update_batch_status(batch_id, "failed")
-                    firestore_service.set_pipeline_state(batch_id, "failed")
+                    firestore_service.set_pipeline_and_batch_state(batch_id, "failed")
             except Exception:
                 pass
         logger.exception(f"generate_task failed for code={code}: {e}")
