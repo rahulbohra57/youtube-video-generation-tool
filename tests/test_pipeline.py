@@ -220,6 +220,9 @@ def test_lead_researcher_run_creates_batch_and_enqueues_video(
 ):
     mock_fs.get_pipeline_state.return_value = {}
     mock_fs.get_domains_posted_today.return_value = {}
+    mock_fs.get_top_performers.return_value = []
+    mock_fs.get_genre_performance_weekly.return_value = {}
+    mock_fs.get_recently_suggested_headlines.return_value = []
     mock_gnews.fetch_top_headlines.return_value = [
         {"headline": f"News {i}", "url": "https://x", "description": "desc"} for i in range(10)
     ]
@@ -236,7 +239,7 @@ def test_lead_researcher_run_creates_batch_and_enqueues_video(
 
     assert batch_id.startswith("auto_")
     mock_fs.save_news_batch.assert_called_once()
-    mock_fs.set_pipeline_state.assert_called_once()
+    mock_fs.set_pipeline_and_batch_state.assert_called_once()
     mock_send_message.assert_called_once()
     mock_enqueue.assert_called_once()
 
@@ -257,8 +260,7 @@ def test_lead_researcher_expires_stale_awaiting_reply_digest(mock_fs):
 
     lead_researcher._expire_stale_digest_if_needed()
 
-    mock_fs.update_batch_status.assert_called_once_with("batch_old", "skipped")
-    mock_fs.set_pipeline_state.assert_called_once_with("batch_old", "skipped")
+    mock_fs.set_pipeline_and_batch_state.assert_called_once_with("batch_old", "skipped")
 
 
 @patch("app.agents.lead_researcher._within_suggestion_window", return_value=False)
@@ -303,7 +305,7 @@ def test_handle_reply_none_skips_pipeline(mock_fs, mock_telegram):
     from app.agents import whatsapp_agent
     whatsapp_agent.handle_reply("123456789", "none")
 
-    mock_fs.update_batch_status.assert_called_with("batch_001", "skipped")
+    mock_fs.set_pipeline_and_batch_state.assert_called_with("batch_001", "skipped")
     mock_telegram.send_message.assert_called_once()
     assert "See you" in mock_telegram.send_message.call_args[0][1]
 
@@ -327,7 +329,7 @@ def test_handle_reply_valid_code_triggers_generator(mock_fs, mock_telegram, mock
     kwargs = mock_enqueue.call_args[1]
     assert args == ("Big AI news", "TECH01", "batch_001")
     assert "public_id" in kwargs
-    mock_fs.update_batch_status.assert_called_with("batch_001", "processing")
+    mock_fs.set_pipeline_and_batch_state.assert_called_with("batch_001", "processing")
 
 
 @patch("app.agents.whatsapp_agent.telegram_service")
@@ -379,8 +381,7 @@ def test_handle_reply_marks_expired_digest_as_skipped(mock_fs, mock_telegram):
     from app.agents import whatsapp_agent
     whatsapp_agent.handle_reply("123456789", "TECH01")
 
-    mock_fs.update_batch_status.assert_called_with("batch_001", "skipped")
-    mock_fs.set_pipeline_state.assert_called_with("batch_001", "skipped")
+    mock_fs.set_pipeline_and_batch_state.assert_called_with("batch_001", "skipped")
     assert "expired after 2 hours" in mock_telegram.send_message.call_args[0][1]
 
 
@@ -395,7 +396,7 @@ def test_handle_reply_create_topic_triggers_direct_generation(mock_fs, mock_tele
     whatsapp_agent.handle_reply("123456789", "CREATE Why is Artemis going to moon?")
 
     mock_fs.save_news_batch.assert_called_once()
-    mock_fs.set_pipeline_state.assert_called_once()
+    mock_fs.set_pipeline_and_batch_state.assert_called_once()
     mock_enqueue.assert_called_once()
 
 
@@ -573,7 +574,7 @@ def test_social_media_agent_post_uploads_and_notifies(
     assert args[0] == "/tmp/final.mp4"
     assert args[1] == "Big AI News"
     assert "Enhanced caption" in args[2]
-    mock_fs.update_batch_status.assert_called_with("batch_001", "completed")
+    mock_fs.set_pipeline_and_batch_state.assert_called_with("batch_001", "completed")
     mock_send_post.assert_called_once()
     kwargs = mock_send_post.call_args[1]
     assert kwargs["title"] == "Big AI News"
