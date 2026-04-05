@@ -377,32 +377,42 @@ def handle_reply(chat_id: str, body: str):
 
         # Enrich CREATE with recent news so Gemini has dated facts to work from.
         # Only search when the user hasn't already provided context via "topic | context".
+        # Strategy: Google Custom Search first (100/day free, on GCP billing); fall back to GNews.
         if not create_context:
             try:
-                from app.services import gnews_service
-                from datetime import timedelta
-                from_date = (
-                    datetime.now(timezone.utc) - timedelta(hours=72)
-                ).isoformat(timespec="seconds").replace("+00:00", "Z")
-                articles = gnews_service.search_news(
-                    query=topic, max_results=5, from_date=from_date
-                )
-                if articles:
-                    lines = []
-                    for a in articles[:3]:
-                        pub = a.get("published_at", "")
-                        headline = a.get("headline", "")
-                        desc = a.get("description", "")
-                        entry = f"- [{pub}] {headline}"
-                        if desc:
-                            entry += f": {desc}"
-                        lines.append(entry)
-                    create_context = (
-                        f"Recent news context (use these facts to ground the script in current events):\n"
-                        + "\n".join(lines)
-                    )
+                from app.services import google_search_service
+                articles = google_search_service.search_news(query=topic, max_results=5, date_restrict="w1")
             except Exception:
-                pass  # Non-fatal — proceed without live context
+                articles = []
+
+            if not articles:
+                # GNews fallback
+                try:
+                    from app.services import gnews_service
+                    from datetime import timedelta
+                    from_date = (
+                        datetime.now(timezone.utc) - timedelta(hours=72)
+                    ).isoformat(timespec="seconds").replace("+00:00", "Z")
+                    articles = gnews_service.search_news(
+                        query=topic, max_results=5, from_date=from_date
+                    )
+                except Exception:
+                    articles = []
+
+            if articles:
+                lines = []
+                for a in articles[:3]:
+                    pub = a.get("published_at", "")
+                    headline = a.get("headline", "")
+                    desc = a.get("description", "")
+                    entry = f"- [{pub}] {headline}"
+                    if desc:
+                        entry += f": {desc}"
+                    lines.append(entry)
+                create_context = (
+                    "NEWS CONTEXT (authoritative — script must cover these facts, do not use older training data):\n"
+                    + "\n".join(lines)
+                )
 
         topic_key = _topic_key(topic)
         if not is_force_create:

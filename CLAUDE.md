@@ -220,6 +220,8 @@ gcloud run services describe autoframe \
 | Variable | Purpose |
 |---|---|
 | `GNEWS_API_KEY` | GNews.io API key |
+| `GOOGLE_SEARCH_API_KEY` | Google Custom Search API key (CREATE/FORCE_CREATE enrichment; 100 free/day on GCP billing) |
+| `GOOGLE_SEARCH_ENGINE_ID` | Programmable Search Engine ID — must have "Search the entire web" enabled |
 | `TELEGRAM_BOT_TOKEN` | Telegram Bot API token |
 | `TELEGRAM_CHAT_ID` | Telegram chat ID that the bot responds to |
 | `YOUTUBE_CLIENT_ID` | YouTube OAuth 2.0 client ID |

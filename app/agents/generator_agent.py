@@ -11,6 +11,7 @@ from app.config import TEMP_DIR, OUTPUT_DIR, TMP_RETENTION_DAYS, TELEGRAM_CHAT_I
 from app.services import firestore_service
 from app.services.llm_service import (
     generate_script,
+    generate_script_with_search,
     classify_music_genre,
     apply_quality_controls,
 )
@@ -190,12 +191,11 @@ def run(
             return
         # ──────────────────────────────────────────────────────────────────
 
-        send_message(
-            TELEGRAM_CHAT_ID,
-            f"🎬 Starting video generation for *{code}* (ID: `{public_id or effective_job_id}`)...\n_{headline}_",
-        )
-
-        raw_script = generate_script(headline, language="en", aspect_ratio="9:16", context=details or "")
+        try:
+            raw_script = generate_script_with_search(headline, language="en", aspect_ratio="9:16", context=details or "")
+        except Exception as _search_exc:
+            logger.warning("Search-grounded script generation failed (%s), falling back to standard", _search_exc)
+            raw_script = generate_script(headline, language="en", aspect_ratio="9:16", context=details or "")
         try:
             scenes = extract_json(raw_script)
         except Exception:
@@ -365,7 +365,7 @@ def run(
                 )
             return
 
-        send_message(TELEGRAM_CHAT_ID, f"✅ Video generated! Now uploading to YouTube...")
+        send_message(TELEGRAM_CHAT_ID, "✅ Frames Generated! Now compiling the video...")
 
         output_path = os.path.join(OUTPUT_DIR, f"final_{code}_{timestamp}.mp4")
         create_video(video_clips, output_path, music_genre=music_genre, language="en")

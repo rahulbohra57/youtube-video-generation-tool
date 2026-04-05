@@ -19,6 +19,12 @@ SCENE_DURATION = 5  # seconds per scene
 # GNews
 GNEWS_API_KEY = os.getenv("GNEWS_API_KEY", "")
 
+# Google Custom Search (used for CREATE/FORCE_CREATE topic enrichment)
+# Get API key: console.cloud.google.com/apis/library/customsearch.googleapis.com
+# Get Search Engine ID: programmablesearchengine.google.com (enable "Search the entire web")
+GOOGLE_SEARCH_API_KEY = os.getenv("GOOGLE_SEARCH_API_KEY", "")
+GOOGLE_SEARCH_ENGINE_ID = os.getenv("GOOGLE_SEARCH_ENGINE_ID", "")
+
 # Telegram
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")

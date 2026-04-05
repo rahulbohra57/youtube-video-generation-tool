@@ -82,11 +82,11 @@ def generate_script(topic: str, language: str = "en", aspect_ratio: str = "16:9"
         )
         max_scenes = "5"
 
-    context_block = f"\nBackground context (use to enrich facts and details in the script):\n{context.strip()}\n" if context and context.strip() else ""
+    context_block = f"\nNEWS CONTEXT — primary source of truth. The script MUST cover ALL angles and facts below. Do not omit any element:\n{context.strip()}\n" if context and context.strip() else ""
     video_style = random.choice(_VISUAL_STYLE_POOL)
 
     prompt = f"""
-You are an expert scriptwriter for educational YouTube videos. Research and write a complete, insightful, reader-friendly script on:
+You are an expert scriptwriter for educational YouTube videos. Write a factually accurate video script on the headline below. The script must faithfully represent ALL angles in the headline and news context. Do NOT substitute your own interpretation of the topic or use general knowledge to override the provided context.
 
 Topic: {topic}{context_block}
 
@@ -104,6 +104,7 @@ NARRATION RULES — follow strictly:
 - Ensure the topic adds practical value for the viewer (what happened, why it matters, and key takeaway).
 - Do NOT use filler phrases like "let's explore", "stay tuned", "it's a game-changer", or "this is just the beginning".
 - Do NOT summarise without substance — each narration must stand alone as a useful insight.
+- Cover ALL key angles from the headline and news context. If the headline mentions multiple story elements (e.g. a main event AND a secondary detail), every element must appear somewhere in the script — typically scene 1 (hook) introduces the main angle and scene 3–4 covers the secondary detail.
 - {lang_instruction}
 
 VISUAL PROMPT RULES:
@@ -141,6 +142,108 @@ Additional format constraints:
 """
 
     response = model.generate_content(prompt)
+    return _response_text(response)
+
+
+_search_model = None  # lazily initialised on first call
+
+
+def _get_search_model():
+    global _search_model
+    if _search_model is None:
+        from vertexai.generative_models import Tool, grounding as vgrounding
+        search_tool = Tool.from_google_search_retrieval(vgrounding.GoogleSearchRetrieval())
+        _search_model = GenerativeModel("gemini-2.5-flash", tools=[search_tool])
+    return _search_model
+
+
+def generate_script_with_search(topic: str, language: str = "en", aspect_ratio: str = "16:9", context: str = "") -> str:
+    """Like generate_script() but with Gemini Google Search grounding enabled.
+
+    Gemini will search the web for the topic before writing the script, ensuring
+    the output reflects current facts rather than training-data knowledge.
+    Falls back gracefully — callers should catch exceptions and fall back to
+    generate_script() if this fails.
+    """
+    search_model = _get_search_model()
+
+    from datetime import date
+    today_str = date.today().isoformat()
+    lang_instruction = _LANG_INSTRUCTIONS.get(language, _LANG_INSTRUCTIONS["en"])
+
+    if aspect_ratio == "9:16":
+        format_hint = (
+            "- MAXIMUM 5 scenes (target 45–55 seconds total when spoken at a natural pace — NEVER exceed 58 seconds)\n"
+            "- Scene 1: open with the single most compelling fact or question — hook the viewer immediately\n"
+            "- Scenes 2–4: each must reveal a specific, concrete insight, fact, number, or implication — no filler\n"
+            "- Final scene: strong closing insight or call-to-reflection — not a generic sign-off\n"
+            "- Each narration: 20–24 words (approx 9–11 seconds when spoken aloud)"
+        )
+        max_scenes = "5"
+    else:
+        format_hint = (
+            "- MAXIMUM 5 scenes (target 45–55 seconds total when spoken at a natural pace — NEVER exceed 58 seconds)\n"
+            "- Each narration: 20–24 words (approx 9–11 seconds when spoken aloud)"
+        )
+        max_scenes = "5"
+
+    context_block = f"\nNEWS CONTEXT — primary source of truth. The script MUST cover ALL angles and facts below. Do not omit any element:\n{context.strip()}\n" if context and context.strip() else ""
+    video_style = random.choice(_VISUAL_STYLE_POOL)
+
+    prompt = f"""
+You are an expert scriptwriter for educational YouTube videos. Use your Google Search tool to look up the latest information about this headline, then write a factually accurate video script. The script must faithfully represent ALL angles in the headline and news context. Do NOT substitute outdated training-data knowledge when current search results are available.
+
+Topic: {topic}{context_block}
+
+Return ONLY a valid JSON array. No markdown, no explanation, no code fences.
+
+Each scene object must have:
+- "scene": integer
+- "narration": substantive narration text in the required language
+- "visual": VERY DETAILED image generation prompt in English
+
+NARRATION RULES — follow strictly:
+- Write in simple, reader-friendly language (clear and natural; avoid jargon unless necessary).
+- Write COMPLETE information. Never tease or leave a fact unresolved.
+- Every sentence must teach something specific: include real figures, dates, mechanisms, or consequences where relevant.
+- Ensure the topic adds practical value for the viewer (what happened, why it matters, and key takeaway).
+- Do NOT use filler phrases like "let's explore", "stay tuned", "it's a game-changer", or "this is just the beginning".
+- Do NOT summarise without substance — each narration must stand alone as a useful insight.
+- Cover ALL key angles from the headline and news context. If the headline mentions multiple story elements (e.g. a main event AND a secondary detail), every element must appear somewhere in the script — typically scene 1 (hook) introduces the main angle and scene 3–4 covers the secondary detail.
+- {lang_instruction}
+
+VISUAL PROMPT RULES:
+- Always write visual prompts in English, regardless of narration language.
+- Every visual prompt MUST begin with this exact style prefix to keep all scenes visually consistent: "{video_style} — ". Apply it to every scene without exception.
+- Do NOT depict or name any specific real individual (politician, celebrity, activist) unless they are a current sitting Prime Minister or President of a country. Use representative imagery instead (e.g. "a government official at a podium", "scientists in a lab").
+- Do NOT request company logos, brand marks, app icons, or any readable text/labels in the image — Imagen cannot render text accurately. Use abstract or thematic imagery instead (e.g. instead of "Google logo", use "a colourful abstract search interface on a glowing screen").
+- STRICT: Avoid text-bearing compositions like newspaper front pages, posters, billboards, screenshots, UI panels, signs, or subtitles.
+- Be highly specific: lighting, composition, mood, style, camera angle.
+- Avoid copyrighted fictional characters/franchises (e.g., superheroes, movie/cartoon characters, game mascots), trademarked logos, or branded products.
+
+FACTUAL / COPYRIGHT SAFETY:
+- TODAY'S DATE: {today_str}. Never present a past event as if it just happened.
+- Prefer facts retrieved via search. For any fact NOT confirmed by search results, only include it if you are confident it occurred. Phrase uncertain claims as "reportedly", "according to reports", or "as of [year]".
+- Do NOT fabricate specific dates, statistics, or event details. If uncertain, omit or hedge explicitly.
+- Do not include direct quotes longer than 8 words from songs, books, movies, or articles.
+- Do not include song lyrics.
+
+Format:
+[
+  {{
+    "scene": 1,
+    "narration": "...",
+    "visual": "..."
+  }}
+]
+
+Additional format constraints:
+{format_hint}
+- Total spoken duration should be between 15 and 58 seconds (ideal 30-55 seconds).
+- Maximum {max_scenes} scenes total
+"""
+
+    response = search_model.generate_content(prompt)
     return _response_text(response)
 
 
@@ -314,10 +417,10 @@ Rate each article on a combined 1–5 scale using these criteria:
 - Freshness (is this breaking or very recent news?)
 - Story depth (is there a concrete fact, number, or consequence — not just a vague headline?)
 {performers_block}
-Select the top 5 articles. For each, write a 2-sentence context summary that captures the key fact and why it matters — this will be used to write the video script.
+Select the top 5 articles. For each, write a 2–3 sentence context summary that captures ALL key facts, angles, and notable details — including surprising, unusual, or quirky elements that make the story interesting. Do NOT drop secondary details; they may be the most viral element. This summary will be used directly to write the video script.
 
 Return ONLY a valid JSON array, no markdown, no explanation:
-[{{"headline": "...", "context": "2-sentence summary with key fact and significance.", "rating": 4.5}}, ...]
+[{{"headline": "...", "context": "ALL key facts and angles including secondary/unusual details.", "rating": 4.5}}, ...]
 
 Articles:
 {articles_text}"""
