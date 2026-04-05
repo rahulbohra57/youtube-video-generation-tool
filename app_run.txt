@@ -1,0 +1,12 @@
+Run the app with:
+
+
+cd "/Users/chetan/Desktop/Data Science/youtube-video-generation-tool"
+source venv/bin/activate
+uvicorn app.main:app --reload --port 8080
+
+Then open http://localhost:8080 and generate a video.
+
+LIVE URL: https://autoframe-353645494126.us-central1.run.app 
+
+Admin page: https://autoframe-353645494126.us-central1.run.app/admin

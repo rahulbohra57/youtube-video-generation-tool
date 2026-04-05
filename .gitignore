@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+
+# Virtual environments
+venv/
+.venv/
+
+# Environment and secrets
+.env
+*.env
+
+# OS/editor
+.DS_Store
+.vscode/
+
+# Runtime outputs
+tmp/
+Output/
+*.log
+
+# Claude/Codex local state
+.claude/
+
+# Misc
+*.sqlite3

@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+vertexai
+google-cloud-storage
+google-cloud-texttospeech
+moviepy
+Pillow
+requests
+python-multipart
+google-cloud-firestore
+google-api-python-client
+google-auth-oauthlib
+google-cloud-tasks
+httpx
