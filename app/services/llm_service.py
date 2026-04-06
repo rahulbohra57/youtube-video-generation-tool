@@ -576,13 +576,15 @@ def review_title_and_caption_with_senior_reviewer(
     prompt = f"""
 You are a senior script reviewer.
 Create:
-1) A catchy but non-clickbait YouTube Shorts title.
-2) A reader-friendly caption aligned with the voiceover script (same core points).
+1) A catchy but non-clickbait YouTube Shorts title — include the subject's name or key identifier if present in the script.
+2) A reader-friendly caption aligned with the voiceover script (same core points), preserving all specific names, numbers, and facts.
 3) 10-15 relevant hashtags derived from the script content and topic — mix broad popular tags with niche-specific ones.{genre_hint}
 
 Rules:
 - Keep language simple and natural.
 - Caption body must be insightful, complete, and engaging (2 short paragraphs max).
+- CRITICAL: Include every key specific detail from the script — names of people, places, organizations, ages, numbers, dates, and any other concrete facts. A caption missing a person's name or other key detail is unacceptable.
+- Do not use vague placeholders like "a grandpa", "a man", "a woman", "a company" when the script contains their actual name or identity.
 - Do not exaggerate or promise things not in script.
 - Always include #Shorts and #YouTubeShorts in the hashtags.
 - Return ONLY a valid JSON object with keys: title, caption, hashtags (array of strings).

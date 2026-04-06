@@ -297,12 +297,12 @@ def get_queue_snapshot() -> dict:
     processing = sum(1 for r in rows if r.get("status") == "processing")
     failed_24h = 0
     completed_24h = 0
-    now_ts = datetime.now(timezone.utc).timestamp()
+    window_start_ts = _ist_window_start().timestamp()
     for r in rows:
         updated = _parse_iso(r.get("updated_at"))
         if not updated:
             continue
-        if now_ts - updated.timestamp() > 24 * 3600:
+        if updated.timestamp() < window_start_ts:
             continue
         if r.get("status") == "failed":
             failed_24h += 1
@@ -483,9 +483,30 @@ def _today_key() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
+def _ist_window_start() -> datetime:
+    """Return the start of the current 8am-to-8am IST report window as a UTC datetime."""
+    from zoneinfo import ZoneInfo
+    ist = ZoneInfo("Asia/Kolkata")
+    now_ist = datetime.now(ist)
+    today_8am_ist = now_ist.replace(hour=8, minute=0, second=0, microsecond=0)
+    if now_ist >= today_8am_ist:
+        return today_8am_ist.astimezone(timezone.utc)
+    return (today_8am_ist - timedelta(days=1)).astimezone(timezone.utc)
+
+
+def _ist_report_day_key() -> str:
+    """Date key that resets at 8am IST — aligns with the daily digest window."""
+    from zoneinfo import ZoneInfo
+    ist = ZoneInfo("Asia/Kolkata")
+    now_ist = datetime.now(ist)
+    if now_ist >= now_ist.replace(hour=8, minute=0, second=0, microsecond=0):
+        return now_ist.strftime("%Y-%m-%d")
+    return (now_ist - timedelta(days=1)).strftime("%Y-%m-%d")
+
+
 def get_domains_posted_today() -> dict:
     try:
-        doc = _get_db().collection("daily_domain_posts").document(_today_key()).get()
+        doc = _get_db().collection("daily_domain_posts").document(_ist_report_day_key()).get()
         if not doc.exists:
             return {}
         data = doc.to_dict() or {}
@@ -565,39 +586,48 @@ def get_failed_auto_jobs(max_age_hours: int = 12) -> list[dict]:
 
 
 def get_gnews_calls_today() -> int:
-    """Return the count of GNews API calls made since UTC midnight today."""
+    """Return GNews API calls since 8am IST today (avoids composite index by filtering in Python)."""
     try:
-        today_start = datetime.now(timezone.utc).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        ).isoformat()
+        window_start_ts = _ist_window_start().timestamp()
         docs = (
             _get_db()
             .collection("quota_events")
-            .where("kind", "==", "gnews_call")
-            .where("created_at", ">=", today_start)
+            .order_by("created_at", direction=firestore.Query.DESCENDING)
+            .limit(500)
             .stream()
         )
-        return sum(1 for _ in docs)
+        count = 0
+        for d in docs:
+            data = d.to_dict() or {}
+            if data.get("kind") != "gnews_call":
+                continue
+            ts = _parse_iso(data.get("created_at"))
+            if ts and ts.timestamp() >= window_start_ts:
+                count += 1
+        return count
     except Exception:
         return 0
 
 
 def get_tts_chars_today() -> int:
-    """Return the total TTS characters synthesized since UTC midnight today."""
+    """Return total TTS chars synthesized since 8am IST today (avoids composite index by filtering in Python)."""
     try:
-        today_start = datetime.now(timezone.utc).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        ).isoformat()
+        window_start_ts = _ist_window_start().timestamp()
         docs = (
             _get_db()
             .collection("quota_events")
-            .where("kind", "==", "tts_chars")
-            .where("created_at", ">=", today_start)
+            .order_by("created_at", direction=firestore.Query.DESCENDING)
+            .limit(500)
             .stream()
         )
         total = 0
         for d in docs:
             data = d.to_dict() or {}
+            if data.get("kind") != "tts_chars":
+                continue
+            ts = _parse_iso(data.get("created_at"))
+            if not ts or ts.timestamp() < window_start_ts:
+                continue
             try:
                 total += int(data.get("details", "0") or "0")
             except (ValueError, TypeError):
@@ -612,7 +642,7 @@ def mark_domain_posted_today(domain: str, job_id: str = "", headline: str = ""):
         key = (domain or "").strip().lower()
         if not key:
             return
-        doc_ref = _get_db().collection("daily_domain_posts").document(_today_key())
+        doc_ref = _get_db().collection("daily_domain_posts").document(_ist_report_day_key())
         current = get_domains_posted_today()
         current[key] = {
             "posted_at": datetime.now(timezone.utc).isoformat(),
@@ -621,7 +651,7 @@ def mark_domain_posted_today(domain: str, job_id: str = "", headline: str = ""):
         }
         doc_ref.set(
             {
-                "date": _today_key(),
+                "date": _ist_report_day_key(),
                 "domains": current,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             },
