@@ -309,7 +309,14 @@ def run() -> str | None:
         if not candidates:
             domain_results[domain] = []
             continue
+        # Build lookup so we can re-attach published_at / url that rate_and_select_news drops
+        _orig_lookup = {_norm_headline(c.get("headline", "")): c for c in candidates}
         rated = rate_and_select_news(candidates, top_performers=top_performers, recently_covered=recently_covered)[:5]
+        for item in rated:
+            orig = _orig_lookup.get(_norm_headline(item.get("headline", ""))) or {}
+            item.setdefault("published_at", orig.get("published_at", ""))
+            item.setdefault("url", orig.get("url", ""))
+            item.setdefault("source", orig.get("source", ""))
         enriched = []
         for item in rated:
             h = item.get("headline", "")
@@ -393,7 +400,14 @@ def run() -> str | None:
     from app.agents import whatsapp_agent
     task_name = whatsapp_agent._task_name(batch_id, code)  # shared deterministic id
     public_id = whatsapp_agent._public_video_id(task_name)
-    details = selected_item.get("context") or selected_item.get("description") or "Top trending story selected."
+    context_summary = selected_item.get("context") or selected_item.get("description") or "Top trending story selected."
+    pub_date = selected_item.get("published_at", "")
+    source_url = selected_item.get("url", "")
+    # Prepend the GNews publication date + URL so the script generator knows the exact event date
+    # and can instruct Google Search grounding to find the right (recent) version of the story.
+    date_prefix = f"[Article published: {pub_date}]" if pub_date else ""
+    url_suffix = f" Source: {source_url}" if source_url else ""
+    details = f"{date_prefix} {context_summary}{url_suffix}".strip()
     virality = float(selected_item.get("rigorous_score", selected_item.get("rating", 4.0)))
 
     send_message(

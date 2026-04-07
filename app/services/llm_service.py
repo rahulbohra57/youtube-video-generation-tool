@@ -193,6 +193,8 @@ def generate_script_with_search(topic: str, language: str = "en", aspect_ratio: 
     prompt = f"""
 You are an expert scriptwriter for educational YouTube videos. Use your Google Search tool to look up the latest information about this headline, then write a factually accurate video script. The script must faithfully represent ALL angles in the headline and news context. Do NOT substitute outdated training-data knowledge when current search results are available.
 
+CRITICAL: TODAY'S DATE is {today_str}. The NEWS CONTEXT below (if present) describes a RECENT event that occurred close to this date. When searching, look for the most recent version of this story — do NOT write about older events with similar topic names. If the context says "As of [date]", that is the event date to focus on.
+
 Topic: {topic}{context_block}
 
 Return ONLY a valid JSON array. No markdown, no explanation, no code fences.
@@ -400,7 +402,7 @@ def rate_and_select_news(
     today_str = date.today().isoformat()
 
     articles_text = "\n".join(
-        f"{i + 1}. {a['headline']}"
+        f"{i + 1}. [published: {a.get('published_at', 'unknown')}] {a['headline']}"
         + (f" — {a['description']}" if a.get("description") else "")
         for i, a in enumerate(articles)
     )
@@ -435,10 +437,10 @@ Rate each article on a combined 1–5 scale using these criteria:
 - Story depth (is there a concrete fact, number, or consequence — not just a vague headline?)
 - Content fatigue: heavily penalise stories already covered recently (see list below if present)
 {performers_block}{fatigue_block}
-Select the top 5 articles. For each, write a 2–3 sentence context summary that captures ALL key facts, angles, and notable details — including surprising, unusual, or quirky elements that make the story interesting. Do NOT drop secondary details; they may be the most viral element. This summary will be used directly to write the video script.
+Select the top 5 articles. For each, write a 2–3 sentence context summary that captures ALL key facts, angles, and notable details — including surprising, unusual, or quirky elements that make the story interesting. ALWAYS begin the context with the publication date (e.g. "As of April 7, 2026, ...") so the script writer knows exactly when this event occurred. Do NOT drop secondary details; they may be the most viral element. This summary will be used directly to write the video script.
 
 Return ONLY a valid JSON array, no markdown, no explanation:
-[{{"headline": "...", "context": "ALL key facts and angles including secondary/unusual details.", "rating": 4.5}}, ...]
+[{{"headline": "...", "context": "As of [date], ALL key facts and angles including secondary/unusual details.", "rating": 4.5}}, ...]
 
 Articles:
 {articles_text}"""
