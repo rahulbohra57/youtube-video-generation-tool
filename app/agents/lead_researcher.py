@@ -161,19 +161,25 @@ def send_daily_digest():
     except Exception:
         yt = firestore_service.get_social_metrics("youtube") or {}
 
-    queue = firestore_service.get_queue_snapshot()
+    # The digest fires at 8am IST, exactly when the window resets to the new day.
+    # Use the PREVIOUS window (yesterday 8am → today 8am) to capture the day's activity.
+    current_window_start = firestore_service._ist_window_start()
+    prev_window_start = current_window_start - timedelta(hours=24)
+    prev_day_key = prev_window_start.astimezone(ist).strftime("%Y-%m-%d")
+
+    queue = firestore_service.get_queue_snapshot(window_start=prev_window_start)
     quota = firestore_service.get_quota_usage_snapshot()
 
-    # TTS usage today
-    tts_chars_today = firestore_service.get_tts_chars_today()
+    # TTS usage in previous window
+    tts_chars_today = firestore_service.get_tts_chars_today(window_start=prev_window_start)
     tts_monthly_est = tts_chars_today * 30
     tts_pct = round((tts_monthly_est / 1_000_000) * 100, 1)
 
-    # GNews calls today
-    gnews_today = firestore_service.get_gnews_calls_today()
+    # GNews calls in previous window
+    gnews_today = firestore_service.get_gnews_calls_today(window_start=prev_window_start)
 
     all_domains = ["technology", "artificial intelligence", "current affairs", "trending", "science"]
-    domains_today = firestore_service.get_domains_posted_today()
+    domains_today = firestore_service.get_domains_posted_today(day_key=prev_day_key)
     domain_lines = []
     for d in all_domains:
         mark = "✅" if d in domains_today else "⬜"

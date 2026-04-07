@@ -291,13 +291,13 @@ def list_recent_jobs(limit: int = 50) -> list[dict]:
     return rows
 
 
-def get_queue_snapshot() -> dict:
+def get_queue_snapshot(window_start=None) -> dict:
     rows = list_recent_jobs(limit=200)
     queued = sum(1 for r in rows if r.get("status") == "queued")
     processing = sum(1 for r in rows if r.get("status") == "processing")
     failed_24h = 0
     completed_24h = 0
-    window_start_ts = _ist_window_start().timestamp()
+    window_start_ts = (window_start or _ist_window_start()).timestamp()
     for r in rows:
         updated = _parse_iso(r.get("updated_at"))
         if not updated:
@@ -504,9 +504,9 @@ def _ist_report_day_key() -> str:
     return (now_ist - timedelta(days=1)).strftime("%Y-%m-%d")
 
 
-def get_domains_posted_today() -> dict:
+def get_domains_posted_today(day_key=None) -> dict:
     try:
-        doc = _get_db().collection("daily_domain_posts").document(_ist_report_day_key()).get()
+        doc = _get_db().collection("daily_domain_posts").document(day_key or _ist_report_day_key()).get()
         if not doc.exists:
             return {}
         data = doc.to_dict() or {}
@@ -585,10 +585,10 @@ def get_failed_auto_jobs(max_age_hours: int = 12) -> list[dict]:
         return []
 
 
-def get_gnews_calls_today() -> int:
+def get_gnews_calls_today(window_start=None) -> int:
     """Return GNews API calls since 8am IST today (avoids composite index by filtering in Python)."""
     try:
-        window_start_ts = _ist_window_start().timestamp()
+        window_start_ts = (window_start or _ist_window_start()).timestamp()
         docs = (
             _get_db()
             .collection("quota_events")
@@ -609,10 +609,10 @@ def get_gnews_calls_today() -> int:
         return 0
 
 
-def get_tts_chars_today() -> int:
+def get_tts_chars_today(window_start=None) -> int:
     """Return total TTS chars synthesized since 8am IST today (avoids composite index by filtering in Python)."""
     try:
-        window_start_ts = _ist_window_start().timestamp()
+        window_start_ts = (window_start or _ist_window_start()).timestamp()
         docs = (
             _get_db()
             .collection("quota_events")
