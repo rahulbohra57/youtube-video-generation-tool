@@ -623,8 +623,9 @@ def _enqueue_generate(
         return False
 
 
-def send_post_result(title: str, url: str, public_id: str = "", live_date: str = "", live_time: str = ""):
+def send_post_result(title: str, url: str, public_id: str = "", live_date: str = "", live_time: str = "", domain: str = ""):
     id_line = f"\nId: `{public_id}`" if public_id else ""
+    domain_line = f"\nDomain: {domain.title()}" if domain else ""
     date_line = live_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
     time_line = live_time or datetime.now(timezone.utc).strftime("%H:%M UTC")
     message = (
@@ -633,5 +634,6 @@ def send_post_result(title: str, url: str, public_id: str = "", live_date: str =
         f"Date: {date_line}\n"
         f"Time: {time_line}"
         f"{id_line}"
+        f"{domain_line}"
     )
     telegram_service.send_message(TELEGRAM_CHAT_ID, message)

@@ -81,6 +81,7 @@ def post(video_path: str, caption: str, title: str, job_id: str = "", public_id:
             public_id=public_id,
             live_date=ist_now.strftime("%Y-%m-%d"),
             live_time=ist_now.strftime("%I:%M %p IST"),
+            domain=(firestore_service.get_job(job_id) or {}).get("genre", "") if job_id else "",
         )
     except Exception as notify_err:
         logger.exception(f"Post-result notification failed: {notify_err}")

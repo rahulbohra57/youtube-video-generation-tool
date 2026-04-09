@@ -421,6 +421,7 @@ def run() -> str | None:
         (
             "🎬 A video is being generated...\n"
             f"Id: `{public_id}`\n"
+            f"Domain: {selected_domain.title()}\n"
             f"Headline: {selected_item.get('headline', '')}\n"
             f"Details: {details}\n"
             f"Virality Score: {virality}/5"
