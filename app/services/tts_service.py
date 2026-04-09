@@ -1,9 +1,23 @@
 # app/services/tts_service.py
 
-from google.cloud import texttospeech
+try:
+    from google.cloud import texttospeech
+except Exception:
+    texttospeech = None
 import random
 
-client = texttospeech.TextToSpeechClient()
+client = None
+
+
+def _get_client():
+    global client
+    if client is None:
+        if texttospeech is None:
+            raise RuntimeError(
+                "google-cloud-texttospeech is not installed or could not be imported."
+            )
+        client = texttospeech.TextToSpeechClient()
+    return client
 
 # Voice options for per-video shuffling.
 # English pool: 3 male + 2 female (Neural2/WaveNet — within 1M chars/month free tier).
@@ -64,6 +78,10 @@ def choose_voice_for_video(language: str = "en", preference: str = "shuffle", do
 
 
 def generate_audio(text: str, output_file: str, language: str = "en", voice_name: str | None = None):
+    if texttospeech is None:
+        raise RuntimeError(
+            "google-cloud-texttospeech is not installed or could not be imported."
+        )
     synthesis_input = texttospeech.SynthesisInput(text=text)
 
     lang_code = _LANG_CODES.get(language, "en-US")
@@ -86,7 +104,7 @@ def generate_audio(text: str, output_file: str, language: str = "en", voice_name
                 language_code=lang_code,
                 name=voice_name,
             )
-            response = client.synthesize_speech(
+            response = _get_client().synthesize_speech(
                 input=synthesis_input,
                 voice=voice,
                 audio_config=audio_config,

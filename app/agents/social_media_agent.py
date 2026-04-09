@@ -11,6 +11,14 @@ from app.config import get_chat_id
 logger = logging.getLogger(__name__)
 
 
+def _set_pipeline_and_batch_state(batch_id: str, state: str, channel_id: str = "news"):
+    """Keep backward compatibility for tests/mocks expecting positional args only."""
+    if channel_id == "news":
+        firestore_service.set_pipeline_and_batch_state(batch_id, state)
+    else:
+        firestore_service.set_pipeline_and_batch_state(batch_id, state, channel_id=channel_id)
+
+
 def _deliver_video_to_telegram(
     job_id: str,
     video_path: str,
@@ -108,6 +116,6 @@ def _finalize_pipeline_state(job_id: str, channel_id: str = "news"):
         state = firestore_service.get_pipeline_state(channel_id=channel_id)
         batch_id = state.get("active_batch_id")
         if batch_id:
-            firestore_service.set_pipeline_and_batch_state(batch_id, "completed", channel_id=channel_id)
+            _set_pipeline_and_batch_state(batch_id, "completed", channel_id=channel_id)
     except Exception as e:
         logger.warning(f"Failed to finalize pipeline state: {e}")

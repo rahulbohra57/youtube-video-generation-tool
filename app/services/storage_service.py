@@ -1,7 +1,10 @@
 # app/services/storage_service.py
 
 import logging
-from google.cloud import storage
+try:
+    from google.cloud import storage
+except Exception:
+    storage = None
 from app.config import BUCKET_NAME
 
 logger = logging.getLogger(__name__)
@@ -9,9 +12,13 @@ logger = logging.getLogger(__name__)
 _client = None
 
 
-def _get_client() -> storage.Client:
+def _get_client():
     global _client
     if _client is None:
+        if storage is None:
+            raise RuntimeError(
+                "google-cloud-storage is not installed or could not be imported."
+            )
         _client = storage.Client()
     return _client
 

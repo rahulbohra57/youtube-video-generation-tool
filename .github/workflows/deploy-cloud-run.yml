@@ -42,4 +42,9 @@ jobs:
             --region "${{ secrets.CLOUD_RUN_REGION }}" \
             --project "${{ secrets.GCP_PROJECT_ID }}" \
             --platform managed \
+            --allow-unauthenticated \
+            --min-instances=1 \
+            --memory=4Gi \
+            --cpu=4 \
+            --timeout=3600 \
             --quiet

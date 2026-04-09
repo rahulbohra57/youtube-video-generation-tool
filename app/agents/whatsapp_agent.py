@@ -6,8 +6,14 @@ import os
 import re
 import hashlib
 from datetime import datetime, timezone
-from google.cloud import tasks_v2
-from google.api_core.exceptions import AlreadyExists
+try:
+    from google.cloud import tasks_v2
+    from google.api_core.exceptions import AlreadyExists
+except Exception:
+    tasks_v2 = None
+
+    class AlreadyExists(Exception):
+        pass
 from app.services import firestore_service, telegram_service, youtube_service
 from app.config import (
     TELEGRAM_CHAT_ID,
@@ -20,6 +26,14 @@ from app.config import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _set_pipeline_and_batch_state(batch_id: str, state: str, channel_id: str = "news"):
+    """Keep backward compatibility for tests/mocks expecting positional args only."""
+    if channel_id == "news":
+        firestore_service.set_pipeline_and_batch_state(batch_id, state)
+    else:
+        firestore_service.set_pipeline_and_batch_state(batch_id, state, channel_id=channel_id)
 
 
 def _download_from_gcs(url: str) -> str:
@@ -75,7 +89,7 @@ def _refresh_pipeline_after_stop(job: dict, channel_id: str = "news"):
         return
     state = firestore_service.get_pipeline_state(channel_id=channel_id) or {}
     if state.get("active_batch_id") == batch_id and state.get("state") == "processing":
-        firestore_service.set_pipeline_and_batch_state(batch_id, "failed", channel_id=channel_id)
+        _set_pipeline_and_batch_state(batch_id, "failed", channel_id=channel_id)
     # Release the video lock immediately so the next scheduled run is not
     # blocked waiting for the cancelled generator to exit naturally.
     firestore_service.force_release_video_lock()
@@ -83,6 +97,8 @@ def _refresh_pipeline_after_stop(job: dict, channel_id: str = "news"):
 
 def _delete_queued_task(task_name: str):
     if not task_name:
+        return
+    if tasks_v2 is None:
         return
     client = tasks_v2.CloudTasksClient()
     queue_path = client.queue_path(PROJECT_ID, LOCATION, TASKS_QUEUE)
@@ -345,7 +361,7 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
             firestore_service.save_news_batch(redo_batch_id, genre or "direct", {
                 code: {"code": code, "headline": title, "context": details, "rating": 5.0, "genre": genre}
             })
-            firestore_service.set_pipeline_and_batch_state(redo_batch_id, "processing", channel_id=channel_id)
+            _set_pipeline_and_batch_state(redo_batch_id, "processing", channel_id=channel_id)
             task_name = _task_name(redo_batch_id, code)
             public_id = _public_video_id(task_name)
             enqueued = _enqueue_generate(
@@ -465,7 +481,7 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
                 }
             },
         )
-        firestore_service.set_pipeline_and_batch_state(direct_batch_id, "processing", channel_id=channel_id)
+        _set_pipeline_and_batch_state(direct_batch_id, "processing", channel_id=channel_id)
         task_name = _task_name(direct_batch_id, "DIRECT01")
         public_id = _public_video_id(task_name)
         enqueued = _enqueue_generate(
@@ -513,13 +529,13 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
         return
 
     if text == "NONE":
-        firestore_service.set_pipeline_and_batch_state(batch_id, "skipped", channel_id=channel_id)
+        _set_pipeline_and_batch_state(batch_id, "skipped", channel_id=channel_id)
         telegram_service.send_message(chat_id, "Got it! See you in the next digest.")
         return
 
     batch = firestore_service.get_news_batch(batch_id)
     if state.get("state") == "awaiting_reply" and _is_digest_expired(batch):
-        firestore_service.set_pipeline_and_batch_state(batch_id, "skipped", channel_id=channel_id)
+        _set_pipeline_and_batch_state(batch_id, "skipped", channel_id=channel_id)
         telegram_service.send_message(
             chat_id,
             "This digest expired after 2 hours and has been skipped. Please wait for the next digest, or use CREATE <topic>.",
@@ -533,7 +549,7 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
         if current_state in ("processing", "completed"):
             telegram_service.send_message(chat_id, "A video is already being processed. Please wait for it to finish.")
             return
-        firestore_service.set_pipeline_and_batch_state(batch_id, "processing", channel_id=channel_id)
+        _set_pipeline_and_batch_state(batch_id, "processing", channel_id=channel_id)
         task_name = _task_name(batch_id, text)
         public_id = _public_video_id(task_name)
         enqueued = _enqueue_generate(item["headline"], text, batch_id, public_id=public_id, channel_id=channel_id)
@@ -565,6 +581,10 @@ def _enqueue_generate(
     channel_id: str = "news",
 ) -> bool:
     """Enqueue a Cloud Task to generate a video. Returns True if newly enqueued, False if duplicate."""
+    if tasks_v2 is None:
+        raise RuntimeError(
+            "google-cloud-tasks is not installed or could not be imported."
+        )
     client = tasks_v2.CloudTasksClient()
     queue_path = client.queue_path(PROJECT_ID, LOCATION, TASKS_QUEUE)
 

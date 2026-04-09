@@ -1,7 +1,27 @@
 # app/services/firestore_service.py
 
-from google.cloud import firestore
-from google.api_core.exceptions import AlreadyExists
+try:
+    from google.cloud import firestore
+    from google.api_core.exceptions import AlreadyExists
+except Exception:
+    class AlreadyExists(Exception):
+        pass
+
+    class _FirestoreUnavailable:
+        class Query:
+            DESCENDING = "DESCENDING"
+
+        @staticmethod
+        def transactional(fn):
+            return fn
+
+        class Client:
+            def __init__(self, *args, **kwargs):
+                raise RuntimeError(
+                    "google-cloud-firestore is not installed or could not be imported."
+                )
+
+    firestore = _FirestoreUnavailable()
 from datetime import datetime, timezone, timedelta
 import hashlib
 
