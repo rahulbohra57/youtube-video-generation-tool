@@ -2,14 +2,22 @@
 
 import logging
 import httpx
-from app.config import TELEGRAM_BOT_TOKEN
+from app.config import TELEGRAM_BOT_TOKEN, STORIES_BOT_TOKEN, STORIES_CHAT_ID
 
 logger = logging.getLogger(__name__)
 
 
+def _bot_token_for(chat_id: str) -> str:
+    """Return the correct bot token for the given chat_id."""
+    if STORIES_CHAT_ID and str(chat_id) == str(STORIES_CHAT_ID):
+        return STORIES_BOT_TOKEN
+    return TELEGRAM_BOT_TOKEN
+
+
 def send_message(chat_id: str, text: str) -> bool:
     """Send Telegram message with markdown first, then plain-text fallback."""
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    token = _bot_token_for(chat_id)
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
 
     try:
         resp = httpx.post(
@@ -62,7 +70,7 @@ def send_video_for_manual_post(
         # GCS public URL — send as link so user can download
         return send_message(chat_id, caption_text + f"\n\n🔗 Video: {video_path_or_url}")
 
-    api_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
+    api_url = f"https://api.telegram.org/bot{_bot_token_for(chat_id)}/sendVideo"
     try:
         with open(video_path_or_url, "rb") as f:
             resp = httpx.post(
