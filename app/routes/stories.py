@@ -66,7 +66,7 @@ def _send_stories_daily_digest():
     current_window_start = firestore_service._ist_window_start()
     prev_window_start = current_window_start - timedelta(hours=24)
 
-    queue = firestore_service.get_queue_snapshot(window_start=prev_window_start)
+    queue = firestore_service.get_queue_snapshot(window_start=prev_window_start, channel_id="stories")
     tts_chars_month = firestore_service.get_tts_chars_this_month()
     tts_pct = round((tts_chars_month / 1_000_000) * 100, 1)
 

@@ -381,6 +381,26 @@ def test_lead_researcher_falls_back_to_new_domain_when_primary_exhausted(
     mock_enqueue.assert_called_once()
 
 
+@patch("app.agents.lead_researcher.firestore_service")
+@patch("app.agents.lead_researcher.gnews_service")
+@patch("app.agents.lead_researcher._within_suggestion_window", return_value=True)
+def test_lead_researcher_uses_news_only_recently_covered(mock_window, mock_gnews, mock_fs):
+    mock_fs.get_pipeline_state.return_value = {}
+    mock_fs.get_domains_posted_today.return_value = {}
+    mock_fs.get_top_performers.return_value = []
+    mock_fs.get_genre_performance_weekly.return_value = {}
+    mock_fs.get_recently_suggested_headlines.return_value = []
+    mock_fs.is_headline_already_suggested.return_value = False
+    mock_gnews.search_news.return_value = []
+
+    from app.agents import lead_researcher
+    lead_researcher.run()
+
+    mock_fs.get_recently_suggested_headlines.assert_called_once_with(
+        days=14, limit=20, channel_id="news"
+    )
+
+
 @patch("app.agents.lead_researcher.send_message")
 @patch("app.agents.lead_researcher.firestore_service")
 @patch("app.agents.lead_researcher.rate_and_select_news")
@@ -413,6 +433,18 @@ def test_lead_researcher_uses_24h_lookback():
     from app.agents import lead_researcher
     src = inspect.getsource(lead_researcher.run)
     assert "lookback_hours = 24" in src
+
+
+@patch("app.agents.story_researcher.firestore_service")
+def test_story_researcher_recent_titles_are_stories_only(mock_fs):
+    mock_fs.get_recently_suggested_headlines.return_value = []
+
+    from app.agents import story_researcher
+    story_researcher._recently_used_titles(limit=5)
+
+    mock_fs.get_recently_suggested_headlines.assert_called_once_with(
+        days=30, limit=5, channel_id="stories"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -772,6 +804,21 @@ def test_research_run_returns_skipped_when_no_batch(mock_lr):
     resp = client.post("/research/run", headers={"X-Scheduler-Secret": "mysecret"})
     assert resp.status_code == 200
     assert resp.json()["status"] == "skipped"
+
+
+@patch("app.services.telegram_service.send_message")
+@patch("app.services.youtube_service.get_channel_stats")
+@patch("app.routes.stories.firestore_service")
+def test_stories_daily_digest_uses_stories_queue_only(mock_fs, mock_get_channel_stats, _mock_send_message):
+    mock_get_channel_stats.return_value = {"subscriber_count": 1, "view_count": 10, "video_count": 2}
+    mock_fs._ist_window_start.return_value = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+    mock_fs.get_queue_snapshot.return_value = {"completed_24h": 1, "failed_24h": 0}
+    mock_fs.get_tts_chars_this_month.return_value = 100
+
+    from app.routes import stories
+    stories._send_stories_daily_digest()
+
+    assert mock_fs.get_queue_snapshot.call_args[1]["channel_id"] == "stories"
 
 
 @patch("app.routes.webhook.whatsapp_agent")

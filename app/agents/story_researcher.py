@@ -37,7 +37,7 @@ def _recently_used_titles(limit: int = 20) -> list[str]:
     """Return recent story titles from suggested_headlines to pass to the LLM to avoid repeats."""
     try:
         return firestore_service.get_recently_suggested_headlines(
-            days=_STORY_DEDUP_DAYS, limit=limit
+            days=_STORY_DEDUP_DAYS, limit=limit, channel_id="stories"
         )
     except Exception:
         return []

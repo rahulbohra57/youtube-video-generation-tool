@@ -226,7 +226,11 @@ def mark_headline_suggested(headline: str, genre: str = "", channel_id: str = "n
     }, merge=True)
 
 
-def get_recently_suggested_headlines(days: int = 14, limit: int = 20) -> list[str]:
+def get_recently_suggested_headlines(
+    days: int = 14,
+    limit: int = 20,
+    channel_id: str | None = None,
+) -> list[str]:
     """Return headlines suggested within the last `days` days, newest first.
 
     Used to detect content fatigue — passed to the LLM so it can penalize
@@ -234,10 +238,15 @@ def get_recently_suggested_headlines(days: int = 14, limit: int = 20) -> list[st
     """
     try:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-        docs = (
+        query = (
             _get_db()
             .collection("suggested_headlines")
             .where("suggested_at", ">=", cutoff)
+        )
+        if channel_id:
+            query = query.where("channel_id", "==", channel_id)
+        docs = (
+            query
             .order_by("suggested_at", direction=firestore.Query.DESCENDING)
             .limit(limit)
             .stream()

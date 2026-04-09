@@ -328,7 +328,7 @@ def run() -> str | None:
     domain_results: dict[str, list[dict]] = {}
 
     top_performers = firestore_service.get_top_performers(n=3)
-    recently_covered = firestore_service.get_recently_suggested_headlines(days=14, limit=20)
+    recently_covered = firestore_service.get_recently_suggested_headlines(days=14, limit=20, channel_id="news")
 
     for domain, cfg in domains.items():
         # One search call per domain (sorted by publishedAt already covers top headlines).
