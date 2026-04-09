@@ -7,11 +7,12 @@ from datetime import datetime, timezone
 from uuid import uuid4
 from typing import Callable, Any
 
-from app.config import TEMP_DIR, OUTPUT_DIR, TMP_RETENTION_DAYS, TELEGRAM_CHAT_ID
+from app.config import TEMP_DIR, OUTPUT_DIR, TMP_RETENTION_DAYS, get_chat_id
 from app.services import firestore_service
 from app.services.llm_service import (
     generate_script,
     generate_script_with_search,
+    generate_story_script,
     classify_music_genre,
     apply_quality_controls,
 )
@@ -49,14 +50,14 @@ def _run_with_backoff(fn: Callable[[], Any], max_retries: int = SCENE_MAX_RETRIE
     raise last_exc
 
 
-def _set_batch_terminal_state(batch_id: str | None, status: str):
+def _set_batch_terminal_state(batch_id: str | None, status: str, channel_id: str = "news"):
     """Keep pipeline state consistent when a batch reaches a terminal state."""
     if not batch_id:
         return
     try:
-        current = firestore_service.get_pipeline_state() or {}
+        current = firestore_service.get_pipeline_state(channel_id=channel_id) or {}
         if current.get("active_batch_id") == batch_id:
-            firestore_service.set_pipeline_and_batch_state(batch_id, status)
+            firestore_service.set_pipeline_and_batch_state(batch_id, status, channel_id=channel_id)
     except Exception:
         return
 
@@ -81,6 +82,8 @@ def run(
     virality_score: float = 0.0,
     idempotency_scope: str | None = None,
     idempotency_key: str | None = None,
+    channel_id: str = "news",
+    script_type: str = "news",
 ):
     ensure_dir(TEMP_DIR)
     ensure_dir(OUTPUT_DIR)
@@ -89,6 +92,7 @@ def run(
     lock_owner = f"task:{batch_id or 'manual'}:{code}:{uuid4().hex}"
     effective_job_id = job_id or f"task-{uuid4().hex}"
 
+    _chat_id = get_chat_id(channel_id)
     firestore_service.create_or_update_job(
         effective_job_id,
         {
@@ -102,11 +106,13 @@ def run(
             "genre": genre,
             "details": details,
             "virality_score": float(virality_score or 0),
+            "channel_id": channel_id,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "started_at": datetime.now(timezone.utc).isoformat(),
         },
     )
-    selected_voice = choose_voice_for_video(language="en", preference="shuffle", domain=genre or "")
+    _voice_lang = "hi" if script_type == "story" else "en"
+    selected_voice = choose_voice_for_video(language=_voice_lang, preference="shuffle", domain=genre or "")
     firestore_service.create_or_update_job(
         effective_job_id,
         {
@@ -127,7 +133,7 @@ def run(
             },
         )
         send_message(
-            TELEGRAM_CHAT_ID,
+            _chat_id,
             f"⚠️ Another video is already being processed. "
             f"Request for *{code}* has been rejected. Please wait for the current video to finish."
         )
@@ -137,14 +143,14 @@ def run(
                 idempotency_key,
                 {"status": "rejected_busy"},
             )
-        _set_batch_terminal_state(batch_id, "failed")
+        _set_batch_terminal_state(batch_id, "failed", channel_id=channel_id)
         return
 
     try:
         # ── Single-video guard ─────────────────────────────────────────────
         # If another pipeline is already running for a DIFFERENT batch, reject
         # this task immediately so Cloud Tasks doesn't retry it.
-        current = firestore_service.get_pipeline_state()
+        current = firestore_service.get_pipeline_state(channel_id=channel_id)
         current_state = current.get("state")
         current_batch = current.get("active_batch_id")
 
@@ -166,7 +172,7 @@ def run(
                     idempotency_key,
                     {"status": "stale_rejected"},
                 )
-            _set_batch_terminal_state(batch_id, "failed")
+            _set_batch_terminal_state(batch_id, "failed", channel_id=channel_id)
             return  # return silently — Cloud Tasks will see 200 OK and not retry
 
         if (not force_run) and current_state == "processing" and current_batch != batch_id:
@@ -178,7 +184,7 @@ def run(
                 },
             )
             send_message(
-                TELEGRAM_CHAT_ID,
+                _chat_id,
                 f"⚠️ Another video is already being processed. "
                 f"Request for *{code}* has been rejected. Please wait for the current video to finish."
             )
@@ -188,21 +194,29 @@ def run(
                     idempotency_key,
                     {"status": "rejected_busy"},
                 )
-            _set_batch_terminal_state(batch_id, "failed")
+            _set_batch_terminal_state(batch_id, "failed", channel_id=channel_id)
             return
         # ──────────────────────────────────────────────────────────────────
 
-        try:
-            raw_script = generate_script_with_search(headline, language="en", aspect_ratio="9:16", context=details or "")
-        except Exception as _search_exc:
-            logger.warning("Search-grounded script generation failed (%s), falling back to standard", _search_exc)
-            raw_script = generate_script(headline, language="en", aspect_ratio="9:16", context=details or "")
+        if script_type == "story":
+            # Stories: pure LLM generation in Hindi, no web search
+            language = "hi"
+            mood = genre or "inspiring"
+            raw_script = generate_story_script(headline, mood=mood, premise=details or "")
+        else:
+            # News: search-grounded script generation in English
+            language = "en"
+            try:
+                raw_script = generate_script_with_search(headline, language="en", aspect_ratio="9:16", context=details or "")
+            except Exception as _search_exc:
+                logger.warning("Search-grounded script generation failed (%s), falling back to standard", _search_exc)
+                raw_script = generate_script(headline, language="en", aspect_ratio="9:16", context=details or "")
         try:
             scenes = extract_json(raw_script)
         except Exception:
             scenes = [{"scene": 1, "narration": headline, "visual": "news concept illustration"}]
-        scenes = apply_quality_controls(headline, scenes, language="en")
-        reviewed = review_package(headline, scenes, language="en", min_seconds=15, max_seconds=58, genre=genre or "")
+        scenes = apply_quality_controls(headline, scenes, language=language)
+        reviewed = review_package(headline, scenes, language=language, min_seconds=15, max_seconds=58, genre=genre or "")
         scenes = reviewed.get("scenes") or scenes
         reviewed_title = reviewed.get("title") or headline
         reviewed_caption = reviewed.get("caption") or ""
@@ -216,7 +230,7 @@ def run(
 
         for i, scene in enumerate(scenes):
             if _is_cancel_requested(effective_job_id):
-                send_message(TELEGRAM_CHAT_ID, f"🛑 Generation stopped successfully for ID `{public_id or effective_job_id}`.")
+                send_message(_chat_id, f"🛑 Generation stopped successfully for ID `{public_id or effective_job_id}`.")
                 firestore_service.create_or_update_job(
                     effective_job_id,
                     {
@@ -224,7 +238,7 @@ def run(
                         "finished_at": datetime.now(timezone.utc).isoformat(),
                     },
                 )
-                _set_batch_terminal_state(batch_id, "failed")
+                _set_batch_terminal_state(batch_id, "failed", channel_id=channel_id)
                 if idempotency_scope and idempotency_key:
                     firestore_service.update_idempotency_key(
                         idempotency_scope,
@@ -255,7 +269,7 @@ def run(
             try:
                 audio_path = os.path.join(TEMP_DIR, f"audio_{code}_{i}.mp3")
                 _, audio_retries = _run_with_backoff(
-                    lambda: generate_audio(narration, audio_path, language="en", voice_name=selected_voice)
+                    lambda n=narration, p=audio_path: generate_audio(n, p, language=language, voice_name=selected_voice)
                 )
                 firestore_service.mark_scene_checkpoint(
                     effective_job_id,
@@ -266,7 +280,7 @@ def run(
                 )
 
                 image_path, image_retries = _run_with_backoff(
-                    lambda: generate_image(visual, i, aspect_ratio="9:16")
+                    lambda v=visual, idx=i: generate_image(v, idx, aspect_ratio="9:16")
                 )
                 firestore_service.record_quota_event("image_success")
                 firestore_service.mark_scene_checkpoint(
@@ -296,7 +310,7 @@ def run(
                 # If ALL scenes have failed due to quota/image errors, notify and abort early
                 if image_failures >= MAX_SCENES:
                     send_message(
-                        TELEGRAM_CHAT_ID,
+                        _chat_id,
                         f"❌ Image generation failed for *{code}* after 3 attempts "
                         f"(Imagen quota may be exhausted). Please try again later."
                     )
@@ -315,12 +329,12 @@ def run(
                             idempotency_key,
                             {"status": "failed", "job_id": effective_job_id},
                         )
-                    _set_batch_terminal_state(batch_id, "failed")
+                    _set_batch_terminal_state(batch_id, "failed", channel_id=channel_id)
                     return
 
         if not video_clips:
             send_message(
-                TELEGRAM_CHAT_ID,
+                _chat_id,
                 f"❌ Video generation failed for *{code}* — no scenes could be generated. "
                 f"Please try again later."
             )
@@ -338,11 +352,11 @@ def run(
                     idempotency_key,
                     {"status": "failed", "job_id": effective_job_id},
                 )
-            _set_batch_terminal_state(batch_id, "failed")
+            _set_batch_terminal_state(batch_id, "failed", channel_id=channel_id)
             return
 
         if _is_cancel_requested(effective_job_id):
-            send_message(TELEGRAM_CHAT_ID, f"🛑 Generation stopped successfully for ID `{public_id or effective_job_id}`.")
+            send_message(_chat_id, f"🛑 Generation stopped successfully for ID `{public_id or effective_job_id}`.")
             firestore_service.create_or_update_job(
                 effective_job_id,
                 {
@@ -350,7 +364,7 @@ def run(
                     "finished_at": datetime.now(timezone.utc).isoformat(),
                 },
             )
-            _set_batch_terminal_state(batch_id, "failed")
+            _set_batch_terminal_state(batch_id, "failed", channel_id=channel_id)
             if idempotency_scope and idempotency_key:
                 firestore_service.update_idempotency_key(
                     idempotency_scope,
@@ -359,10 +373,10 @@ def run(
                 )
             return
 
-        send_message(TELEGRAM_CHAT_ID, "✅ Frames Generated! Now compiling the video...")
+        send_message(_chat_id, "✅ Frames Generated! Now compiling the video...")
 
         output_path = os.path.join(OUTPUT_DIR, f"final_{code}_{timestamp}.mp4")
-        create_video(video_clips, output_path, music_genre=music_genre, language="en")
+        create_video(video_clips, output_path, music_genre=music_genre, language=language)
 
         # Upload to GCS so the video survives instance restarts
         try:
@@ -386,6 +400,7 @@ def run(
             public_id=public_id or "",
             genre=genre,
             source=source,
+            channel_id=channel_id,
         )
         # If post() returned None the video was delivered via Telegram (delivered_manual).
         # Do not overwrite that status — just record the local path and scene count.
@@ -415,7 +430,7 @@ def run(
                 idempotency_key,
                 {"status": "completed", "job_id": effective_job_id},
             )
-        _set_batch_terminal_state(batch_id, "completed")
+        _set_batch_terminal_state(batch_id, "completed", channel_id=channel_id)
     except Exception as e:
         firestore_service.create_or_update_job(
             effective_job_id,
@@ -432,7 +447,7 @@ def run(
                 idempotency_key,
                 {"status": "failed", "job_id": effective_job_id},
             )
-        _set_batch_terminal_state(batch_id, "failed")
+        _set_batch_terminal_state(batch_id, "failed", channel_id=channel_id)
         raise
     finally:
         firestore_service.release_video_lock(lock_owner)

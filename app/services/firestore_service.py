@@ -33,15 +33,15 @@ def update_batch_status(batch_id: str, status: str):
     _get_db().collection("news_batches").document(batch_id).update({"status": status})
 
 
-def set_pipeline_state(batch_id: str, state: str):
-    _get_db().collection("pipeline_state").document("current").set({
+def set_pipeline_state(batch_id: str, state: str, channel_id: str = "news"):
+    _get_db().collection("pipeline_state").document(channel_id).set({
         "active_batch_id": batch_id,
         "last_run_at": datetime.now(timezone.utc).isoformat(),
         "state": state,
     })
 
 
-def set_pipeline_and_batch_state(batch_id: str, state: str):
+def set_pipeline_and_batch_state(batch_id: str, state: str, channel_id: str = "news"):
     """Atomically update pipeline_state and news_batches status in a single Firestore batch write."""
     db = _get_db()
     wb = db.batch()
@@ -50,7 +50,7 @@ def set_pipeline_and_batch_state(batch_id: str, state: str):
         {"status": state},
     )
     wb.set(
-        db.collection("pipeline_state").document("current"),
+        db.collection("pipeline_state").document(channel_id),
         {
             "active_batch_id": batch_id,
             "last_run_at": datetime.now(timezone.utc).isoformat(),
@@ -60,9 +60,15 @@ def set_pipeline_and_batch_state(batch_id: str, state: str):
     wb.commit()
 
 
-def get_pipeline_state() -> dict:
-    doc = _get_db().collection("pipeline_state").document("current").get()
-    return doc.to_dict() if doc.exists else {}
+def get_pipeline_state(channel_id: str = "news") -> dict:
+    doc = _get_db().collection("pipeline_state").document(channel_id).get()
+    if doc.exists:
+        return doc.to_dict()
+    # Migration: fall back to legacy "current" doc for news channel
+    if channel_id == "news":
+        legacy = _get_db().collection("pipeline_state").document("current").get()
+        return legacy.to_dict() if legacy.exists else {}
+    return {}
 
 
 def _utc_now() -> datetime:
@@ -149,13 +155,19 @@ def release_video_lock(owner: str) -> bool:
     return bool(_release_if_owner(transaction))
 
 
-def save_youtube_tokens(tokens: dict):
-    _get_db().collection("oauth_tokens").document("youtube").set(tokens)
+def save_youtube_tokens(tokens: dict, channel_id: str = "news"):
+    _get_db().collection("oauth_tokens").document(f"youtube_{channel_id}").set(tokens)
 
 
-def get_youtube_tokens() -> dict | None:
-    doc = _get_db().collection("oauth_tokens").document("youtube").get()
-    return doc.to_dict() if doc.exists else None
+def get_youtube_tokens(channel_id: str = "news") -> dict | None:
+    doc = _get_db().collection("oauth_tokens").document(f"youtube_{channel_id}").get()
+    if doc.exists:
+        return doc.to_dict()
+    # Migration: fall back to legacy "youtube" doc for news channel
+    if channel_id == "news":
+        legacy = _get_db().collection("oauth_tokens").document("youtube").get()
+        return legacy.to_dict() if legacy.exists else None
+    return None
 
 
 def _headline_key(headline: str) -> str:
@@ -163,13 +175,15 @@ def _headline_key(headline: str) -> str:
     return hashlib.sha1(normalized.encode("utf-8")).hexdigest()
 
 
-def is_headline_already_suggested(headline: str, ttl_days: int = 14) -> bool:
+def is_headline_already_suggested(headline: str, ttl_days: int = 14, channel_id: str = "news") -> bool:
     """Return True only if this headline was suggested within the last ttl_days.
 
     Headlines older than ttl_days are treated as fresh so the topic can be
     revisited if there's a new development.
+    Stories use a prefixed doc key ("stories_<hash>") to avoid colliding with news.
     """
-    key = _headline_key(headline)
+    prefix = "stories_" if channel_id == "stories" else ""
+    key = f"{prefix}{_headline_key(headline)}"
     doc = _get_db().collection("suggested_headlines").document(key).get()
     if not doc.exists:
         return False
@@ -181,11 +195,13 @@ def is_headline_already_suggested(headline: str, ttl_days: int = 14) -> bool:
     return age_days < ttl_days
 
 
-def mark_headline_suggested(headline: str, genre: str = ""):
-    key = _headline_key(headline)
+def mark_headline_suggested(headline: str, genre: str = "", channel_id: str = "news"):
+    prefix = "stories_" if channel_id == "stories" else ""
+    key = f"{prefix}{_headline_key(headline)}"
     _get_db().collection("suggested_headlines").document(key).set({
         "headline": headline,
         "genre": genre,
+        "channel_id": channel_id,
         "suggested_at": datetime.now(timezone.utc).isoformat(),
     }, merge=True)
 

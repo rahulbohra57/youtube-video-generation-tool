@@ -404,6 +404,99 @@ Reply with ONLY the single mood name from the list above. Nothing else."""
         return "general"
 
 
+_STORY_MOODS = ["inspiring", "cheerful", "joyful", "happy", "sad", "adventurous"]
+
+_STORY_VISUAL_STYLE = (
+    "Soft watercolor illustration, warm earthy palette, gentle diffused lighting, "
+    "painterly texture, no text, no words, no letters"
+)
+
+
+def generate_story_idea(recently_used_titles: list[str] | None = None) -> dict:
+    """Generate a fresh Hindi moral story concept. Returns {title, mood, premise} all in Hindi."""
+    avoid_block = ""
+    if recently_used_titles:
+        lines = "\n".join(f"  - {t}" for t in recently_used_titles[:20])
+        avoid_block = f"\nइन कहानियों को दोबारा मत बनाओ (हाल में बनाई गई):\n{lines}\n"
+
+    mood_list = ", ".join(_STORY_MOODS)
+    prompt = f"""तुम एक रचनात्मक Hindi कहानीकार हो जो YouTube Shorts के लिए छोटी नैतिक कहानियाँ लिखते हो।
+
+एक बिल्कुल नई, मौलिक कहानी का विचार दो। कहानी 45-55 सेकंड में पूरी होनी चाहिए।{avoid_block}
+
+नियम:
+- शीर्षक (title) 5-8 शब्दों का हो, जिज्ञासा जगाने वाला हो
+- mood इनमें से एक हो: {mood_list}
+- premise एक वाक्य में हो: कौन + क्या चुनौती + कौन सी सीख
+
+सिर्फ एक valid JSON object return करो, कोई markdown नहीं:
+{{"title": "...", "mood": "...", "premise": "..."}}"""
+
+    try:
+        response = model.generate_content(prompt)
+        result = _extract_json_object(_response_text(response))
+        if result.get("title") and result.get("mood") and result.get("premise"):
+            return result
+    except Exception:
+        pass
+    # Fallback
+    import random as _random
+    return {
+        "title": "एक छोटी सी मेहनत, बड़ा बदलाव",
+        "mood": _random.choice(_STORY_MOODS),
+        "premise": "एक बच्चा छोटी सी कोशिश से बड़ा सपना पूरा करता है।",
+    }
+
+
+def generate_story_script(title: str, mood: str, premise: str = "") -> str:
+    """Generate a 3-scene Hindi moral story script for YouTube Shorts (<1 min).
+
+    Returns JSON array with scene/narration/visual keys (same format as generate_script).
+    Narrations are in Hindi (Devanagari). Visual prompts are in English for Imagen.
+    """
+    premise_block = f"\nकहानी का सार: {premise}" if premise else ""
+
+    prompt = f"""तुम एक YouTube Shorts के लिए Hindi में छोटी नैतिक कहानी लिखने वाले scriptwriter हो।
+
+कहानी: {title}{premise_block}
+मूड: {mood}
+
+3 दृश्य (scenes) लिखो। कुल अवधि 45-55 सेकंड होनी चाहिए।
+
+हर scene में:
+- "narration": हिंदी में (देवनागरी लिपि), 18-22 शब्द, बोलने में स्वाभाविक
+- "visual": अंग्रेज़ी में (Imagen के लिए), बहुत विस्तृत image generation prompt
+
+Scene structure:
+- Scene 1 (शुरुआत ~15s): पात्र और उसकी चुनौती का परिचय। दर्शक को बाँधे।
+- Scene 2 (मोड़ ~15s): निर्णायक क्षण — पात्र एक महत्वपूर्ण कदम उठाता है।
+- Scene 3 (अंत ~15s): परिणाम और एक काव्यात्मक नैतिक वाक्य।
+
+NARRATION नियम:
+- हिंदी (देवनागरी) में लिखो — Roman script नहीं
+- 18-22 शब्द प्रति scene — इससे अधिक नहीं
+- "एक बार की बात है" से शुरू मत करो
+- Scene 1-2 में सीधे नैतिक उपदेश मत दो — कार्य के ज़रिए दिखाओ
+- सरल, बोधगम्य भाषा
+
+VISUAL PROMPT नियम:
+- अंग्रेज़ी में लिखो
+- इस style prefix से शुरू करो: "{_STORY_VISUAL_STYLE} — "
+- कोई असली व्यक्ति, धार्मिक प्रतीक, copyright characters नहीं
+- प्रकृति, गाँव, जंगल, नदी जैसी settings को प्राथमिकता दो
+- No text, no words, no signs in the image
+
+सिर्फ valid JSON array return करो, कोई markdown नहीं:
+[
+  {{"scene": 1, "narration": "...", "visual": "..."}},
+  {{"scene": 2, "narration": "...", "visual": "..."}},
+  {{"scene": 3, "narration": "...", "visual": "..."}}
+]"""
+
+    response = model.generate_content(prompt)
+    return _response_text(response)
+
+
 def rate_and_select_news(
     articles: list[dict],
     top_performers: list[dict] | None = None,

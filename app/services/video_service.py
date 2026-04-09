@@ -19,7 +19,7 @@ AUDIO_FADE_OUT = 0.35
 # DejaVu is installed via Dockerfile (fonts-dejavu-core) and is the production font.
 # macOS fonts are listed as secondary so local dev still gets good rendering.
 _FONT_EN  = ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 0)  # Linux / Cloud Run
-_FONT_HI  = ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 0)  # Hindi fallback (no Devanagari in DejaVu, but readable)
+_FONT_HI  = ("/usr/share/fonts/truetype/lohit-devanagari/Lohit-Devanagari.ttf", 0)  # Devanagari (installed via fonts-indic)
 _FONT_FALLBACKS = [
     ("/System/Library/Fonts/HelveticaNeue.ttc", 1),  # macOS dev
     ("/System/Library/Fonts/Kohinoor.ttc",      3),  # macOS Hindi dev

@@ -2,7 +2,7 @@ FROM python:3.10
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y fonts-dejavu-core fonts-indic && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN pip install -r requirements.txt

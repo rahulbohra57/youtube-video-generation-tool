@@ -11,6 +11,7 @@ from google.api_core.exceptions import AlreadyExists
 from app.services import firestore_service, telegram_service, youtube_service
 from app.config import (
     TELEGRAM_CHAT_ID,
+    get_chat_id,
     PROJECT_ID,
     LOCATION,
     CLOUD_RUN_URL,
@@ -68,13 +69,13 @@ def _resolve_job(identifier: str) -> tuple[str | None, dict | None]:
     return None, None
 
 
-def _refresh_pipeline_after_stop(job: dict):
+def _refresh_pipeline_after_stop(job: dict, channel_id: str = "news"):
     batch_id = (job or {}).get("batch_id")
     if not batch_id:
         return
-    state = firestore_service.get_pipeline_state() or {}
+    state = firestore_service.get_pipeline_state(channel_id=channel_id) or {}
     if state.get("active_batch_id") == batch_id and state.get("state") == "processing":
-        firestore_service.set_pipeline_and_batch_state(batch_id, "failed")
+        firestore_service.set_pipeline_and_batch_state(batch_id, "failed", channel_id=channel_id)
     # Release the video lock immediately so the next scheduled run is not
     # blocked waiting for the cancelled generator to exit naturally.
     firestore_service.force_release_video_lock()
@@ -168,7 +169,7 @@ def send_digest(batch_id: str):
     telegram_service.send_message(TELEGRAM_CHAT_ID, message)
 
 
-def handle_reply(chat_id: str, body: str):
+def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
     raw_text = body.strip()
     text = raw_text.upper()
 
@@ -220,7 +221,7 @@ def handle_reply(chat_id: str, body: str):
                 job_id,
                 {"status": "cancelled", "finished_at": datetime.now(timezone.utc).isoformat()},
             )
-        _refresh_pipeline_after_stop(job)
+        _refresh_pipeline_after_stop(job, channel_id=channel_id)
         telegram_service.send_message(
             chat_id,
             f"🛑 Stop requested for `{stop_id}`.",
@@ -239,7 +240,7 @@ def handle_reply(chat_id: str, body: str):
             telegram_service.send_message(chat_id, f"Video URL not found for `{private_id}`.")
             return
         try:
-            youtube_service.set_video_privacy(video_id, privacy_status="private")
+            youtube_service.set_video_privacy(video_id, privacy_status="private", channel_id=channel_id)
             firestore_service.create_or_update_job(
                 resolved_job_id,
                 {"youtube_privacy": "private", "updated_at": datetime.now(timezone.utc).isoformat()},
@@ -261,7 +262,7 @@ def handle_reply(chat_id: str, body: str):
             telegram_service.send_message(chat_id, f"Video URL not found for `{delete_id}`.")
             return
         try:
-            youtube_service.delete_video(video_id)
+            youtube_service.delete_video(video_id, channel_id=channel_id)
             firestore_service.create_or_update_job(
                 resolved_job_id,
                 {
@@ -319,7 +320,7 @@ def handle_reply(chat_id: str, body: str):
             telegram_service.send_message(chat_id, f"🔁 Attempting YouTube re-upload for `{redo_id}`...")
             try:
                 local_path = _download_from_gcs(gcs_url)
-                url = youtube_service.upload_video(local_path, title, caption, genre=genre)
+                url = youtube_service.upload_video(local_path, title, caption, genre=genre, channel_id=channel_id)
                 firestore_service.create_or_update_job(job_id, {"status": "completed", "youtube_url": url})
                 telegram_service.send_message(chat_id, f"✅ REDO uploaded to YouTube!\n{url}")
                 try:
@@ -342,12 +343,13 @@ def handle_reply(chat_id: str, body: str):
             firestore_service.save_news_batch(redo_batch_id, genre or "direct", {
                 code: {"code": code, "headline": title, "context": details, "rating": 5.0, "genre": genre}
             })
-            firestore_service.set_pipeline_and_batch_state(redo_batch_id, "processing")
+            firestore_service.set_pipeline_and_batch_state(redo_batch_id, "processing", channel_id=channel_id)
             task_name = _task_name(redo_batch_id, code)
             public_id = _public_video_id(task_name)
             enqueued = _enqueue_generate(
                 title, code, redo_batch_id,
                 public_id=public_id, force_run=True, genre=genre, details=details,
+                channel_id=channel_id,
             )
             if enqueued:
                 telegram_service.send_message(
@@ -431,7 +433,7 @@ def handle_reply(chat_id: str, body: str):
                 )
                 return
 
-        state = firestore_service.get_pipeline_state()
+        state = firestore_service.get_pipeline_state(channel_id=channel_id)
         if state.get("state") == "processing" and not is_force_create:
             telegram_service.send_message(chat_id, "A video is already being processed. Please wait for it to finish.")
             firestore_service.update_idempotency_key(
@@ -461,7 +463,7 @@ def handle_reply(chat_id: str, body: str):
                 }
             },
         )
-        firestore_service.set_pipeline_and_batch_state(direct_batch_id, "processing")
+        firestore_service.set_pipeline_and_batch_state(direct_batch_id, "processing", channel_id=channel_id)
         task_name = _task_name(direct_batch_id, "DIRECT01")
         public_id = _public_video_id(task_name)
         enqueued = _enqueue_generate(
@@ -473,6 +475,7 @@ def handle_reply(chat_id: str, body: str):
             details=create_context,
             idempotency_scope="create_topic",
             idempotency_key=topic_key,
+            channel_id=channel_id,
         )
         if enqueued:
             firestore_service.update_idempotency_key(
@@ -500,7 +503,7 @@ def handle_reply(chat_id: str, body: str):
             )
         return
 
-    state = firestore_service.get_pipeline_state()
+    state = firestore_service.get_pipeline_state(channel_id=channel_id)
     batch_id = state.get("active_batch_id")
 
     if not batch_id:
@@ -508,13 +511,13 @@ def handle_reply(chat_id: str, body: str):
         return
 
     if text == "NONE":
-        firestore_service.set_pipeline_and_batch_state(batch_id, "skipped")
+        firestore_service.set_pipeline_and_batch_state(batch_id, "skipped", channel_id=channel_id)
         telegram_service.send_message(chat_id, "Got it! See you in the next digest.")
         return
 
     batch = firestore_service.get_news_batch(batch_id)
     if state.get("state") == "awaiting_reply" and _is_digest_expired(batch):
-        firestore_service.set_pipeline_and_batch_state(batch_id, "skipped")
+        firestore_service.set_pipeline_and_batch_state(batch_id, "skipped", channel_id=channel_id)
         telegram_service.send_message(
             chat_id,
             "This digest expired after 2 hours and has been skipped. Please wait for the next digest, or use CREATE <topic>.",
@@ -528,10 +531,10 @@ def handle_reply(chat_id: str, body: str):
         if current_state in ("processing", "completed"):
             telegram_service.send_message(chat_id, "A video is already being processed. Please wait for it to finish.")
             return
-        firestore_service.set_pipeline_and_batch_state(batch_id, "processing")
+        firestore_service.set_pipeline_and_batch_state(batch_id, "processing", channel_id=channel_id)
         task_name = _task_name(batch_id, text)
         public_id = _public_video_id(task_name)
-        enqueued = _enqueue_generate(item["headline"], text, batch_id, public_id=public_id)
+        enqueued = _enqueue_generate(item["headline"], text, batch_id, public_id=public_id, channel_id=channel_id)
         if enqueued:
             telegram_service.send_message(
                 chat_id,
@@ -557,6 +560,7 @@ def _enqueue_generate(
     source: str = "telegram",
     idempotency_scope: str | None = None,
     idempotency_key: str | None = None,
+    channel_id: str = "news",
 ) -> bool:
     """Enqueue a Cloud Task to generate a video. Returns True if newly enqueued, False if duplicate."""
     client = tasks_v2.CloudTasksClient()
@@ -567,6 +571,11 @@ def _enqueue_generate(
     task_name = re.sub(r"[^a-zA-Z0-9_-]", "-", raw_name)
     video_public_id = public_id or _public_video_id(task_name)
     job_id = task_name
+    task_url = (
+        f"{CLOUD_RUN_URL}/generate/stories-task"
+        if channel_id == "stories"
+        else f"{CLOUD_RUN_URL}/generate/task"
+    )
     payload_dict = {
         "headline": headline,
         "code": code,
@@ -577,6 +586,7 @@ def _enqueue_generate(
         "genre": genre,
         "details": details,
         "virality_score": float(virality_score or 0),
+        "channel_id": channel_id,
     }
     if idempotency_scope and idempotency_key:
         payload_dict["idempotency_scope"] = idempotency_scope
@@ -590,7 +600,7 @@ def _enqueue_generate(
                 "name": f"{queue_path}/tasks/{task_name}",
                 "http_request": {
                     "http_method": tasks_v2.HttpMethod.POST,
-                    "url": f"{CLOUD_RUN_URL}/generate/task",
+                    "url": task_url,
                     "headers": {"Content-Type": "application/json"},
                     "body": payload,
                     "oidc_token": {
@@ -614,6 +624,7 @@ def _enqueue_generate(
                 "genre": genre,
                 "details": details,
                 "virality_score": float(virality_score or 0),
+                "channel_id": channel_id,
                 "created_at": datetime.now(timezone.utc).isoformat(),
             },
         )

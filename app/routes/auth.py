@@ -11,7 +11,10 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import RedirectResponse, HTMLResponse
 
-from app.config import YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REDIRECT_URI
+from app.config import (
+    YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REDIRECT_URI,
+    STORIES_YOUTUBE_CLIENT_ID, STORIES_YOUTUBE_CLIENT_SECRET, STORIES_YOUTUBE_REDIRECT_URI,
+)
 from app.services import firestore_service
 
 router = APIRouter()
@@ -78,5 +81,64 @@ def youtube_callback(code: str, state: str = "", error: str = ""):
         <html><body style="font-family:sans-serif;text-align:center;padding:60px">
         <h1>&#x2705; YouTube Auth Complete</h1>
         <p>Your YouTube account is now connected. You can close this tab.</p>
+        </body></html>
+    """)
+
+
+# ─── Stories channel (Short Tales) OAuth flow ─────────────────────────────────
+
+@router.get("/auth/youtube/stories")
+def youtube_stories_auth():
+    """Redirect the browser to Google OAuth for the Short Tales channel."""
+    params = {
+        "client_id":     STORIES_YOUTUBE_CLIENT_ID,
+        "redirect_uri":  STORIES_YOUTUBE_REDIRECT_URI,
+        "response_type": "code",
+        "scope":         " ".join(_SCOPES),
+        "access_type":   "offline",
+        "prompt":        "consent",
+        "state":         secrets.token_urlsafe(32),
+    }
+    url = _AUTH_URI + "?" + urllib.parse.urlencode(params)
+    return RedirectResponse(url)
+
+
+@router.get("/auth/youtube/stories/callback")
+def youtube_stories_callback(code: str, state: str = "", error: str = ""):
+    """Exchange the authorisation code for Short Tales tokens and persist them."""
+    if error:
+        raise HTTPException(status_code=400, detail=f"OAuth error: {error}")
+
+    resp = httpx.post(
+        _TOKEN_URI,
+        data={
+            "code":          code,
+            "client_id":     STORIES_YOUTUBE_CLIENT_ID,
+            "client_secret": STORIES_YOUTUBE_CLIENT_SECRET,
+            "redirect_uri":  STORIES_YOUTUBE_REDIRECT_URI,
+            "grant_type":    "authorization_code",
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+
+    token = resp.json()
+    if "error" in token:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Token exchange failed: {token.get('error_description', token['error'])}",
+        )
+
+    firestore_service.save_youtube_tokens({
+        "access_token":  token["access_token"],
+        "refresh_token": token.get("refresh_token"),
+        "token_expiry":  None,
+        "client_id":     STORIES_YOUTUBE_CLIENT_ID,
+        "client_secret": STORIES_YOUTUBE_CLIENT_SECRET,
+    }, channel_id="stories")
+
+    return HTMLResponse("""
+        <html><body style="font-family:sans-serif;text-align:center;padding:60px">
+        <h1>&#x2705; Short Tales YouTube Auth Complete</h1>
+        <p>The Short Tales channel is now connected. You can close this tab.</p>
         </body></html>
     """)

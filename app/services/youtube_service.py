@@ -8,7 +8,10 @@ from googleapiclient.http import MediaFileUpload
 from urllib.parse import urlparse
 
 from app.services import firestore_service  # noqa: E402 (used by playlist helpers)
-from app.config import YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET
+from app.config import (
+    YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET,
+    STORIES_YOUTUBE_CLIENT_ID, STORIES_YOUTUBE_CLIENT_SECRET,
+)
 
 _SCOPES = [
     "https://www.googleapis.com/auth/youtube",
@@ -45,17 +48,21 @@ def normalize_title(title: str, limit: int = 100) -> str:
     return (truncated or clean[:limit]).strip()
 
 
-def get_credentials() -> Credentials:
-    tokens = firestore_service.get_youtube_tokens()
+def get_credentials(channel_id: str = "news") -> Credentials:
+    tokens = firestore_service.get_youtube_tokens(channel_id=channel_id)
     if not tokens:
-        raise RuntimeError("YouTube OAuth tokens not found. Run /auth/youtube first.")
+        auth_url = "/auth/youtube/stories" if channel_id == "stories" else "/auth/youtube"
+        raise RuntimeError(f"YouTube OAuth tokens not found for channel '{channel_id}'. Run {auth_url} first.")
+
+    client_id = STORIES_YOUTUBE_CLIENT_ID if channel_id == "stories" else YOUTUBE_CLIENT_ID
+    client_secret = STORIES_YOUTUBE_CLIENT_SECRET if channel_id == "stories" else YOUTUBE_CLIENT_SECRET
 
     creds = Credentials(
         token=tokens.get("access_token"),
         refresh_token=tokens.get("refresh_token"),
         token_uri=_TOKEN_URI,
-        client_id=YOUTUBE_CLIENT_ID,
-        client_secret=YOUTUBE_CLIENT_SECRET,
+        client_id=client_id,
+        client_secret=client_secret,
         scopes=_SCOPES,
     )
 
@@ -65,15 +72,15 @@ def get_credentials() -> Credentials:
             "access_token": creds.token,
             "refresh_token": creds.refresh_token,
             "token_expiry": creds.expiry.isoformat() if creds.expiry else None,
-            "client_id": YOUTUBE_CLIENT_ID,
-            "client_secret": YOUTUBE_CLIENT_SECRET,
-        })
+            "client_id": client_id,
+            "client_secret": client_secret,
+        }, channel_id=channel_id)
 
     return creds
 
 
-def upload_video(video_path: str, title: str, description: str, genre: str = "") -> str:
-    creds = get_credentials()
+def upload_video(video_path: str, title: str, description: str, genre: str = "", channel_id: str = "news") -> str:
+    creds = get_credentials(channel_id=channel_id)
     youtube = build("youtube", "v3", credentials=creds)
 
     # Ensure #Shorts is in the description so YouTube surfaces it in the Shorts feed
@@ -135,15 +142,20 @@ _GENRE_PLAYLIST_NAMES: dict[str, str] = {
 }
 
 
-def get_or_create_playlist(genre: str) -> str | None:
-    """Return playlist_id for the genre, creating it on YouTube if needed. Cached in Firestore."""
+def get_or_create_playlist(genre: str, channel_id: str = "news") -> str | None:
+    """Return playlist_id for the genre, creating it on YouTube if needed. Cached in Firestore.
+    Returns None immediately for the stories channel (no playlist routing for stories).
+    """
+    if channel_id == "stories":
+        return None
+
     playlist_name = _GENRE_PLAYLIST_NAMES.get((genre or "").strip().lower(), "General")
 
     cached = firestore_service.get_playlist_id(playlist_name)
     if cached:
         return cached
 
-    creds = get_credentials()
+    creds = get_credentials(channel_id=channel_id)
     youtube = build("youtube", "v3", credentials=creds)
 
     # Check if playlist already exists on channel
@@ -170,10 +182,10 @@ def get_or_create_playlist(genre: str) -> str | None:
     return pl_id
 
 
-def add_video_to_playlist(video_id: str, playlist_id: str) -> bool:
+def add_video_to_playlist(video_id: str, playlist_id: str, channel_id: str = "news") -> bool:
     if not video_id or not playlist_id:
         return False
-    creds = get_credentials()
+    creds = get_credentials(channel_id=channel_id)
     youtube = build("youtube", "v3", credentials=creds)
     youtube.playlistItems().insert(
         part="snippet",
@@ -187,12 +199,12 @@ def add_video_to_playlist(video_id: str, playlist_id: str) -> bool:
     return True
 
 
-def set_video_privacy(video_id: str, privacy_status: str = "private") -> bool:
+def set_video_privacy(video_id: str, privacy_status: str = "private", channel_id: str = "news") -> bool:
     if not video_id:
         return False
     if privacy_status not in ("private", "public", "unlisted"):
         privacy_status = "private"
-    creds = get_credentials()
+    creds = get_credentials(channel_id=channel_id)
     youtube = build("youtube", "v3", credentials=creds)
     youtube.videos().update(
         part="status",
@@ -201,19 +213,19 @@ def set_video_privacy(video_id: str, privacy_status: str = "private") -> bool:
     return True
 
 
-def delete_video(video_id: str) -> bool:
+def delete_video(video_id: str, channel_id: str = "news") -> bool:
     if not video_id:
         return False
-    creds = get_credentials()
+    creds = get_credentials(channel_id=channel_id)
     youtube = build("youtube", "v3", credentials=creds)
     youtube.videos().delete(id=video_id).execute()
     return True
 
 
-def fetch_video_analytics(video_id: str) -> dict:
+def fetch_video_analytics(video_id: str, channel_id: str = "news") -> dict:
     if not video_id:
         return {}
-    creds = get_credentials()
+    creds = get_credentials(channel_id=channel_id)
     youtube = build("youtube", "v3", credentials=creds)
     resp = youtube.videos().list(part="statistics", id=video_id, maxResults=1).execute()
     items = resp.get("items", [])
@@ -227,8 +239,8 @@ def fetch_video_analytics(video_id: str) -> dict:
     }
 
 
-def get_channel_stats() -> dict:
-    creds = get_credentials()
+def get_channel_stats(channel_id: str = "news") -> dict:
+    creds = get_credentials(channel_id=channel_id)
     youtube = build("youtube", "v3", credentials=creds)
     response = youtube.channels().list(part="statistics,contentDetails", mine=True).execute()
     items = response.get("items", [])

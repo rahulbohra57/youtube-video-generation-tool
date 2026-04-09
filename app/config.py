@@ -25,14 +25,28 @@ GNEWS_API_KEY = os.getenv("GNEWS_API_KEY", "")
 GOOGLE_SEARCH_API_KEY = os.getenv("GOOGLE_SEARCH_API_KEY", "")
 GOOGLE_SEARCH_ENGINE_ID = os.getenv("GOOGLE_SEARCH_ENGINE_ID", "")
 
-# Telegram
+# Telegram — News channel (Kurrent Affairs)
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
-# YouTube OAuth
+# Telegram — Stories channel (Short Tales)
+STORIES_BOT_TOKEN = os.getenv("STORIES_BOT_TOKEN", "")
+STORIES_CHAT_ID = os.getenv("STORIES_CHAT_ID", "")
+
+# YouTube OAuth — News channel
 YOUTUBE_CLIENT_ID = os.getenv("YOUTUBE_CLIENT_ID", "")
 YOUTUBE_CLIENT_SECRET = os.getenv("YOUTUBE_CLIENT_SECRET", "")
 YOUTUBE_REDIRECT_URI = os.getenv("YOUTUBE_REDIRECT_URI", "")
+
+# YouTube OAuth — Stories channel (Short Tales)
+STORIES_YOUTUBE_CLIENT_ID = os.getenv("STORIES_YOUTUBE_CLIENT_ID", "")
+STORIES_YOUTUBE_CLIENT_SECRET = os.getenv("STORIES_YOUTUBE_CLIENT_SECRET", "")
+STORIES_YOUTUBE_REDIRECT_URI = os.getenv("STORIES_YOUTUBE_REDIRECT_URI", "")
+
+
+def get_chat_id(channel_id: str) -> str:
+    """Return the Telegram chat ID for the given channel."""
+    return STORIES_CHAT_ID if channel_id == "stories" else TELEGRAM_CHAT_ID
 
 # Cloud Scheduler auth
 SCHEDULER_SECRET = os.getenv("SCHEDULER_SECRET", "")
