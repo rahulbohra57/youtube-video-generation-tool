@@ -75,6 +75,9 @@ def _refresh_pipeline_after_stop(job: dict):
     state = firestore_service.get_pipeline_state() or {}
     if state.get("active_batch_id") == batch_id and state.get("state") == "processing":
         firestore_service.set_pipeline_and_batch_state(batch_id, "failed")
+    # Release the video lock immediately so the next scheduled run is not
+    # blocked waiting for the cancelled generator to exit naturally.
+    firestore_service.force_release_video_lock()
 
 
 def _delete_queued_task(task_name: str):
@@ -220,7 +223,7 @@ def handle_reply(chat_id: str, body: str):
         _refresh_pipeline_after_stop(job)
         telegram_service.send_message(
             chat_id,
-            f"🛑 Stop requested for `{stop_id}`. Pipeline has been refreshed for new exports.",
+            f"🛑 Stop requested for `{stop_id}`.",
         )
         return
 

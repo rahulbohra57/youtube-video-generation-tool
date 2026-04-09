@@ -216,7 +216,7 @@ def run(
 
         for i, scene in enumerate(scenes):
             if _is_cancel_requested(effective_job_id):
-                send_message(TELEGRAM_CHAT_ID, f"🛑 Generation stopped for ID `{public_id or effective_job_id}`.")
+                send_message(TELEGRAM_CHAT_ID, f"🛑 Generation stopped successfully for ID `{public_id or effective_job_id}`.")
                 firestore_service.create_or_update_job(
                     effective_job_id,
                     {
@@ -342,7 +342,7 @@ def run(
             return
 
         if _is_cancel_requested(effective_job_id):
-            send_message(TELEGRAM_CHAT_ID, f"🛑 Generation stopped for ID `{public_id or effective_job_id}`.")
+            send_message(TELEGRAM_CHAT_ID, f"🛑 Generation stopped successfully for ID `{public_id or effective_job_id}`.")
             firestore_service.create_or_update_job(
                 effective_job_id,
                 {

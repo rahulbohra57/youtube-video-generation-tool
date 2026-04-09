@@ -373,6 +373,18 @@ def get_current_lock() -> dict:
     return doc.to_dict() if doc.exists else {}
 
 
+def force_release_video_lock():
+    """Forcibly delete the video generation lock regardless of owner.
+
+    Used by the STOP command so the next scheduled video is not blocked by
+    a lock still held by the cancelled generator.
+    """
+    try:
+        _get_db().collection("locks").document("video_generation").delete()
+    except Exception:
+        return
+
+
 def save_social_metrics(platform: str, payload: dict):
     _get_db().collection("social_metrics").document(platform).set({
         **payload,
