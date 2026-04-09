@@ -65,9 +65,6 @@ jobs:
           fi
 
           SCHEDULER_SECRET="${SCHEDULER_SECRET_INPUT:-}"
-          if [ -z "${SCHEDULER_SECRET:-}" ]; then
-            SCHEDULER_SECRET="$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --project "$PROJECT_ID" --format='value(spec.template.spec.containers[0].env.filter(name:SCHEDULER_SECRET).first().value)' || true)"
-          fi
 
           TZ="Asia/Kolkata"
           if [ -n "${SCHEDULER_SECRET:-}" ]; then
@@ -84,7 +81,7 @@ jobs:
             BODY="$4"
 
             if gcloud scheduler jobs describe "$NAME" --location="$REGION" --project="$PROJECT_ID" >/dev/null 2>&1; then
-              gcloud scheduler jobs update http "$NAME" \
+              if ! gcloud scheduler jobs update http "$NAME" \
                 --location="$REGION" \
                 --project="$PROJECT_ID" \
                 --schedule="$SCHEDULE" \
@@ -97,9 +94,12 @@ jobs:
                 --min-backoff=60s \
                 --max-backoff=600s \
                 --max-doublings=3 \
-                --attempt-deadline=320s
+                --attempt-deadline=320s; then
+                echo "Warning: failed to update scheduler job $NAME (missing IAM permission likely)."
+                return 1
+              fi
             else
-              gcloud scheduler jobs create http "$NAME" \
+              if ! gcloud scheduler jobs create http "$NAME" \
                 --location="$REGION" \
                 --project="$PROJECT_ID" \
                 --schedule="$SCHEDULE" \
@@ -112,17 +112,25 @@ jobs:
                 --min-backoff=60s \
                 --max-backoff=600s \
                 --max-doublings=3 \
-                --attempt-deadline=320s
+                --attempt-deadline=320s; then
+                echo "Warning: failed to create scheduler job $NAME (missing IAM permission likely)."
+                return 1
+              fi
             fi
           }
 
+          FAILED_JOBS=0
           # News pipeline: every 4 hours => 6 runs/day
-          upsert_job "autoframe-lead-researcher" "0 */4 * * *" "${SERVICE_URL}/research/run" "{}"
+          upsert_job "autoframe-lead-researcher" "0 */4 * * *" "${SERVICE_URL}/research/run" "{}" || FAILED_JOBS=1
           # Retry failed runs midway between primary slots
-          upsert_job "autoframe-retry-failed" "30 */4 * * *" "${SERVICE_URL}/research/retry-failed" "{}"
+          upsert_job "autoframe-retry-failed" "30 */4 * * *" "${SERVICE_URL}/research/retry-failed" "{}" || FAILED_JOBS=1
           # News daily report
-          upsert_job "autoframe-daily-digest" "0 8 * * *" "${SERVICE_URL}/research/daily-digest" "{}"
+          upsert_job "autoframe-daily-digest" "0 8 * * *" "${SERVICE_URL}/research/daily-digest" "{}" || FAILED_JOBS=1
           # Stories pipeline: every 6 hours => 4 runs/day
-          upsert_job "autoframe-stories-run" "0 */6 * * *" "${SERVICE_URL}/stories/run" "{}"
+          upsert_job "autoframe-stories-run" "0 */6 * * *" "${SERVICE_URL}/stories/run" "{}" || FAILED_JOBS=1
           # Stories daily report
-          upsert_job "autoframe-stories-daily-digest" "30 8 * * *" "${SERVICE_URL}/stories/daily-digest" "{}"
+          upsert_job "autoframe-stories-daily-digest" "30 8 * * *" "${SERVICE_URL}/stories/daily-digest" "{}" || FAILED_JOBS=1
+
+          if [ "$FAILED_JOBS" -ne 0 ]; then
+            echo "Warning: one or more scheduler jobs were not synced. Grant roles/cloudscheduler.admin (or equivalent) to the deploy service account."
+          fi
