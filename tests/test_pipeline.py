@@ -564,9 +564,19 @@ def test_handle_reply_marks_expired_digest_as_skipped(mock_fs, mock_telegram):
 
 
 @patch("app.agents.whatsapp_agent._enqueue_generate", return_value=True)
+@patch(
+    "app.agents.whatsapp_agent._best_recent_article",
+    return_value={
+        "headline": "Artemis mission update",
+        "url": "https://example.com/artemis",
+        "published_at": "2026-04-09T10:00:00Z",
+        "description": "Latest Artemis mission update.",
+        "source": "Example News",
+    },
+)
 @patch("app.agents.whatsapp_agent.telegram_service")
 @patch("app.agents.whatsapp_agent.firestore_service")
-def test_handle_reply_create_topic_triggers_direct_generation(mock_fs, mock_telegram, mock_enqueue):
+def test_handle_reply_create_topic_triggers_direct_generation(mock_fs, mock_telegram, _mock_source, mock_enqueue):
     mock_fs.get_pipeline_state.return_value = {"state": "awaiting_reply", "active_batch_id": "batch_001"}
     mock_fs.acquire_idempotency_key.return_value = (True, {"status": "new"})
 
@@ -580,7 +590,15 @@ def test_handle_reply_create_topic_triggers_direct_generation(mock_fs, mock_tele
 
 @patch("app.agents.whatsapp_agent.telegram_service")
 @patch("app.agents.whatsapp_agent.firestore_service")
-def test_handle_reply_create_topic_duplicate_is_ignored(mock_fs, mock_telegram):
+@patch(
+    "app.agents.whatsapp_agent._best_recent_article",
+    return_value={
+        "headline": "Artemis mission update",
+        "url": "https://example.com/artemis",
+        "published_at": "2026-04-09T10:00:00Z",
+    },
+)
+def test_handle_reply_create_topic_duplicate_is_ignored(mock_source, mock_fs, mock_telegram):
     mock_fs.acquire_idempotency_key.return_value = (False, {"status": "queued"})
     from app.agents import whatsapp_agent
     whatsapp_agent.handle_reply("123456789", "CREATE Why is Artemis going to moon?")
@@ -589,9 +607,33 @@ def test_handle_reply_create_topic_duplicate_is_ignored(mock_fs, mock_telegram):
 
 
 @patch("app.agents.whatsapp_agent._enqueue_generate", return_value=True)
+@patch("app.agents.whatsapp_agent._best_recent_article", return_value=None)
 @patch("app.agents.whatsapp_agent.telegram_service")
 @patch("app.agents.whatsapp_agent.firestore_service")
-def test_handle_reply_force_create_allows_rejected_busy_override(mock_fs, mock_telegram, mock_enqueue):
+def test_handle_reply_create_topic_requires_recent_source(mock_fs, mock_telegram, _mock_source, mock_enqueue):
+    mock_fs.get_pipeline_state.return_value = {"state": "awaiting_reply", "active_batch_id": "batch_001"}
+    mock_fs.acquire_idempotency_key.return_value = (True, {"status": "new"})
+
+    from app.agents import whatsapp_agent
+    whatsapp_agent.handle_reply("123456789", "CREATE Why is Artemis going to moon?")
+
+    mock_enqueue.assert_not_called()
+    sent = mock_telegram.send_message.call_args[0][1]
+    assert "could not find a recent" in sent
+
+
+@patch("app.agents.whatsapp_agent._enqueue_generate", return_value=True)
+@patch(
+    "app.agents.whatsapp_agent._best_recent_article",
+    return_value={
+        "headline": "Artemis mission update",
+        "url": "https://example.com/artemis",
+        "published_at": "2026-04-09T10:00:00Z",
+    },
+)
+@patch("app.agents.whatsapp_agent.telegram_service")
+@patch("app.agents.whatsapp_agent.firestore_service")
+def test_handle_reply_force_create_allows_rejected_busy_override(mock_fs, mock_telegram, _mock_source, mock_enqueue):
     mock_fs.acquire_idempotency_key.return_value = (False, {"status": "rejected_busy"})
     mock_fs.get_pipeline_state.return_value = {"state": "processing", "active_batch_id": "batch_001"}
 
@@ -604,9 +646,17 @@ def test_handle_reply_force_create_allows_rejected_busy_override(mock_fs, mock_t
 
 
 @patch("app.agents.whatsapp_agent._enqueue_generate", return_value=True)
+@patch(
+    "app.agents.whatsapp_agent._best_recent_article",
+    return_value={
+        "headline": "Artemis mission update",
+        "url": "https://example.com/artemis",
+        "published_at": "2026-04-09T10:00:00Z",
+    },
+)
 @patch("app.agents.whatsapp_agent.telegram_service")
 @patch("app.agents.whatsapp_agent.firestore_service")
-def test_handle_reply_force_create_allows_completed_override(mock_fs, mock_telegram, mock_enqueue):
+def test_handle_reply_force_create_allows_completed_override(mock_fs, mock_telegram, _mock_source, mock_enqueue):
     mock_fs.acquire_idempotency_key.return_value = (False, {"status": "completed"})
     mock_fs.get_pipeline_state.return_value = {"state": "completed", "active_batch_id": "batch_001"}
 
@@ -619,9 +669,17 @@ def test_handle_reply_force_create_allows_completed_override(mock_fs, mock_teleg
 
 
 @patch("app.agents.whatsapp_agent._enqueue_generate", return_value=True)
+@patch(
+    "app.agents.whatsapp_agent._best_recent_article",
+    return_value={
+        "headline": "Artemis mission update",
+        "url": "https://example.com/artemis",
+        "published_at": "2026-04-09T10:00:00Z",
+    },
+)
 @patch("app.agents.whatsapp_agent.telegram_service")
 @patch("app.agents.whatsapp_agent.firestore_service")
-def test_handle_reply_force_create_bypasses_duplicate_status(mock_fs, mock_telegram, mock_enqueue):
+def test_handle_reply_force_create_bypasses_duplicate_status(mock_fs, mock_telegram, _mock_source, mock_enqueue):
     mock_fs.acquire_idempotency_key.return_value = (False, {"status": "queued"})
     mock_fs.get_pipeline_state.return_value = {"state": "processing", "active_batch_id": "batch_001"}
 

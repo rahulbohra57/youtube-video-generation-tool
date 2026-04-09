@@ -5,7 +5,7 @@ import logging
 import os
 import re
 import hashlib
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 try:
     from google.cloud import tasks_v2
     from google.api_core.exceptions import AlreadyExists
@@ -176,6 +176,73 @@ def _parse_iso(ts: str | None) -> datetime | None:
         return datetime.fromisoformat(ts)
     except Exception:
         return None
+
+
+def _is_recent_source_article(article: dict, lookback_hours: int = 72) -> bool:
+    published_at = _parse_iso(article.get("published_at"))
+    if not published_at:
+        return False
+    age_seconds = (datetime.now(timezone.utc) - published_at.astimezone(timezone.utc)).total_seconds()
+    return 0 <= age_seconds <= (lookback_hours * 3600)
+
+
+def _best_recent_article(topic: str) -> dict | None:
+    articles = []
+
+    try:
+        from app.services import google_search_service
+        articles = google_search_service.search_news(query=topic, max_results=5, date_restrict="w1")
+    except Exception:
+        articles = []
+
+    if not articles:
+        try:
+            from app.services import gnews_service
+            from_date = (
+                datetime.now(timezone.utc) - timedelta(hours=72)
+            ).isoformat(timespec="seconds").replace("+00:00", "Z")
+            articles = gnews_service.search_news(query=topic, max_results=5, from_date=from_date)
+        except Exception:
+            articles = []
+
+    # Prefer strictly recent sources (last 72h) with URL and publication time.
+    recent = [
+        a for a in articles
+        if (a.get("url") and _is_recent_source_article(a, lookback_hours=72))
+    ]
+    if recent:
+        recent.sort(
+            key=lambda a: _parse_iso(a.get("published_at")) or datetime.min.replace(tzinfo=timezone.utc),
+            reverse=True,
+        )
+        return recent[0]
+    return None
+
+
+def _compose_create_context_from_article(article: dict, user_context: str = "") -> str:
+    published_at = article.get("published_at", "")
+    headline = article.get("headline", "")
+    description = article.get("description", "")
+    source_name = article.get("source", "")
+    source_url = article.get("url", "")
+
+    lines = [
+        "STRICT SOURCE OF TRUTH (required):",
+        f"- Published at: {published_at}",
+        f"- Headline: {headline}",
+    ]
+    if description:
+        lines.append(f"- Summary: {description}")
+    if source_name:
+        lines.append(f"- Publisher: {source_name}")
+    lines.append(f"- Source URL: {source_url}")
+    lines.append(
+        "- Instruction: Script MUST only use facts from the source above (and current search corroboration). "
+        "Do NOT fill gaps from model memory."
+    )
+    if user_context:
+        lines.append(f"- User context: {user_context}")
+    return "\n".join(lines)
 
 
 def _is_digest_expired(batch: dict | None) -> bool:
@@ -431,44 +498,18 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
             topic = rest
             create_context = ""
 
-        # Enrich CREATE with recent news so Gemini has dated facts to work from.
-        # Only search when the user hasn't already provided context via "topic | context".
-        # Strategy: Google Custom Search first (100/day free, on GCP billing); fall back to GNews.
-        if not create_context:
-            try:
-                from app.services import google_search_service
-                articles = google_search_service.search_news(query=topic, max_results=5, date_restrict="w1")
-            except Exception:
-                articles = []
-
-            if not articles:
-                # GNews fallback
-                try:
-                    from app.services import gnews_service
-                    from datetime import timedelta
-                    from_date = (
-                        datetime.now(timezone.utc) - timedelta(hours=72)
-                    ).isoformat(timespec="seconds").replace("+00:00", "Z")
-                    articles = gnews_service.search_news(
-                        query=topic, max_results=5, from_date=from_date
-                    )
-                except Exception:
-                    articles = []
-
-            if articles:
-                lines = []
-                for a in articles[:3]:
-                    pub = a.get("published_at", "")
-                    headline = a.get("headline", "")
-                    desc = a.get("description", "")
-                    entry = f"- [{pub}] {headline}"
-                    if desc:
-                        entry += f": {desc}"
-                    lines.append(entry)
-                create_context = (
-                    "NEWS CONTEXT (authoritative — script must cover these facts, do not use older training data):\n"
-                    + "\n".join(lines)
+        source_article = None
+        # For News CREATE/FORCE_CREATE, enforce a recent source article.
+        if channel_id == "news":
+            source_article = _best_recent_article(topic)
+            if not source_article:
+                _send_local(
+                    chat_id,
+                    "I could not find a recent (last 72h) source article for this topic, so I did not queue the video. "
+                    "Please refine the topic and try CREATE again.",
                 )
+                return
+            create_context = _compose_create_context_from_article(source_article, user_context=create_context)
 
         topic_key = _topic_key(topic)
         if not is_force_create:
@@ -536,6 +577,17 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
                 topic_key,
                 {"status": "queued", "batch_id": direct_batch_id, "public_id": public_id},
             )
+            if channel_id == "news" and source_article:
+                source_published_at = source_article.get("published_at", "")
+                source_url = source_article.get("url", "")
+                source_headline = source_article.get("headline", "")
+                _send_local(
+                    chat_id,
+                    "📰 Source article selected for this CREATE request:\n"
+                    f"Headline: {source_headline}\n"
+                    f"Published: {source_published_at}\n"
+                    f"Link: {source_url}",
+                )
             _send_local(
                 chat_id,
                 (
