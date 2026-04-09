@@ -637,6 +637,42 @@ def get_tts_chars_today(window_start=None) -> int:
         return 0
 
 
+def get_tts_chars_this_month() -> int:
+    """Return total TTS chars synthesized since the 1st of the current UTC month.
+
+    Uses the same quota_events collection as get_tts_chars_today but with a
+    month-level window so the daily digest shows actual cumulative usage, not
+    a single-day extrapolation.
+    """
+    try:
+        now_utc = datetime.now(timezone.utc)
+        month_start_ts = now_utc.replace(day=1, hour=0, minute=0, second=0, microsecond=0).timestamp()
+        docs = (
+            _get_db()
+            .collection("quota_events")
+            .order_by("created_at", direction=firestore.Query.DESCENDING)
+            .limit(2000)
+            .stream()
+        )
+        total = 0
+        for d in docs:
+            data = d.to_dict() or {}
+            ts = _parse_iso(data.get("created_at"))
+            if not ts:
+                continue
+            if ts.timestamp() < month_start_ts:
+                break  # descending order — everything remaining is older
+            if data.get("kind") != "tts_chars":
+                continue
+            try:
+                total += int(data.get("details", "0") or "0")
+            except (ValueError, TypeError):
+                pass
+        return total
+    except Exception:
+        return 0
+
+
 def mark_domain_posted_today(domain: str, job_id: str = "", headline: str = ""):
     try:
         key = (domain or "").strip().lower()

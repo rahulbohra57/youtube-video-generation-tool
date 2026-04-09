@@ -273,6 +273,16 @@ def _response_text(response) -> str:
     raise RuntimeError("Model response did not contain text output.")
 
 
+def strip_markdown_formatting(text: str) -> str:
+    """Remove markdown bold/italic markers Gemini sometimes inserts into narrations."""
+    out = text or ""
+    out = re.sub(r'\*\*(.+?)\*\*', r'\1', out)  # **bold** → bold
+    out = re.sub(r'\*(.+?)\*', r'\1', out)        # *italic* → italic
+    out = re.sub(r'__(.+?)__', r'\1', out)         # __bold__ → bold
+    out = re.sub(r'_(.+?)_', r'\1', out)           # _italic_ → italic
+    return out
+
+
 def sanitize_profanity(text: str) -> str:
     out = text or ""
     for pattern in _PROFANITY_PATTERNS:
@@ -360,7 +370,8 @@ def apply_quality_controls(topic: str, scenes: list[dict], language: str = "en")
     reviewed = fact_check_scenes(topic, scenes, language=language)
     cleaned = []
     for s in reviewed:
-        narration = sanitize_profanity(str(s.get("narration", "")))
+        narration = strip_markdown_formatting(str(s.get("narration", "")))
+        narration = sanitize_profanity(narration)
         narration = sanitize_copyright_risks(narration)
         visual = sanitize_copyright_risks(str(s.get("visual", "")))
         visual = sanitize_visual_prompt_no_text(visual)
@@ -599,8 +610,8 @@ Script scenes:
     try:
         response = model.generate_content(prompt)
         payload = _extract_json_object(_response_text(response))
-        title = (payload.get("title") or "").strip()
-        caption_body = (payload.get("caption") or "").strip()
+        title = strip_markdown_formatting((payload.get("title") or "").strip())
+        caption_body = strip_markdown_formatting((payload.get("caption") or "").strip())
         hashtags = payload.get("hashtags") or []
         if isinstance(hashtags, list):
             hashtag_line = " ".join(

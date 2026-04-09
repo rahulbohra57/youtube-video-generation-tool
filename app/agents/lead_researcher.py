@@ -43,15 +43,15 @@ def _is_recent_article(article: dict, lookback_hours: int) -> bool:
 def _recency_score(article: dict) -> float:
     published_at = _parse_iso(article.get("published_at"))
     if not published_at:
-        return 0.25
+        return 0.2
     age_h = (datetime.now(timezone.utc) - published_at.astimezone(timezone.utc)).total_seconds() / 3600
-    if age_h <= 6:
+    if age_h <= 3:
         return 1.0
-    if age_h <= 24:
-        return 0.8
-    if age_h <= 48:
-        return 0.6
-    return 0.35
+    if age_h <= 6:
+        return 0.85
+    if age_h <= 12:
+        return 0.65
+    return 0.2
 
 
 def _trend_bonus(headline: str) -> float:
@@ -170,10 +170,10 @@ def send_daily_digest():
     queue = firestore_service.get_queue_snapshot(window_start=prev_window_start)
     quota = firestore_service.get_quota_usage_snapshot()
 
-    # TTS usage in previous window
+    # TTS usage: daily (previous window) + actual month-to-date cumulative total
     tts_chars_today = firestore_service.get_tts_chars_today(window_start=prev_window_start)
-    tts_monthly_est = tts_chars_today * 30
-    tts_pct = round((tts_monthly_est / 1_000_000) * 100, 1)
+    tts_chars_month = firestore_service.get_tts_chars_this_month()
+    tts_pct = round((tts_chars_month / 1_000_000) * 100, 1)
 
     # GNews calls in previous window
     gnews_today = firestore_service.get_gnews_calls_today(window_start=prev_window_start)
@@ -223,7 +223,7 @@ def send_daily_digest():
         f"  Quota errors: {quota.get('quota_errors_24h', 0)}\n"
         f"  Quota pressure: {quota.get('pressure', 'unknown')}\n\n"
         f"📊 API Usage Today\n"
-        f"  TTS chars: {tts_chars_today:,} (~{tts_pct}% of monthly free tier)\n"
+        f"  TTS chars: {tts_chars_today:,} today | {tts_chars_month:,} this month ({tts_pct}% of 1M free tier)\n"
         f"  GNews calls: {gnews_today}/100\n\n"
         f"🗂️ Domain Coverage Today\n"
         + "\n".join(domain_lines)
@@ -290,7 +290,7 @@ def run() -> str | None:
     if state.get("state") == "processing":
         return None
 
-    lookback_hours = 24
+    lookback_hours = 12
     from_date = (
         datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
     ).isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -327,7 +327,7 @@ def run() -> str | None:
         for item in rated:
             h = item.get("headline", "")
             score = float(item.get("rating", 0))
-            rigorous = (score * 0.65) + (_recency_score(item) * 1.5) + _trend_bonus(h)
+            rigorous = (score * 0.60) + (_recency_score(item) * 2.0) + _trend_bonus(h)
             if score < 3.8:
                 continue
             enriched.append(
