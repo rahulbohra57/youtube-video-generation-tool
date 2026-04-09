@@ -54,14 +54,9 @@ jobs:
           PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           REGION: ${{ secrets.CLOUD_RUN_REGION }}
           SERVICE_NAME: ${{ secrets.CLOUD_RUN_SERVICE }}
-          SCHEDULER_SECRET: ${{ secrets.SCHEDULER_SECRET }}
+          SCHEDULER_SECRET_INPUT: ${{ secrets.SCHEDULER_SECRET }}
         run: |
           set -euo pipefail
-
-          if [ -z "${SCHEDULER_SECRET:-}" ]; then
-            echo "SCHEDULER_SECRET is not set in GitHub secrets."
-            exit 1
-          fi
 
           SERVICE_URL="$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --project "$PROJECT_ID" --format='value(status.url)')"
           if [ -z "${SERVICE_URL:-}" ]; then
@@ -69,8 +64,18 @@ jobs:
             exit 1
           fi
 
+          SCHEDULER_SECRET="${SCHEDULER_SECRET_INPUT:-}"
+          if [ -z "${SCHEDULER_SECRET:-}" ]; then
+            SCHEDULER_SECRET="$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --project "$PROJECT_ID" --format='value(spec.template.spec.containers[0].env.filter(name:SCHEDULER_SECRET).first().value)' || true)"
+          fi
+
           TZ="Asia/Kolkata"
-          HDR="X-Scheduler-Secret=${SCHEDULER_SECRET},Content-Type=application/json"
+          if [ -n "${SCHEDULER_SECRET:-}" ]; then
+            HDR="X-Scheduler-Secret=${SCHEDULER_SECRET},Content-Type=application/json"
+          else
+            echo "Warning: SCHEDULER_SECRET not found in GitHub secrets or Cloud Run env. Proceeding with Content-Type header only."
+            HDR="Content-Type=application/json"
+          fi
 
           upsert_job() {
             NAME="$1"
