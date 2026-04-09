@@ -82,7 +82,7 @@ def _send_stories_daily_digest():
         f"📊 TTS Usage This Month\n"
         f"  {tts_chars_month:,} chars ({tts_pct}% of 1M free tier)"
     )
-    telegram_service.send_message(STORIES_CHAT_ID, message)
+    telegram_service.send_message(STORIES_CHAT_ID, message, channel_id="stories")
 
 
 @router.post("/generate/stories-task")

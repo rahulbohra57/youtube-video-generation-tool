@@ -198,6 +198,46 @@ def test_send_message_falls_back_to_plain_text(mock_post):
     assert "parse_mode" not in second_payload
 
 
+@patch.dict(
+    "os.environ",
+    {
+        "TELEGRAM_BOT_TOKEN": "news-token",
+        "STORIES_BOT_TOKEN": "stories-token",
+        "STORIES_CHAT_ID": "123456789",
+    },
+    clear=False,
+)
+@patch("app.services.telegram_service.httpx.post")
+def test_send_message_uses_explicit_stories_channel_token(mock_post):
+    mock_post.return_value = MagicMock(raise_for_status=MagicMock())
+
+    from app.services import telegram_service
+    telegram_service.send_message("123456789", "Hello stories", channel_id="stories")
+
+    called_url = mock_post.call_args[0][0]
+    assert "botstories-token" in called_url
+
+
+@patch.dict(
+    "os.environ",
+    {
+        "TELEGRAM_BOT_TOKEN": "news-token",
+        "STORIES_BOT_TOKEN": "stories-token",
+        "STORIES_CHAT_ID": "123456789",
+    },
+    clear=False,
+)
+@patch("app.services.telegram_service.httpx.post")
+def test_send_message_uses_explicit_news_channel_token(mock_post):
+    mock_post.return_value = MagicMock(raise_for_status=MagicMock())
+
+    from app.services import telegram_service
+    telegram_service.send_message("123456789", "Hello news", channel_id="news")
+
+    called_url = mock_post.call_args[0][0]
+    assert "botnews-token" in called_url
+
+
 def test_choose_voice_for_video_returns_requested_gender():
     from app.services import tts_service
     voice = tts_service.choose_voice_for_video(language="en", preference="female")

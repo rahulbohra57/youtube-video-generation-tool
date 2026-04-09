@@ -28,6 +28,28 @@ from app.config import (
 logger = logging.getLogger(__name__)
 
 
+def _send_message(chat_id: str, text: str, channel_id: str = "news"):
+    telegram_service.send_message(chat_id, text, channel_id=channel_id)
+
+
+def _send_video_for_manual_post(
+    chat_id: str,
+    video_path_or_url: str,
+    title: str,
+    caption: str,
+    source_label: str = "",
+    channel_id: str = "news",
+):
+    telegram_service.send_video_for_manual_post(
+        chat_id,
+        video_path_or_url,
+        title,
+        caption,
+        source_label=source_label,
+        channel_id=channel_id,
+    )
+
+
 def _set_pipeline_and_batch_state(batch_id: str, state: str, channel_id: str = "news"):
     """Keep backward compatibility for tests/mocks expecting positional args only."""
     if channel_id == "news":
@@ -142,7 +164,7 @@ def _send_stats(chat_id: str, channel_id: str = "news"):
             message += "\n\n⚠️ YouTube stats auth token is outdated. Reconnect once: /auth/youtube"
         else:
             message += "\n\n⚠️ YouTube stats fetch failed; showing last cached values."
-    telegram_service.send_message(chat_id, message)
+    _send_message(chat_id, message, channel_id=channel_id)
 
 
 def _parse_iso(ts: str | None) -> datetime | None:
@@ -184,10 +206,23 @@ def send_digest(batch_id: str):
         "or send *CREATE <topic>* for a custom topic, or reply *None* to skip."
     )
     message = "\n---\n".join(sections) + "\n\n" + footer
-    telegram_service.send_message(TELEGRAM_CHAT_ID, message)
+    _send_message(TELEGRAM_CHAT_ID, message, channel_id="news")
 
 
 def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
+    def _send_local(target_chat_id: str, message: str):
+        _send_message(target_chat_id, message, channel_id=channel_id)
+
+    def _send_video_local(target_chat_id: str, video_path_or_url: str, title: str, caption: str, source_label: str = ""):
+        _send_video_for_manual_post(
+            target_chat_id,
+            video_path_or_url,
+            title,
+            caption,
+            source_label=source_label,
+            channel_id=channel_id,
+        )
+
     raw_text = body.strip()
     text = raw_text.upper()
 
@@ -196,7 +231,7 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
         return
 
     if text == "COMMANDS":
-        telegram_service.send_message(chat_id, (
+        _send_local(chat_id, (
             "🤖 *AutoframeBot Commands*\n\n"
             "*STATS*\n"
             "  Channel stats, subscriber count, pipeline queue summary.\n\n"
@@ -226,11 +261,11 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
     if stop_id:
         job_id, job = _resolve_job(stop_id)
         if not job_id or not job:
-            telegram_service.send_message(chat_id, f"No job found for ID `{stop_id}`.")
+            _send_local(chat_id, f"No job found for ID `{stop_id}`.")
             return
         status = (job.get("status") or "").lower()
         if status in ("completed", "failed", "cancelled"):
-            telegram_service.send_message(chat_id, f"Job `{stop_id}` is already `{status}`.")
+            _send_local(chat_id, f"Job `{stop_id}` is already `{status}`.")
             return
         firestore_service.request_job_cancel(job_id, requested_by="telegram_stop")
         if status == "queued":
@@ -240,7 +275,7 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
                 {"status": "cancelled", "finished_at": datetime.now(timezone.utc).isoformat()},
             )
         _refresh_pipeline_after_stop(job, channel_id=channel_id)
-        telegram_service.send_message(
+        _send_local(
             chat_id,
             f"🛑 Stop requested for `{stop_id}`.",
         )
@@ -250,12 +285,12 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
     if private_id:
         resolved_job_id, job = _resolve_job(private_id)
         if not resolved_job_id or not job:
-            telegram_service.send_message(chat_id, f"No job found for ID `{private_id}`.")
+            _send_local(chat_id, f"No job found for ID `{private_id}`.")
             return
         video_url = job.get("youtube_url", "")
         video_id = youtube_service.extract_video_id(video_url)
         if not video_id:
-            telegram_service.send_message(chat_id, f"Video URL not found for `{private_id}`.")
+            _send_local(chat_id, f"Video URL not found for `{private_id}`.")
             return
         try:
             youtube_service.set_video_privacy(video_id, privacy_status="private", channel_id=channel_id)
@@ -263,21 +298,21 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
                 resolved_job_id,
                 {"youtube_privacy": "private", "updated_at": datetime.now(timezone.utc).isoformat()},
             )
-            telegram_service.send_message(chat_id, f"🔒 Video `{private_id}` is now private.")
+            _send_local(chat_id, f"🔒 Video `{private_id}` is now private.")
         except Exception as e:
-            telegram_service.send_message(chat_id, f"❌ Failed to set private for `{private_id}`: {e}")
+            _send_local(chat_id, f"❌ Failed to set private for `{private_id}`: {e}")
         return
 
     delete_id = _command_arg("DELETE", raw_text)
     if delete_id:
         resolved_job_id, job = _resolve_job(delete_id)
         if not resolved_job_id or not job:
-            telegram_service.send_message(chat_id, f"No job found for ID `{delete_id}`.")
+            _send_local(chat_id, f"No job found for ID `{delete_id}`.")
             return
         video_url = job.get("youtube_url", "")
         video_id = youtube_service.extract_video_id(video_url)
         if not video_id:
-            telegram_service.send_message(chat_id, f"Video URL not found for `{delete_id}`.")
+            _send_local(chat_id, f"Video URL not found for `{delete_id}`.")
             return
         try:
             youtube_service.delete_video(video_id, channel_id=channel_id)
@@ -290,9 +325,9 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
                     "finished_at": datetime.now(timezone.utc).isoformat(),
                 },
             )
-            telegram_service.send_message(chat_id, f"🗑️ Video `{delete_id}` deleted from YouTube.")
+            _send_local(chat_id, f"🗑️ Video `{delete_id}` deleted from YouTube.")
         except Exception as e:
-            telegram_service.send_message(chat_id, f"❌ Failed to delete `{delete_id}`: {e}")
+            _send_local(chat_id, f"❌ Failed to delete `{delete_id}`: {e}")
         return
 
     # RESEND <id> — send existing video + caption to Telegram (no YouTube API)
@@ -300,18 +335,18 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
     if resend_id:
         job_id, job = _resolve_job(resend_id)
         if not job_id or not job:
-            telegram_service.send_message(chat_id, f"❌ No job found for ID `{resend_id}`.")
+            _send_local(chat_id, f"❌ No job found for ID `{resend_id}`.")
             return
         gcs_url = job.get("gcs_video_url", "")
         title = job.get("topic", "")
         caption = job.get("final_caption", "")
         if gcs_url and caption:
-            telegram_service.send_video_for_manual_post(
+            _send_video_local(
                 chat_id, gcs_url, title, caption, source_label="resend"
             )
-            telegram_service.send_message(chat_id, f"📤 Video sent for manual posting: `{resend_id}`")
+            _send_local(chat_id, f"📤 Video sent for manual posting: `{resend_id}`")
         else:
-            telegram_service.send_message(
+            _send_local(
                 chat_id,
                 f"❌ No video file on record for `{resend_id}` "
                 f"(status: {job.get('status', 'unknown')}). Use CREATE to re-generate."
@@ -323,11 +358,11 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
     if redo_id:
         job_id, job = _resolve_job(redo_id)
         if not job_id or not job:
-            telegram_service.send_message(chat_id, f"No job found for ID `{redo_id}`.")
+            _send_local(chat_id, f"No job found for ID `{redo_id}`.")
             return
         title = job.get("topic") or job.get("headline", "")
         if not title:
-            telegram_service.send_message(chat_id, f"Cannot REDO `{redo_id}` — no topic found.")
+            _send_local(chat_id, f"Cannot REDO `{redo_id}` — no topic found.")
             return
         genre = job.get("genre", "")
         caption = job.get("final_caption", "")
@@ -335,22 +370,22 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
 
         if gcs_url and caption:
             # Attempt YouTube re-upload from GCS
-            telegram_service.send_message(chat_id, f"🔁 Attempting YouTube re-upload for `{redo_id}`...")
+            _send_local(chat_id, f"🔁 Attempting YouTube re-upload for `{redo_id}`...")
             try:
                 local_path = _download_from_gcs(gcs_url)
                 url = youtube_service.upload_video(local_path, title, caption, genre=genre, channel_id=channel_id)
                 firestore_service.create_or_update_job(job_id, {"status": "completed", "youtube_url": url})
-                telegram_service.send_message(chat_id, f"✅ REDO uploaded to YouTube!\n{url}")
+                _send_local(chat_id, f"✅ REDO uploaded to YouTube!\n{url}")
                 try:
                     os.remove(local_path)
                 except Exception:
                     pass
             except Exception as e:
                 if "youtube_quota_exceeded" in str(e):
-                    telegram_service.send_message(chat_id, "⚠️ YouTube quota exceeded — sending for manual post.")
+                    _send_local(chat_id, "⚠️ YouTube quota exceeded — sending for manual post.")
                 else:
-                    telegram_service.send_message(chat_id, f"❌ YouTube re-upload failed: {str(e)[:200]} — sending for manual post.")
-                telegram_service.send_video_for_manual_post(
+                    _send_local(chat_id, f"❌ YouTube re-upload failed: {str(e)[:200]} — sending for manual post.")
+                _send_video_local(
                     chat_id, gcs_url, title, caption, source_label="redo"
                 )
         else:
@@ -370,12 +405,12 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
                 channel_id=channel_id,
             )
             if enqueued:
-                telegram_service.send_message(
+                _send_local(
                     chat_id,
                     f"🔄 No existing video found — regenerating *{title}*\nNew ID: `{public_id}`",
                 )
             else:
-                telegram_service.send_message(chat_id, "❌ Failed to re-queue. Try FORCE_CREATE instead.")
+                _send_local(chat_id, "❌ Failed to re-queue. Try FORCE_CREATE instead.")
         return
 
     is_force_create = text.startswith("FORCE_CREATE")
@@ -386,7 +421,7 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
         rest = raw_text[cmd_len:].strip()
         if not rest:
             usage = "FORCE_CREATE <topic>" if is_force_create else "CREATE <topic> or CREATE <topic> | <context>"
-            telegram_service.send_message(chat_id, f"Please send: {usage}.")
+            _send_local(chat_id, f"Please send: {usage}.")
             return
         if "|" in rest:
             topic, create_context = rest.split("|", 1)
@@ -445,7 +480,7 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
             )
             if not acquired:
                 existing_status = existing.get("status", "queued")
-                telegram_service.send_message(
+                _send_local(
                     chat_id,
                     f"This topic is already {existing_status}. Skipping duplicate request.",
                 )
@@ -453,7 +488,7 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
 
         state = firestore_service.get_pipeline_state(channel_id=channel_id)
         if state.get("state") == "processing" and not is_force_create:
-            telegram_service.send_message(chat_id, "A video is already being processed. Please wait for it to finish.")
+            _send_local(chat_id, "A video is already being processed. Please wait for it to finish.")
             firestore_service.update_idempotency_key(
                 "create_topic",
                 topic_key,
@@ -501,7 +536,7 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
                 topic_key,
                 {"status": "queued", "batch_id": direct_batch_id, "public_id": public_id},
             )
-            telegram_service.send_message(
+            _send_local(
                 chat_id,
                 (
                     f"FORCE_CREATE accepted. Generating video for your custom topic: *{topic}*.\nVideo ID: `{public_id}`"
@@ -515,7 +550,7 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
                 topic_key,
                 {"status": "duplicate_task"},
             )
-            telegram_service.send_message(
+            _send_local(
                 chat_id,
                 "A similar request is already queued. I will notify you when it is uploaded.",
             )
@@ -525,18 +560,18 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
     batch_id = state.get("active_batch_id")
 
     if not batch_id:
-        telegram_service.send_message(chat_id, "No active digest. Please wait for the next one.")
+        _send_local(chat_id, "No active digest. Please wait for the next one.")
         return
 
     if text == "NONE":
         _set_pipeline_and_batch_state(batch_id, "skipped", channel_id=channel_id)
-        telegram_service.send_message(chat_id, "Got it! See you in the next digest.")
+        _send_local(chat_id, "Got it! See you in the next digest.")
         return
 
     batch = firestore_service.get_news_batch(batch_id)
     if state.get("state") == "awaiting_reply" and _is_digest_expired(batch):
         _set_pipeline_and_batch_state(batch_id, "skipped", channel_id=channel_id)
-        telegram_service.send_message(
+        _send_local(
             chat_id,
             "This digest expired after 2 hours and has been skipped. Please wait for the next digest, or use CREATE <topic>.",
         )
@@ -547,23 +582,23 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
     if item:
         current_state = state.get("state")
         if current_state in ("processing", "completed"):
-            telegram_service.send_message(chat_id, "A video is already being processed. Please wait for it to finish.")
+            _send_local(chat_id, "A video is already being processed. Please wait for it to finish.")
             return
         _set_pipeline_and_batch_state(batch_id, "processing", channel_id=channel_id)
         task_name = _task_name(batch_id, text)
         public_id = _public_video_id(task_name)
         enqueued = _enqueue_generate(item["headline"], text, batch_id, public_id=public_id, channel_id=channel_id)
         if enqueued:
-            telegram_service.send_message(
+            _send_local(
                 chat_id,
                 f"Got it! Generating video for *{text}* (ID: `{public_id}`). I'll notify you when it's uploaded.",
             )
         else:
-            telegram_service.send_message(chat_id, f"Video for *{text}* is already queued. I'll notify you when it's uploaded.")
+            _send_local(chat_id, f"Video for *{text}* is already queued. I'll notify you when it's uploaded.")
         return
 
     valid_codes = ", ".join(sorted(batch["items"].keys())) if batch else "TECH01–TECH05"
-    telegram_service.send_message(chat_id, f"Invalid code. Please reply with {valid_codes} or None.")
+    _send_local(chat_id, f"Invalid code. Please reply with {valid_codes} or None.")
 
 
 def _enqueue_generate(
@@ -669,4 +704,4 @@ def send_post_result(title: str, url: str, public_id: str = "", live_date: str =
         f"{id_line}"
         f"{domain_line}"
     )
-    telegram_service.send_message(TELEGRAM_CHAT_ID, message)
+    _send_message(TELEGRAM_CHAT_ID, message, channel_id="news")

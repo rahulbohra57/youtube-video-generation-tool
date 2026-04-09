@@ -30,4 +30,4 @@ def send_post_result(title: str, url: str, public_id: str = "", live_date: str =
         f"{id_line}"
         f"{mood_line}"
     )
-    telegram_service.send_message(STORIES_CHAT_ID, message)
+    telegram_service.send_message(STORIES_CHAT_ID, message, channel_id="stories")

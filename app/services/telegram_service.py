@@ -7,7 +7,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
-def _bot_token_for(chat_id: str) -> str:
+def _bot_token_for(chat_id: str, channel_id: str = "") -> str:
     """Return the correct bot token for the given chat_id.
     Read env vars at call time (not import time) to avoid module caching issues.
     Both tokens are read fresh on every call so Cloud Run env var updates take effect
@@ -16,14 +16,21 @@ def _bot_token_for(chat_id: str) -> str:
     news_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
     stories_chat_id = os.getenv("STORIES_CHAT_ID", "")
     stories_bot_token = os.getenv("STORIES_BOT_TOKEN", "")
+    # Explicit channel routing always wins when provided.
+    if channel_id == "stories" and stories_bot_token:
+        return stories_bot_token
+    if channel_id == "news" and news_bot_token:
+        return news_bot_token
+
+    # Backward-compatible fallback for older callsites.
     if stories_chat_id and stories_bot_token and str(chat_id) == str(stories_chat_id):
         return stories_bot_token
     return news_bot_token
 
 
-def send_message(chat_id: str, text: str) -> bool:
+def send_message(chat_id: str, text: str, channel_id: str = "") -> bool:
     """Send Telegram message with markdown first, then plain-text fallback."""
-    token = _bot_token_for(chat_id)
+    token = _bot_token_for(chat_id, channel_id=channel_id)
     url = f"https://api.telegram.org/bot{token}/sendMessage"
 
     try:
@@ -56,6 +63,7 @@ def send_video_for_manual_post(
     title: str,
     caption: str,
     source_label: str = "",
+    channel_id: str = "",
 ) -> bool:
     """
     Send a video file (local path or GCS URL) + formatted post caption to Telegram
@@ -75,9 +83,9 @@ def send_video_for_manual_post(
 
     if video_path_or_url.startswith("http"):
         # GCS public URL — send as link so user can download
-        return send_message(chat_id, caption_text + f"\n\n🔗 Video: {video_path_or_url}")
+        return send_message(chat_id, caption_text + f"\n\n🔗 Video: {video_path_or_url}", channel_id=channel_id)
 
-    api_url = f"https://api.telegram.org/bot{_bot_token_for(chat_id)}/sendVideo"
+    api_url = f"https://api.telegram.org/bot{_bot_token_for(chat_id, channel_id=channel_id)}/sendVideo"
     try:
         with open(video_path_or_url, "rb") as f:
             resp = httpx.post(
@@ -90,4 +98,4 @@ def send_video_for_manual_post(
         return True
     except Exception as e:
         logger.warning(f"Telegram video upload failed ({e}), falling back to text message.")
-        return send_message(chat_id, caption_text + "\n\n⚠️ Video file could not be attached.")
+        return send_message(chat_id, caption_text + "\n\n⚠️ Video file could not be attached.", channel_id=channel_id)

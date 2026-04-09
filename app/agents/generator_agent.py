@@ -135,7 +135,8 @@ def run(
         send_message(
             _chat_id,
             f"⚠️ Another video is already being processed. "
-            f"Request for *{code}* has been rejected. Please wait for the current video to finish."
+            f"Request for *{code}* has been rejected. Please wait for the current video to finish.",
+            channel_id=channel_id,
         )
         if idempotency_scope and idempotency_key:
             firestore_service.update_idempotency_key(
@@ -186,7 +187,8 @@ def run(
             send_message(
                 _chat_id,
                 f"⚠️ Another video is already being processed. "
-                f"Request for *{code}* has been rejected. Please wait for the current video to finish."
+                f"Request for *{code}* has been rejected. Please wait for the current video to finish.",
+                channel_id=channel_id,
             )
             if idempotency_scope and idempotency_key:
                 firestore_service.update_idempotency_key(
@@ -230,7 +232,7 @@ def run(
 
         for i, scene in enumerate(scenes):
             if _is_cancel_requested(effective_job_id):
-                send_message(_chat_id, f"🛑 Generation stopped successfully for ID `{public_id or effective_job_id}`.")
+                send_message(_chat_id, f"🛑 Generation stopped successfully for ID `{public_id or effective_job_id}`.", channel_id=channel_id)
                 firestore_service.create_or_update_job(
                     effective_job_id,
                     {
@@ -312,7 +314,8 @@ def run(
                     send_message(
                         _chat_id,
                         f"❌ Image generation failed for *{code}* after 3 attempts "
-                        f"(Imagen quota may be exhausted). Please try again later."
+                        f"(Imagen quota may be exhausted). Please try again later.",
+                        channel_id=channel_id,
                     )
                     firestore_service.create_or_update_job(
                         effective_job_id,
@@ -336,7 +339,8 @@ def run(
             send_message(
                 _chat_id,
                 f"❌ Video generation failed for *{code}* — no scenes could be generated. "
-                f"Please try again later."
+                f"Please try again later.",
+                channel_id=channel_id,
             )
             firestore_service.create_or_update_job(
                 effective_job_id,
@@ -356,7 +360,7 @@ def run(
             return
 
         if _is_cancel_requested(effective_job_id):
-            send_message(_chat_id, f"🛑 Generation stopped successfully for ID `{public_id or effective_job_id}`.")
+            send_message(_chat_id, f"🛑 Generation stopped successfully for ID `{public_id or effective_job_id}`.", channel_id=channel_id)
             firestore_service.create_or_update_job(
                 effective_job_id,
                 {
@@ -373,7 +377,7 @@ def run(
                 )
             return
 
-        send_message(_chat_id, "✅ Frames Generated! Now compiling the video...")
+        send_message(_chat_id, "✅ Frames Generated! Now compiling the video...", channel_id=channel_id)
 
         output_path = os.path.join(OUTPUT_DIR, f"final_{code}_{timestamp}.mp4")
         create_video(video_clips, output_path, music_genre=music_genre, language=language)

@@ -260,7 +260,7 @@ def send_daily_digest():
         + top_line
         + failed_lines
     )
-    send_message(TELEGRAM_CHAT_ID, message)
+    send_message(TELEGRAM_CHAT_ID, message, channel_id="news")
 
 
 def retry_failed_pipeline() -> str | None:
@@ -297,7 +297,7 @@ def retry_failed_pipeline() -> str | None:
     task_name = whatsapp_agent._task_name(batch_id, code)
     public_id = whatsapp_agent._public_video_id(task_name)
 
-    send_message(TELEGRAM_CHAT_ID, f"🔁 Auto-retrying failed pipeline\nTopic: _{topic}_")
+    send_message(TELEGRAM_CHAT_ID, f"🔁 Auto-retrying failed pipeline\nTopic: _{topic}_", channel_id="news")
 
     enqueued = whatsapp_agent._enqueue_generate(
         topic, code, batch_id,
@@ -483,6 +483,7 @@ def run() -> str | None:
             f"Details: {details}\n"
             f"Virality Score: {virality}/5"
         ),
+        channel_id="news",
     )
 
     enqueued = whatsapp_agent._enqueue_generate(

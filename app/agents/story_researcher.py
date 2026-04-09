@@ -68,7 +68,7 @@ def run() -> str | None:
     except Exception as e:
         logger.exception(f"Story idea generation failed: {e}")
         if STORIES_CHAT_ID:
-            send_message(STORIES_CHAT_ID, f"⚠️ Story idea generation failed: {e}")
+            send_message(STORIES_CHAT_ID, f"⚠️ Story idea generation failed: {e}", channel_id="stories")
         return None
 
     title = (idea.get("title") or "").strip()
@@ -160,7 +160,7 @@ def run() -> str | None:
         logger.exception(f"Failed to enqueue stories task: {e}")
         firestore_service.set_pipeline_and_batch_state(batch_id, "failed", channel_id="stories")
         if STORIES_CHAT_ID:
-            send_message(STORIES_CHAT_ID, f"❌ Failed to queue story: {e}")
+            send_message(STORIES_CHAT_ID, f"❌ Failed to queue story: {e}", channel_id="stories")
         return None
 
     _mark_story_used(title, mood=mood)
@@ -172,6 +172,7 @@ def run() -> str | None:
             f"Title: *{title}*\n"
             f"Mood: {mood.title()}\n"
             f"Id: `{public_id}`",
+            channel_id="stories",
         )
 
     logger.info(f"Stories task enqueued: {task_name} | {title} | mood={mood}")

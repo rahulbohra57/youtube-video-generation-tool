@@ -29,7 +29,14 @@ def _deliver_video_to_telegram(
 ):
     """Send video + caption to Telegram for manual posting and mark job as delivered_manual."""
     chat_id = get_chat_id(channel_id)
-    send_video_for_manual_post(chat_id, video_path, title, caption, source_label=source_label)
+    send_video_for_manual_post(
+        chat_id,
+        video_path,
+        title,
+        caption,
+        source_label=source_label,
+        channel_id=channel_id,
+    )
     if job_id:
         firestore_service.create_or_update_job(job_id, {
             "status": "delivered_manual",
@@ -46,18 +53,18 @@ def post(video_path: str, caption: str, title: str, job_id: str = "", public_id:
     if job_id:
         firestore_service.create_or_update_job(job_id, {"final_caption": enhanced})
 
-    send_message(chat_id, "📤 Posting to YouTube Shorts...")
+    send_message(chat_id, "📤 Posting to YouTube Shorts...", channel_id=channel_id)
     try:
         url = youtube_service.upload_video(video_path, title, enhanced, genre=genre, channel_id=channel_id)
     except Exception as e:
         err = str(e)
         if "youtube_quota_exceeded" in err:
             logger.warning(f"YouTube quota exceeded for job {job_id}")
-            send_message(chat_id, "⚠️ YouTube daily quota exceeded — sending video for manual posting.")
+            send_message(chat_id, "⚠️ YouTube daily quota exceeded — sending video for manual posting.", channel_id=channel_id)
             label = f"{source}_quota" if source else "quota"
         else:
             logger.exception(f"YouTube upload failed: {e}")
-            send_message(chat_id, f"❌ YouTube upload failed: {e}")
+            send_message(chat_id, f"❌ YouTube upload failed: {e}", channel_id=channel_id)
             label = f"{source}_upload_error" if source else "upload_error"
         _deliver_video_to_telegram(job_id, video_path, title, enhanced, source_label=label, channel_id=channel_id)
         # Mark pipeline state as completed so the next scheduler run isn't blocked
@@ -106,7 +113,7 @@ def post(video_path: str, caption: str, title: str, job_id: str = "", public_id:
             )
     except Exception as notify_err:
         logger.exception(f"Post-result notification failed: {notify_err}")
-        send_message(chat_id, f"✅ Posted to YouTube!\nPost Title: {title}\nPost Link: {url}")
+        send_message(chat_id, f"✅ Posted to YouTube!\nPost Title: {title}\nPost Link: {url}", channel_id=channel_id)
     return url
 
 
