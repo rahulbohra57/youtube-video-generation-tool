@@ -72,10 +72,15 @@ def _prefix_for_domain(domain: str) -> str:
         "current affairs": "CA",
         "trending": "TRND",
         "science": "SCI",
+        "health": "HLTH",
+        "business": "BIZ",
+        "sports": "SPRT",
+        "entertainment": "ENT",
+        "environment": "ENV",
     }.get(domain.lower(), "NEWS")
 
 
-def _domain_query_map() -> dict[str, dict]:
+def _primary_domain_query_map() -> dict[str, dict]:
     return {
         "Technology": {
             "category": "technology",
@@ -96,6 +101,31 @@ def _domain_query_map() -> dict[str, dict]:
         "Science": {
             "category": "science",
             "query": "science OR space OR research OR discovery OR nasa",
+        },
+    }
+
+
+def _fallback_domain_query_map() -> dict[str, dict]:
+    return {
+        "Health": {
+            "category": "health",
+            "query": "health OR medicine OR disease OR wellness OR research",
+        },
+        "Business": {
+            "category": "business",
+            "query": "business OR economy OR market OR finance OR startup",
+        },
+        "Sports": {
+            "category": "sports",
+            "query": "sports OR cricket OR football OR tennis OR olympics",
+        },
+        "Entertainment": {
+            "category": "entertainment",
+            "query": "entertainment OR movies OR celebrity OR music OR award",
+        },
+        "Environment": {
+            "category": "science",
+            "query": "environment OR climate OR pollution OR nature OR sustainability",
         },
     }
 
@@ -294,7 +324,7 @@ def run() -> str | None:
     from_date = (
         datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
     ).isoformat(timespec="seconds").replace("+00:00", "Z")
-    domains = _domain_query_map()
+    domains = _primary_domain_query_map()
     domain_results: dict[str, list[dict]] = {}
 
     top_performers = firestore_service.get_top_performers(n=3)

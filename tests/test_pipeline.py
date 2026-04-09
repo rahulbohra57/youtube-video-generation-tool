@@ -244,6 +244,32 @@ def test_lead_researcher_run_creates_batch_and_enqueues_video(
     mock_enqueue.assert_called_once()
 
 
+def test_fallback_domain_query_map_has_five_entries():
+    from app.agents.lead_researcher import _fallback_domain_query_map
+    m = _fallback_domain_query_map()
+    assert len(m) == 5
+    for name, cfg in m.items():
+        assert "query" in cfg, f"{name} missing 'query'"
+        assert "category" in cfg, f"{name} missing 'category'"
+
+
+def test_prefix_for_domain_covers_all_fallback_domains():
+    from app.agents.lead_researcher import _prefix_for_domain
+    assert _prefix_for_domain("Health") == "HLTH"
+    assert _prefix_for_domain("Business") == "BIZ"
+    assert _prefix_for_domain("Sports") == "SPRT"
+    assert _prefix_for_domain("Entertainment") == "ENT"
+    assert _prefix_for_domain("Environment") == "ENV"
+
+
+def test_primary_domain_query_map_has_five_entries():
+    from app.agents.lead_researcher import _primary_domain_query_map
+    m = _primary_domain_query_map()
+    assert set(m.keys()) == {
+        "Technology", "Artificial Intelligence", "Current Affairs", "Trending", "Science"
+    }
+
+
 @patch("app.agents.lead_researcher.firestore_service")
 def test_lead_researcher_expires_stale_awaiting_reply_digest(mock_fs):
     from app.agents import lead_researcher
