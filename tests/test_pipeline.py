@@ -295,6 +295,86 @@ def test_lead_researcher_skips_outside_allowed_hours(mock_window):
     assert lead_researcher.run() is None
 
 
+@patch("app.agents.whatsapp_agent._enqueue_generate", return_value=True)
+@patch("app.agents.lead_researcher.send_message")
+@patch("app.agents.lead_researcher.firestore_service")
+@patch("app.agents.lead_researcher.rate_and_select_news")
+@patch("app.agents.lead_researcher.gnews_service")
+@patch("app.agents.lead_researcher._within_suggestion_window", return_value=True)
+def test_lead_researcher_falls_back_to_new_domain_when_primary_exhausted(
+    mock_window, mock_gnews, mock_rate, mock_fs, mock_send, mock_enqueue
+):
+    """When all 5 primary domains have no quality articles, Phase 3 fetches a fallback domain."""
+    mock_fs.get_pipeline_state.return_value = {}
+    mock_fs.get_domains_posted_today.return_value = {}
+    mock_fs.get_top_performers.return_value = []
+    mock_fs.get_genre_performance_weekly.return_value = {}
+    mock_fs.get_recently_suggested_headlines.return_value = []
+    mock_fs.is_headline_already_suggested.return_value = False
+
+    fallback_article = {
+        "headline": "Health breakthrough announced",
+        "url": "https://example.com/health",
+        "description": "Scientists discover cure",
+        "published_at": "2026-04-09T10:00:00Z",
+        "source": "HealthNews",
+    }
+
+    call_count = {"n": 0}
+
+    def search_side_effect(**kwargs):
+        call_count["n"] += 1
+        # First 5 calls are primary domains → empty; subsequent calls are Phase 3 → article
+        if call_count["n"] <= 5:
+            return []
+        return [fallback_article]
+
+    mock_gnews.search_news.side_effect = search_side_effect
+    mock_rate.return_value = []
+
+    from app.agents import lead_researcher
+    batch_id = lead_researcher.run()
+
+    assert batch_id is not None
+    assert batch_id.startswith("auto_")
+    mock_fs.save_news_batch.assert_called_once()
+    mock_enqueue.assert_called_once()
+
+
+@patch("app.agents.lead_researcher.send_message")
+@patch("app.agents.lead_researcher.firestore_service")
+@patch("app.agents.lead_researcher.rate_and_select_news")
+@patch("app.agents.lead_researcher.gnews_service")
+@patch("app.agents.lead_researcher._within_suggestion_window", return_value=True)
+def test_lead_researcher_returns_none_when_all_domains_truly_empty(
+    mock_window, mock_gnews, mock_rate, mock_fs, mock_send
+):
+    """Returns None only when primary AND all fallback domains yield nothing."""
+    mock_fs.get_pipeline_state.return_value = {}
+    mock_fs.get_domains_posted_today.return_value = {}
+    mock_fs.get_top_performers.return_value = []
+    mock_fs.get_genre_performance_weekly.return_value = {}
+    mock_fs.get_recently_suggested_headlines.return_value = []
+    mock_fs.is_headline_already_suggested.return_value = False
+
+    mock_gnews.search_news.return_value = []
+    mock_rate.return_value = []
+
+    from app.agents import lead_researcher
+    result = lead_researcher.run()
+
+    assert result is None
+    mock_fs.save_news_batch.assert_not_called()
+
+
+def test_lead_researcher_uses_24h_lookback():
+    """Verify lookback_hours is 24 in the run() function source."""
+    import inspect
+    from app.agents import lead_researcher
+    src = inspect.getsource(lead_researcher.run)
+    assert "lookback_hours = 24" in src
+
+
 # ---------------------------------------------------------------------------
 # Task 7: whatsapp_agent
 # ---------------------------------------------------------------------------

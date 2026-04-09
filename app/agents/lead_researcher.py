@@ -320,7 +320,7 @@ def run() -> str | None:
     if state.get("state") == "processing":
         return None
 
-    lookback_hours = 12
+    lookback_hours = 24
     from_date = (
         datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
     ).isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -415,14 +415,41 @@ def run() -> str | None:
             if rows:
                 all_candidates.append((d, rows[0]))
         if not all_candidates:
-            return None
-        perf_max = max(genre_perf.values(), default=1.0) or 1.0
-        selected_domain, selected_item = sorted(
-            all_candidates,
-            key=lambda pair: pair[1].get("rigorous_score", 0)
-            * (1 + genre_perf.get(pair[0].lower(), 0.0) / perf_max),
-            reverse=True,
-        )[0]
+            # Phase 3: all primary domains exhausted — try a fallback domain.
+            # Fallback domains are fetched live here (not during the primary loop)
+            # to avoid wasting GNews quota on every cycle.
+            fallback_domains = _fallback_domain_query_map()
+            fallback_names = list(fallback_domains.keys())
+            random.shuffle(fallback_names)
+            for fallback_name in fallback_names:
+                cfg = fallback_domains[fallback_name]
+                fallback_search = gnews_service.search_news(
+                    query=cfg["query"],
+                    max_results=25,
+                    from_date=from_date,
+                    category=cfg["category"],
+                )
+                fallback_raw = [a for a in fallback_search if _is_recent_article(a, lookback_hours)]
+                fallback_candidates = _dedupe_and_filter_unsuggested(fallback_raw)
+                if fallback_candidates:
+                    selected_domain = fallback_name
+                    # No quality floor — any article is acceptable in last-resort fallback.
+                    selected_item = {
+                        **fallback_candidates[0],
+                        "genre": fallback_name,
+                        "rigorous_score": 3.5,
+                    }
+                    break
+            if not selected_item:
+                return None
+        else:
+            perf_max = max(genre_perf.values(), default=1.0) or 1.0
+            selected_domain, selected_item = sorted(
+                all_candidates,
+                key=lambda pair: pair[1].get("rigorous_score", 0)
+                * (1 + genre_perf.get(pair[0].lower(), 0.0) / perf_max),
+                reverse=True,
+            )[0]
 
     batch_id = f"auto_{datetime.now(timezone.utc):%Y%m%d_%H%M%S}"
     prefix = _prefix_for_domain(selected_domain)
