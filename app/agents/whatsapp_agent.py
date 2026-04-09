@@ -93,19 +93,21 @@ def _delete_queued_task(task_name: str):
         return
 
 
-def _send_stats(chat_id: str):
-    queue = firestore_service.get_queue_snapshot()
-    jobs = firestore_service.list_recent_jobs(limit=200)
+def _send_stats(chat_id: str, channel_id: str = "news"):
+    metrics_key = f"youtube_{channel_id}"
+    queue = firestore_service.get_queue_snapshot(channel_id=channel_id)
+    jobs = [j for j in firestore_service.list_recent_jobs(limit=200)
+            if j.get("channel_id", "news") == channel_id]
     ongoing = sum(1 for j in jobs if j.get("status") == "processing")
     local_posted = sum(1 for j in jobs if j.get("status") == "completed" and j.get("youtube_url"))
 
     yt_error = ""
     try:
-        yt = youtube_service.get_channel_stats()
-        firestore_service.save_social_metrics("youtube", yt)
+        yt = youtube_service.get_channel_stats(channel_id=channel_id)
+        firestore_service.save_social_metrics(metrics_key, yt)
     except Exception as e:
         yt_error = str(e)
-        yt = firestore_service.get_social_metrics("youtube") or {}
+        yt = firestore_service.get_social_metrics(metrics_key) or {}
 
     videos_posted = int(yt.get("video_count", 0)) or local_posted
     message = (
@@ -174,7 +176,7 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
     text = raw_text.upper()
 
     if text == "STATS":
-        _send_stats(chat_id)
+        _send_stats(chat_id, channel_id=channel_id)
         return
 
     if text == "COMMANDS":

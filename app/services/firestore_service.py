@@ -307,8 +307,10 @@ def list_recent_jobs(limit: int = 50) -> list[dict]:
     return rows
 
 
-def get_queue_snapshot(window_start=None) -> dict:
+def get_queue_snapshot(window_start=None, channel_id: str | None = None) -> dict:
     rows = list_recent_jobs(limit=200)
+    if channel_id:
+        rows = [r for r in rows if r.get("channel_id", "news") == channel_id]
     queued = sum(1 for r in rows if r.get("status") == "queued")
     processing = sum(1 for r in rows if r.get("status") == "processing")
     failed_24h = 0
