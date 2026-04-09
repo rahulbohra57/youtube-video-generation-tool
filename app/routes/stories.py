@@ -29,7 +29,7 @@ def stories_run(request: Request):
         public_id = story_researcher.run()
     except Exception as e:
         logger.exception(f"story_researcher.run() failed: {e}")
-        return {"status": "error", "reason": str(e)[:500]}
+        raise HTTPException(status_code=500, detail="story_researcher_failed")
     if not public_id:
         return {"status": "skipped", "reason": "pipeline_busy_or_story_already_used"}
     return {"status": "ok", "public_id": public_id}
@@ -47,7 +47,7 @@ def stories_daily_digest(request: Request):
         _send_stories_daily_digest()
     except Exception as e:
         logger.exception(f"stories daily digest failed: {e}")
-        return {"status": "error", "reason": str(e)[:500]}
+        raise HTTPException(status_code=500, detail="stories_daily_digest_failed")
     return {"status": "ok"}
 
 

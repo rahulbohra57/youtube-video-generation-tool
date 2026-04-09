@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 @router.post("/research/run")
 def run_research(request: Request):
-    """Called by Cloud Scheduler every 2h. Always returns 200 to prevent retries."""
+    """Called by Cloud Scheduler every 4h."""
     secret = request.headers.get("X-Scheduler-Secret", "")
     if secret != SCHEDULER_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -20,7 +20,7 @@ def run_research(request: Request):
         batch_id = lead_researcher.run()
     except Exception as e:
         logger.exception(f"lead_researcher.run() failed: {e}")
-        return {"status": "error", "reason": str(e)[:500]}
+        raise HTTPException(status_code=500, detail="lead_researcher_failed")
     if not batch_id:
         return {"status": "skipped", "reason": "outside_suggestion_window_or_no_fresh_news"}
     return {"status": "ok", "batch_id": batch_id}
@@ -36,7 +36,7 @@ def retry_failed(request: Request):
         batch_id = lead_researcher.retry_failed_pipeline()
     except Exception as e:
         logger.exception(f"retry_failed_pipeline() failed: {e}")
-        return {"status": "error", "reason": str(e)[:500]}
+        raise HTTPException(status_code=500, detail="retry_failed_pipeline_error")
     if not batch_id:
         return {"status": "skipped", "reason": "no_failed_jobs_or_pipeline_busy"}
     return {"status": "ok", "batch_id": batch_id}
@@ -65,7 +65,7 @@ def update_analytics(request: Request):
         return {"status": "ok", "updated": updated}
     except Exception as e:
         logger.exception(f"update_analytics failed: {e}")
-        return {"status": "error", "reason": str(e)[:500]}
+        raise HTTPException(status_code=500, detail="update_analytics_failed")
 
 
 @router.post("/research/daily-digest")
@@ -78,5 +78,5 @@ def daily_digest(request: Request):
         lead_researcher.send_daily_digest()
     except Exception as e:
         logger.exception(f"send_daily_digest() failed: {e}")
-        return {"status": "error", "reason": str(e)[:500]}
+        raise HTTPException(status_code=500, detail="daily_digest_failed")
     return {"status": "ok"}

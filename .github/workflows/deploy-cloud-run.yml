@@ -48,3 +48,76 @@ jobs:
             --cpu=4 \
             --timeout=3600 \
             --quiet
+
+      - name: Configure Cloud Scheduler Jobs
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          REGION: ${{ secrets.CLOUD_RUN_REGION }}
+          SERVICE_NAME: ${{ secrets.CLOUD_RUN_SERVICE }}
+          SCHEDULER_SECRET: ${{ secrets.SCHEDULER_SECRET }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SCHEDULER_SECRET:-}" ]; then
+            echo "SCHEDULER_SECRET is not set in GitHub secrets."
+            exit 1
+          fi
+
+          SERVICE_URL="$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --project "$PROJECT_ID" --format='value(status.url)')"
+          if [ -z "${SERVICE_URL:-}" ]; then
+            echo "Failed to resolve Cloud Run service URL for $SERVICE_NAME"
+            exit 1
+          fi
+
+          TZ="Asia/Kolkata"
+          HDR="X-Scheduler-Secret=${SCHEDULER_SECRET},Content-Type=application/json"
+
+          upsert_job() {
+            NAME="$1"
+            SCHEDULE="$2"
+            URI="$3"
+            BODY="$4"
+
+            if gcloud scheduler jobs describe "$NAME" --location="$REGION" --project="$PROJECT_ID" >/dev/null 2>&1; then
+              gcloud scheduler jobs update http "$NAME" \
+                --location="$REGION" \
+                --project="$PROJECT_ID" \
+                --schedule="$SCHEDULE" \
+                --time-zone="$TZ" \
+                --uri="$URI" \
+                --http-method=POST \
+                --headers="$HDR" \
+                --message-body="$BODY" \
+                --max-retry-attempts=3 \
+                --min-backoff=60s \
+                --max-backoff=600s \
+                --max-doublings=3 \
+                --attempt-deadline=320s
+            else
+              gcloud scheduler jobs create http "$NAME" \
+                --location="$REGION" \
+                --project="$PROJECT_ID" \
+                --schedule="$SCHEDULE" \
+                --time-zone="$TZ" \
+                --uri="$URI" \
+                --http-method=POST \
+                --headers="$HDR" \
+                --message-body="$BODY" \
+                --max-retry-attempts=3 \
+                --min-backoff=60s \
+                --max-backoff=600s \
+                --max-doublings=3 \
+                --attempt-deadline=320s
+            fi
+          }
+
+          # News pipeline: every 4 hours => 6 runs/day
+          upsert_job "autoframe-lead-researcher" "0 */4 * * *" "${SERVICE_URL}/research/run" "{}"
+          # Retry failed runs midway between primary slots
+          upsert_job "autoframe-retry-failed" "30 */4 * * *" "${SERVICE_URL}/research/retry-failed" "{}"
+          # News daily report
+          upsert_job "autoframe-daily-digest" "0 8 * * *" "${SERVICE_URL}/research/daily-digest" "{}"
+          # Stories pipeline: every 6 hours => 4 runs/day
+          upsert_job "autoframe-stories-run" "0 */6 * * *" "${SERVICE_URL}/stories/run" "{}"
+          # Stories daily report
+          upsert_job "autoframe-stories-daily-digest" "30 8 * * *" "${SERVICE_URL}/stories/daily-digest" "{}"
