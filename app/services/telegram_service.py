@@ -1,16 +1,21 @@
 # app/services/telegram_service.py
 
 import logging
+import os
 import httpx
-from app.config import TELEGRAM_BOT_TOKEN, STORIES_BOT_TOKEN, STORIES_CHAT_ID
+from app.config import TELEGRAM_BOT_TOKEN
 
 logger = logging.getLogger(__name__)
 
 
 def _bot_token_for(chat_id: str) -> str:
-    """Return the correct bot token for the given chat_id."""
-    if STORIES_CHAT_ID and str(chat_id) == str(STORIES_CHAT_ID):
-        return STORIES_BOT_TOKEN
+    """Return the correct bot token for the given chat_id.
+    Read env vars at call time (not import time) to avoid module caching issues.
+    """
+    stories_chat_id = os.getenv("STORIES_CHAT_ID", "")
+    stories_bot_token = os.getenv("STORIES_BOT_TOKEN", "")
+    if stories_chat_id and stories_bot_token and str(chat_id) == str(stories_chat_id):
+        return stories_bot_token
     return TELEGRAM_BOT_TOKEN
 
 
