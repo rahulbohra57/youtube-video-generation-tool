@@ -109,6 +109,18 @@
       <pre id="failures"></pre>
     </div>
 
+    <div class="card" style="margin-bottom:16px">
+      <div class="label">Genre Performance (14d)</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Genre</th><th>Videos</th><th>Views</th><th>Comments</th><th>Avg Views</th><th>Avg Comments</th>
+          </tr>
+        </thead>
+        <tbody id="genrePerfBody"></tbody>
+      </table>
+    </div>
+
     <div class="card">
       <div class="label">Recent Jobs</div>
       <table>
@@ -149,6 +161,17 @@
       const data = await res.json();
       const pressure = data.quota?.pressure || "low";
       const pressureClass = pressure === "high" ? "bad" : (pressure === "medium" ? "mid" : "ok");
+      const genreRows = (data.genre_performance_14d || []).map(g => `
+        <tr>
+          <td>${esc((g.genre || "unknown").replace(/-/g, " "))}</td>
+          <td>${fmt(g.videos)}</td>
+          <td>${fmt(g.total_views)}</td>
+          <td>${fmt(g.total_comments)}</td>
+          <td>${fmt(g.avg_views)}</td>
+          <td>${fmt(g.avg_comments)}</td>
+        </tr>
+      `).join("") || `<tr><td colspan="6" class="meta">No genre analytics yet</td></tr>`;
+      document.getElementById("genrePerfBody").innerHTML = genreRows;
       document.getElementById("cards").innerHTML = `
         <div class="card"><div class="label">Channel</div><div class="value">${currentChannel === "news" ? "News" : "Stories"}</div><div class="meta">live metrics</div></div>
         <div class="card"><div class="label">Pipeline State</div><div class="value" style="font-size:18px">${esc(data.pipeline?.state || "idle")}</div><div class="meta">batch: ${esc(data.pipeline?.active_batch_id || "-")}</div></div>

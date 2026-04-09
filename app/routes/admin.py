@@ -41,6 +41,46 @@ def _social_key(channel_id: str) -> str:
     return "youtube_stories" if channel_id == "stories" else "youtube"
 
 
+def _genre_performance(jobs: list[dict], hours: int = 24 * 14) -> list[dict]:
+    cutoff = _hours_ago(hours)
+    grouped: dict[str, dict] = {}
+    for j in jobs:
+        if j.get("status") != "completed":
+            continue
+        updated = _parse_iso(j.get("updated_at"))
+        if not updated or updated.timestamp() < cutoff:
+            continue
+        genre = (j.get("genre") or "unknown").strip().lower()
+        analytics = j.get("analytics") or {}
+        views = int(analytics.get("view_count", 0) or 0)
+        comments = int(analytics.get("comment_count", 0) or 0)
+        row = grouped.setdefault(
+            genre,
+            {
+                "genre": genre,
+                "videos": 0,
+                "total_views": 0,
+                "total_comments": 0,
+            },
+        )
+        row["videos"] += 1
+        row["total_views"] += views
+        row["total_comments"] += comments
+
+    out = []
+    for row in grouped.values():
+        videos = row["videos"] or 1
+        out.append(
+            {
+                **row,
+                "avg_views": round(row["total_views"] / videos, 1),
+                "avg_comments": round(row["total_comments"] / videos, 1),
+            }
+        )
+    out.sort(key=lambda x: (x["total_views"], x["total_comments"]), reverse=True)
+    return out
+
+
 @router.get("/admin")
 def admin_page(request: Request):
     _require_admin(request)
@@ -108,6 +148,7 @@ def admin_summary(request: Request, channel_id: str = "news"):
             "video_count": int(social.get("video_count", 0)),
             "updated_at": social.get("updated_at"),
         },
+        "genre_performance_14d": _genre_performance(jobs, hours=24 * 14),
     }
 
 
