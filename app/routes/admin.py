@@ -33,6 +33,14 @@ def _hours_ago(hours: int) -> float:
     return datetime.now(timezone.utc).timestamp() - (hours * 3600)
 
 
+def _channel_id(raw: str) -> str:
+    return "stories" if (raw or "").strip().lower() == "stories" else "news"
+
+
+def _social_key(channel_id: str) -> str:
+    return "youtube_stories" if channel_id == "stories" else "youtube"
+
+
 @router.get("/admin")
 def admin_page(request: Request):
     _require_admin(request)
@@ -40,14 +48,18 @@ def admin_page(request: Request):
 
 
 @router.get("/admin/metrics/summary")
-def admin_summary(request: Request):
+def admin_summary(request: Request, channel_id: str = "news"):
     _require_admin(request)
-    pipeline = firestore_service.get_pipeline_state()
-    queue = firestore_service.get_queue_snapshot()
+    channel_id = _channel_id(channel_id)
+    pipeline = firestore_service.get_pipeline_state(channel_id=channel_id)
+    queue = firestore_service.get_queue_snapshot(channel_id=channel_id)
     lock = firestore_service.get_current_lock()
     quota = firestore_service.get_quota_usage_snapshot()
-    social = firestore_service.get_social_metrics("youtube")
-    jobs = firestore_service.list_recent_jobs(limit=200)
+    social = firestore_service.get_social_metrics(_social_key(channel_id))
+    jobs = [
+        j for j in firestore_service.list_recent_jobs(limit=200)
+        if j.get("channel_id", "news") == channel_id
+    ]
 
     cutoff = _hours_ago(24)
     total_24h = 0
@@ -77,6 +89,7 @@ def admin_summary(request: Request):
     avg_duration = round(sum(durations) / len(durations), 1) if durations else 0.0
 
     return {
+        "channel_id": channel_id,
         "queue": queue,
         "pipeline": pipeline,
         "lock": lock,
@@ -99,17 +112,26 @@ def admin_summary(request: Request):
 
 
 @router.get("/admin/metrics/jobs")
-def admin_jobs(request: Request, limit: int = 50):
+def admin_jobs(request: Request, limit: int = 50, channel_id: str = "news"):
     _require_admin(request)
+    channel_id = _channel_id(channel_id)
     safe_limit = max(1, min(limit, 200))
-    return {"jobs": firestore_service.list_recent_jobs(limit=safe_limit)}
+    jobs = [
+        j for j in firestore_service.list_recent_jobs(limit=500)
+        if j.get("channel_id", "news") == channel_id
+    ][:safe_limit]
+    return {"channel_id": channel_id, "jobs": jobs}
 
 
 @router.get("/admin/metrics/failures")
-def admin_failures(request: Request, hours: int = 24):
+def admin_failures(request: Request, hours: int = 24, channel_id: str = "news"):
     _require_admin(request)
+    channel_id = _channel_id(channel_id)
     cutoff = _hours_ago(max(1, min(hours, 168)))
-    jobs = firestore_service.list_recent_jobs(limit=500)
+    jobs = [
+        j for j in firestore_service.list_recent_jobs(limit=500)
+        if j.get("channel_id", "news") == channel_id
+    ]
     grouped = {}
     failures = []
     for j in jobs:
@@ -121,16 +143,18 @@ def admin_failures(request: Request, hours: int = 24):
         err = j.get("error_type", "unknown")
         grouped[err] = grouped.get(err, 0) + 1
         failures.append(j)
-    return {"by_error_type": grouped, "failures": failures}
+    return {"channel_id": channel_id, "by_error_type": grouped, "failures": failures}
 
 
 @router.post("/admin/metrics/refresh-social")
-def refresh_social(request: Request):
+def refresh_social(request: Request, channel_id: str = "news"):
     _require_admin(request)
+    channel_id = _channel_id(channel_id)
     try:
-        stats = youtube_service.get_channel_stats()
-        firestore_service.save_social_metrics("youtube", stats)
-        latest = firestore_service.get_social_metrics("youtube")
-        return {"status": "ok", "youtube": latest}
+        stats = youtube_service.get_channel_stats(channel_id=channel_id)
+        key = _social_key(channel_id)
+        firestore_service.save_social_metrics(key, stats)
+        latest = firestore_service.get_social_metrics(key)
+        return {"status": "ok", "channel_id": channel_id, "youtube": latest}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"YouTube stats refresh failed: {e}")
