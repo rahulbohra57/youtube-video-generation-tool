@@ -16,6 +16,20 @@ from app.config import STORIES_CHAT_ID, CLOUD_RUN_URL, PROJECT_ID, LOCATION, TAS
 logger = logging.getLogger(__name__)
 
 _STORY_DEDUP_DAYS = 30
+_STORY_GENRES = [
+    "inspiring",
+    "comedy",
+    "heartfelt",
+    "crime",
+    "action",
+    "sci-fi",
+    "mythology",
+    "thriller",
+    "mystery",
+    "adventure",
+    "slice-of-life",
+    "historical",
+]
 
 
 def _story_key(title: str) -> str:
@@ -43,6 +57,12 @@ def _recently_used_titles(limit: int = 20) -> list[str]:
         return []
 
 
+def _select_story_genre() -> str:
+    # Deterministic 6-hour slot rotation so genres stay diverse over time.
+    slot = int(datetime.now(timezone.utc).timestamp() // (6 * 3600))
+    return _STORY_GENRES[slot % len(_STORY_GENRES)]
+
+
 def run() -> str | None:
     """
     Main entry point called by POST /stories/run (Cloud Scheduler).
@@ -63,8 +83,12 @@ def run() -> str | None:
 
     # Generate a new story idea (title + mood + premise, all in Hindi)
     recently_used = _recently_used_titles()
+    target_genre = _select_story_genre()
     try:
-        idea = generate_story_idea(recently_used_titles=recently_used)
+        idea = generate_story_idea(
+            recently_used_titles=recently_used,
+            preferred_mood=target_genre,
+        )
     except Exception as e:
         logger.exception(f"Story idea generation failed: {e}")
         if STORIES_CHAT_ID:
@@ -72,7 +96,8 @@ def run() -> str | None:
         return None
 
     title = (idea.get("title") or "").strip()
-    mood = (idea.get("mood") or "inspiring").strip().lower()
+    # Enforce scheduled genre rotation to diversify experiments over 2 weeks.
+    mood = target_genre
     premise = (idea.get("premise") or "").strip()
 
     if not title:
@@ -170,10 +195,10 @@ def run() -> str | None:
             STORIES_CHAT_ID,
             f"📖 Generating story...\n"
             f"Title: *{title}*\n"
-            f"Mood: {mood.title()}\n"
+            f"Genre: {mood.title()}\n"
             f"Id: `{public_id}`",
             channel_id="stories",
         )
 
-    logger.info(f"Stories task enqueued: {task_name} | {title} | mood={mood}")
+    logger.info(f"Stories task enqueued: {task_name} | {title} | genre={mood}")
     return public_id

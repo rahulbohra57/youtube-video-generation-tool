@@ -245,6 +245,11 @@ def _compose_create_context_from_article(article: dict, user_context: str = "") 
     return "\n".join(lines)
 
 
+def _extract_first_url(text: str) -> str:
+    m = re.search(r"(https?://[^\s]+)", text or "", flags=re.IGNORECASE)
+    return (m.group(1).strip(".,;!?)\"'") if m else "")
+
+
 def _is_digest_expired(batch: dict | None) -> bool:
     if not isinstance(batch, dict):
         return False
@@ -305,9 +310,11 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
             "*CREATE <topic>*\n"
             "  Generate a video for a custom topic. Tries YouTube upload first; sends to Telegram for manual posting on failure.\n\n"
             "*CREATE <topic> | <context>*\n"
-            "  Same as CREATE with extra context to guide the script.\n\n"
+            "  Same as CREATE with extra context. Include an article link here if asked.\n\n"
             "*FORCE\\_CREATE <topic>*\n"
             "  Like CREATE but bypasses the pipeline busy check and dedup. Use when CREATE is blocked.\n\n"
+            "*DISCARD*\n"
+            "  Discard a pending request when no valid source is available.\n\n"
             "*REDO <id>*\n"
             "  Re-upload an existing video to YouTube from GCS. Falls back to Telegram delivery on failure. If no video file exists, regenerates from scratch.\n\n"
             "*RESEND <id>*\n"
@@ -322,6 +329,16 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
             "  Show this list.\n\n"
             "_<id> is the 8-character video ID shown in each notification (e.g. 2E95C55E)._"
         ))
+        return
+
+    if text == "DISCARD":
+        state = firestore_service.get_pipeline_state(channel_id=channel_id) or {}
+        batch_id = state.get("active_batch_id")
+        if state.get("state") == "awaiting_reply" and batch_id:
+            _set_pipeline_and_batch_state(batch_id, "skipped", channel_id=channel_id)
+            _send_local(chat_id, "✅ Discarded. This request has been skipped.")
+        else:
+            _send_local(chat_id, "✅ Discarded. No pending request is currently queued from this step.")
         return
 
     stop_id = _command_arg("STOP", raw_text)
@@ -502,11 +519,22 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
         # For News CREATE/FORCE_CREATE, enforce a recent source article.
         if channel_id == "news":
             source_article = _best_recent_article(topic)
+            user_source_url = _extract_first_url(create_context)
+            if not source_article and user_source_url:
+                source_article = {
+                    "headline": topic,
+                    "url": user_source_url,
+                    "description": "",
+                    "published_at": "user_provided",
+                    "source": "user",
+                }
             if not source_article:
                 _send_local(
                     chat_id,
-                    "I could not find a recent (last 72h) source article for this topic, so I did not queue the video. "
-                    "Please refine the topic and try CREATE again.",
+                    "I could not find a recent (last 72h) source article for this topic, so I did not queue the video.\n"
+                    "Please reply with:\n"
+                    "`CREATE <same topic> | <article_link>`\n"
+                    "or send `DISCARD` to skip this video.",
                 )
                 return
             create_context = _compose_create_context_from_article(source_article, user_context=create_context)

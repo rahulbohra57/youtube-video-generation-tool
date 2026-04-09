@@ -404,7 +404,20 @@ Reply with ONLY the single mood name from the list above. Nothing else."""
         return "general"
 
 
-_STORY_MOODS = ["inspiring", "cheerful", "joyful", "happy", "sad", "adventurous"]
+_STORY_MOODS = [
+    "inspiring",
+    "comedy",
+    "heartfelt",
+    "crime",
+    "action",
+    "sci-fi",
+    "mythology",
+    "thriller",
+    "mystery",
+    "adventure",
+    "slice-of-life",
+    "historical",
+]
 
 _STORY_VISUAL_STYLE = (
     "Soft watercolor illustration, warm earthy palette, gentle diffused lighting, "
@@ -412,21 +425,29 @@ _STORY_VISUAL_STYLE = (
 )
 
 
-def generate_story_idea(recently_used_titles: list[str] | None = None) -> dict:
+def generate_story_idea(recently_used_titles: list[str] | None = None, preferred_mood: str = "") -> dict:
     """Generate a fresh Hindi moral story concept. Returns {title, mood, premise} all in Hindi."""
     avoid_block = ""
     if recently_used_titles:
         lines = "\n".join(f"  - {t}" for t in recently_used_titles[:20])
         avoid_block = f"\nइन कहानियों को दोबारा मत बनाओ (हाल में बनाई गई):\n{lines}\n"
 
+    preferred = (preferred_mood or "").strip().lower()
+    if preferred and preferred not in _STORY_MOODS:
+        preferred = ""
     mood_list = ", ".join(_STORY_MOODS)
+    preferred_rule = (
+        f"\n- mood MUST be exactly: {preferred}"
+        if preferred
+        else f"\n- mood इनमें से एक हो: {mood_list}"
+    )
     prompt = f"""तुम एक रचनात्मक Hindi कहानीकार हो जो YouTube Shorts के लिए छोटी नैतिक कहानियाँ लिखते हो।
 
 एक बिल्कुल नई, मौलिक कहानी का विचार दो। कहानी 45-55 सेकंड में पूरी होनी चाहिए।{avoid_block}
 
 नियम:
 - शीर्षक (title) 5-8 शब्दों का हो, जिज्ञासा जगाने वाला हो
-- mood इनमें से एक हो: {mood_list}
+{preferred_rule}
 - premise एक वाक्य में हो: कौन + क्या चुनौती + कौन सी सीख
 
 सिर्फ एक valid JSON object return करो, कोई markdown नहीं:
@@ -443,7 +464,7 @@ def generate_story_idea(recently_used_titles: list[str] | None = None) -> dict:
     import random as _random
     return {
         "title": "एक छोटी सी मेहनत, बड़ा बदलाव",
-        "mood": _random.choice(_STORY_MOODS),
+        "mood": preferred or _random.choice(_STORY_MOODS),
         "premise": "एक बच्चा छोटी सी कोशिश से बड़ा सपना पूरा करता है।",
     }
 

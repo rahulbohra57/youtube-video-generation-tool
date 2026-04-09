@@ -488,6 +488,21 @@ def test_handle_reply_none_skips_pipeline(mock_fs, mock_telegram):
     assert "See you" in mock_telegram.send_message.call_args[0][1]
 
 
+@patch("app.agents.whatsapp_agent.telegram_service")
+@patch("app.agents.whatsapp_agent.firestore_service")
+def test_handle_reply_discard_skips_pending_request(mock_fs, mock_telegram):
+    mock_fs.get_pipeline_state.return_value = {
+        "active_batch_id": "batch_001", "state": "awaiting_reply"
+    }
+
+    from app.agents import whatsapp_agent
+    whatsapp_agent.handle_reply("123456789", "DISCARD")
+
+    mock_fs.set_pipeline_and_batch_state.assert_called_with("batch_001", "skipped")
+    sent = mock_telegram.send_message.call_args[0][1]
+    assert "Discarded" in sent
+
+
 @patch("app.agents.whatsapp_agent._enqueue_generate")
 @patch("app.agents.whatsapp_agent.telegram_service")
 @patch("app.agents.whatsapp_agent.firestore_service")
@@ -620,6 +635,27 @@ def test_handle_reply_create_topic_requires_recent_source(mock_fs, mock_telegram
     mock_enqueue.assert_not_called()
     sent = mock_telegram.send_message.call_args[0][1]
     assert "could not find a recent" in sent
+
+
+@patch("app.agents.whatsapp_agent._enqueue_generate", return_value=True)
+@patch("app.agents.whatsapp_agent._best_recent_article", return_value=None)
+@patch("app.agents.whatsapp_agent.telegram_service")
+@patch("app.agents.whatsapp_agent.firestore_service")
+def test_handle_reply_create_accepts_user_article_link_when_recent_source_missing(
+    mock_fs, mock_telegram, _mock_source, mock_enqueue
+):
+    mock_fs.get_pipeline_state.return_value = {"state": "awaiting_reply", "active_batch_id": "batch_001"}
+    mock_fs.acquire_idempotency_key.return_value = (True, {"status": "new"})
+
+    from app.agents import whatsapp_agent
+    whatsapp_agent.handle_reply(
+        "123456789",
+        "CREATE Why is Artemis going to moon? | https://example.com/source-article",
+    )
+
+    mock_enqueue.assert_called_once()
+    details = mock_enqueue.call_args[1]["details"]
+    assert "Source URL: https://example.com/source-article" in details
 
 
 @patch("app.agents.whatsapp_agent._enqueue_generate", return_value=True)
