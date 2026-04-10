@@ -2,8 +2,8 @@
 
 > **Assumptions**
 > - Exchange rate: **$1 USD ≈ ₹85**
-> - Throughput: **12 videos/day** (1 per domain × 2 cycles, every 2 hours)
-> - Scheduler runs every 2 hours → 12 research cycles/day
+> - Throughput: **12 videos/day** (combined automated + manual runs)
+> - News scheduler runs every 4 hours → 6 research cycles/day
 > - Each video: 3 scenes, 1 thumbnail → 4 Imagen calls; 6–7 Gemini calls; ~2,400 TTS characters
 > - GCP free trial credits: **₹27,287**, expires **June 18 2026** (~74 days remaining)
 > - All prices are **public list prices** as of April 2026; GCP credits apply to all GCP services
@@ -186,8 +186,8 @@ Every video runs through this call chain:
 | Metric | Value |
 |---|---|
 | Free tier | **100 requests/day** |
-| App usage | 5 calls/research cycle × 12 cycles/day = **60 calls/day** |
-| Free tier headroom | 40 calls/day (40% buffer) |
+| App usage | 5 calls/research cycle × 6 cycles/day = **30 calls/day** |
+| Free tier headroom | 70 calls/day (70% buffer) |
 | Circuit-breaker | Fires at 80 calls/day (code-enforced guard) |
 | Paid Basic plan | $9.99/month → 1,000 req/day |
 | Paid Advanced plan | $99/month → unlimited |
@@ -247,7 +247,7 @@ Every video runs through this call chain:
 | Metric | Value |
 |---|---|
 | Free jobs | **3 jobs** |
-| App has | 4 jobs (research/2h, retry/4h, analytics/10pm IST daily, digest/8am IST daily) |
+| App has | multiple jobs including news/research at `12am, 4am, 8am, 12pm, 4pm, 8pm IST` and stories at `7am, 11am, 2pm, 6pm IST` |
 | Paid jobs | $0.10/job/month |
 | Paid jobs in use | 1 |
 | **Monthly cost** | **$0.10 (≈ ₹9)** |

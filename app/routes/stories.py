@@ -1,7 +1,7 @@
 # app/routes/stories.py
 #
 # Cloud Scheduler endpoints for the Short Tales stories channel.
-# /stories/run        → Triggered every 6h — generates a new Hindi story
+# /stories/run        → Triggered at 7am, 11am, 2pm, 6pm IST — generates a new Hindi story
 # /stories/daily-digest → Triggered at 8:30am IST — sends stats to stories Telegram
 # /generate/stories-task → Cloud Tasks delivery endpoint for story video generation
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 @router.post("/stories/run")
 def stories_run(request: Request):
-    """Called by Cloud Scheduler every 6h. Generates a new Hindi moral story."""
+    """Called by Cloud Scheduler at 7am, 11am, 2pm, 6pm IST. Generates a new Hindi moral story."""
     secret = request.headers.get("X-Scheduler-Secret", "")
     if secret != SCHEDULER_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")

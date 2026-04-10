@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 @router.post("/research/run")
 def run_research(request: Request):
-    """Called by Cloud Scheduler every 4h."""
+    """Called by Cloud Scheduler every 4h (12am, 4am, 8am, 12pm, 4pm, 8pm IST)."""
     secret = request.headers.get("X-Scheduler-Secret", "")
     if secret != SCHEDULER_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -28,7 +28,7 @@ def run_research(request: Request):
 
 @router.post("/research/retry-failed")
 def retry_failed(request: Request):
-    """Called by Cloud Scheduler every 4h to retry the latest failed auto-pipeline."""
+    """Called by Cloud Scheduler every 4h (IST) to retry the latest failed auto-pipeline."""
     secret = request.headers.get("X-Scheduler-Secret", "")
     if secret != SCHEDULER_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")

@@ -7,6 +7,7 @@ import re
 import hashlib
 import logging
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from app.services import firestore_service
 from app.services.llm_service import generate_story_idea
@@ -58,9 +59,21 @@ def _recently_used_titles(limit: int = 20) -> list[str]:
 
 
 def _select_story_genre() -> str:
-    # Deterministic 6-hour slot rotation so genres stay diverse over time.
-    slot = int(datetime.now(timezone.utc).timestamp() // (6 * 3600))
-    return _STORY_GENRES[slot % len(_STORY_GENRES)]
+    # Deterministic IST schedule-slot rotation so genres stay diverse over time.
+    # Stories run at 07:00, 11:00, 14:00, 18:00 IST.
+    now_ist = datetime.now(ZoneInfo("Asia/Kolkata"))
+    slot_hours = [7, 11, 14, 18]
+    slot_index = None
+    for idx, hour in enumerate(slot_hours):
+        if now_ist.hour > hour or (now_ist.hour == hour and now_ist.minute >= 0):
+            slot_index = idx
+    if slot_index is None:
+        day_ordinal = now_ist.date().toordinal() - 1
+        slot_index = len(slot_hours) - 1
+    else:
+        day_ordinal = now_ist.date().toordinal()
+    schedule_slot = (day_ordinal * len(slot_hours)) + slot_index
+    return _STORY_GENRES[schedule_slot % len(_STORY_GENRES)]
 
 
 def run() -> str | None:
@@ -96,7 +109,7 @@ def run() -> str | None:
         return None
 
     title = (idea.get("title") or "").strip()
-    # Enforce scheduled genre rotation to diversify experiments over 2 weeks.
+    # Enforce scheduled genre rotation to diversify experiments across scheduler slots.
     mood = target_genre
     premise = (idea.get("premise") or "").strip()
 

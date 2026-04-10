@@ -26,8 +26,8 @@ independent YouTube Shorts channels:
 
 | Channel | Language | YouTube Name | Telegram Bot | Scheduler |
 |---|---|---|---|---|
-| **News** (`channel_id="news"`) | English | Kurrent Affairs | `TELEGRAM_BOT_TOKEN` | Every 2h |
-| **Stories** (`channel_id="stories"`) | Hindi | Short Tales | `STORIES_BOT_TOKEN` | Every 6h |
+| **News** (`channel_id="news"`) | English | Kurrent Affairs | `TELEGRAM_BOT_TOKEN` | Every 4h (`12am, 4am, 8am, 12pm, 4pm, 8pm IST`) |
+| **Stories** (`channel_id="stories"`) | Hindi | Short Tales | `STORIES_BOT_TOKEN` | `7am, 11am, 2pm, 6pm IST` |
 
 Each channel has its own:
 - Telegram bot + chat ID
@@ -54,7 +54,7 @@ and the same Imagen / TTS / LLM services.
 
 ## News Channel Pipeline (Kurrent Affairs)
 
-### Step 1 — Research (`/research/run`, every 2h)
+### Step 1 — Research (`/research/run`, every 4h: 12am, 4am, 8am, 12pm, 4pm, 8pm IST)
 
 Triggered by Cloud Scheduler → `lead_researcher.run()`:
 
@@ -104,14 +104,14 @@ All bot commands are handled by `whatsapp_agent.handle_reply()`:
 
 ## Stories Channel Pipeline (Short Tales)
 
-### Step 1 — Story Idea Generation (`/stories/run`, every 6h)
+### Step 1 — Story Idea Generation (`/stories/run`, 7am, 11am, 2pm, 6pm IST)
 
 Triggered by Cloud Scheduler → `story_researcher.run()`:
 
 1. **Check pipeline state** — skip if already `processing`.
-2. **Genre rotation**: deterministic 6-hour slot rotation across 12 genres (inspiring, comedy,
+2. **Genre rotation**: deterministic scheduler-slot rotation across 12 genres (inspiring, comedy,
    heartfelt, crime, action, sci-fi, mythology, thriller, mystery, adventure, slice-of-life,
-   historical). Formula: `slot = timestamp // (6 * 3600)`, `genre = genres[slot % 12]`.
+   historical), aligned to IST run slots (`7am, 11am, 2pm, 6pm`).
 3. **Generate story idea** via LLM: title + premise in Hindi for the selected genre.
    Recent 30-day titles are passed to the LLM to avoid repeating topics.
 4. **Dedup** against Firestore `suggested_headlines` (30-day window, `channel_id="stories"`).
@@ -302,17 +302,17 @@ Three layers prevent duplicate videos:
 
 | Job ID | Schedule (IST) | Endpoint | Notes |
 |---|---|---|---|
-| `autoframe-lead-researcher` | `0 */2 * * *` (every 2h) | `/research/run` | News pipeline trigger |
+| `autoframe-lead-researcher` | `0 */4 * * *` (12am, 4am, 8am, 12pm, 4pm, 8pm) | `/research/run` | News pipeline trigger |
 | `autoframe-retry-failed` | `0 */4 * * *` (every 4h) | `/research/retry-failed` | Retry last failed news job |
 | `autoframe-daily-digest` | `0 8 * * *` (8am) | `/research/daily-digest` | News channel daily report |
 | `autoframe-update-analytics` | `0 22 * * *` (10pm) | `/research/update-analytics` | **Paid — $0.10/month** |
-| `autoframe-stories-run` | `0 */6 * * *` (every 6h) | `/stories/run` | Stories pipeline trigger |
+| `autoframe-stories-run` | `0 7,11,14,18 * * *` (7am, 11am, 2pm, 6pm) | `/stories/run` | Stories pipeline trigger |
 | `autoframe-stories-digest` | `30 8 * * *` (8:30am) | `/stories/daily-digest` | Short Tales daily report |
 
 **All scheduler endpoints require the `X-Scheduler-Secret` header.**
 
-**Never change the news research schedule to less than 2 hours** — GNews free tier is 100 calls/day;
-12 cycles/day × 5 domains = 60 calls. 1h schedule → 120 calls → quota exhaustion.
+**News cadence quota check:** GNews free tier is 100 calls/day. Current schedule is 6 cycles/day ×
+5 domains = 30 calls/day. A 2h schedule is 60/day (safe), but 1h would be 120/day (quota exhaustion).
 
 ---
 
