@@ -54,17 +54,21 @@ def _tighten_if_too_long(scenes: list[dict], max_seconds: int) -> list[dict]:
     return out
 
 
-def _expand_if_too_short(scenes: list[dict], min_seconds: int) -> list[dict]:
+_EXPAND_SUFFIX = {
+    "en": " This matters because it affects real decisions people make every day.",
+    "hi": " यह इसलिए महत्वपूर्ण है क्योंकि यह हमारे रोज़मर्रा के जीवन को प्रभावित करता है।",
+}
+
+
+def _expand_if_too_short(scenes: list[dict], min_seconds: int, language: str = "en") -> list[dict]:
     cur = _estimate_seconds(scenes)
     if cur >= min_seconds or not scenes:
         return scenes
+    suffix = _EXPAND_SUFFIX.get(language, _EXPAND_SUFFIX["en"])
     out = list(scenes)
     out[-1] = {
         **out[-1],
-        "narration": (
-            str(out[-1].get("narration", "")).strip()
-            + " This matters because it affects real decisions people make every day."
-        ).strip(),
+        "narration": (str(out[-1].get("narration", "")).strip() + suffix).strip(),
     }
     return out
 
@@ -85,7 +89,7 @@ def review_package(
         max_seconds=max_seconds,
     )
     reviewed_scenes = _tighten_if_too_long(reviewed_scenes, max_seconds=max_seconds)
-    reviewed_scenes = _expand_if_too_short(reviewed_scenes, min_seconds=min_seconds)
+    reviewed_scenes = _expand_if_too_short(reviewed_scenes, min_seconds=min_seconds, language=language)
 
     title_caption = review_title_and_caption_with_senior_reviewer(
         topic=topic,

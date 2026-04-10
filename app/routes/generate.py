@@ -314,6 +314,7 @@ def generate_task(payload: dict):
     virality_score = float(payload.get("virality_score", 0) or 0)
     idempotency_scope = payload.get("idempotency_scope")
     idempotency_key = payload.get("idempotency_key")
+    channel_id = payload.get("channel_id", "news")
     if not headline or not code:
         raise HTTPException(status_code=400, detail="headline and code required")
     try:
@@ -330,6 +331,7 @@ def generate_task(payload: dict):
             virality_score=virality_score,
             idempotency_scope=idempotency_scope,
             idempotency_key=idempotency_key,
+            channel_id=channel_id,
         )
     except Exception as e:
         # Log but return 200 — returning 500 would cause Cloud Tasks to retry,
@@ -345,9 +347,9 @@ def generate_task(payload: dict):
         )
         if batch_id:
             try:
-                current = firestore_service.get_pipeline_state() or {}
+                current = firestore_service.get_pipeline_state(channel_id=channel_id) or {}
                 if current.get("active_batch_id") == batch_id:
-                    firestore_service.set_pipeline_and_batch_state(batch_id, "failed")
+                    firestore_service.set_pipeline_and_batch_state(batch_id, "failed", channel_id=channel_id)
             except Exception:
                 pass
         logger.exception(f"generate_task failed for code={code}: {e}")

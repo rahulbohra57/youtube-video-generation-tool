@@ -509,6 +509,15 @@ def run(
                 {"status": "failed", "job_id": effective_job_id},
             )
         _set_batch_terminal_state(batch_id, "failed", channel_id=channel_id)
+        try:
+            send_message(
+                _chat_id,
+                f"❌ Pipeline failed for *{code}* (ID: `{public_id or effective_job_id}`) — "
+                f"{type(e).__name__}: {str(e)[:300]}",
+                channel_id=channel_id,
+            )
+        except Exception:
+            pass
         raise
     finally:
         firestore_service.release_video_lock(lock_owner)

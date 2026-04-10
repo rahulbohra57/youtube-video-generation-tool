@@ -142,7 +142,7 @@ This is the core pipeline shared by both channels. Every video goes through thes
 1. **Idempotency guard**: If `job_id` already exists in Firestore with status
    `completed`, `delivered_manual`, or `cancelled` → return immediately (handles Cloud Tasks
    duplicate deliveries).
-2. **Video lock**: Distributed lock in Firestore `video_lock`. `force_run=True` bypasses via
+2. **Video lock**: Distributed lock in Firestore `locks/video_generation`. `force_run=True` bypasses via
    `acquire_video_lock(force=True)`. Without force, if lock is held → `rejected_busy`.
 3. **Pipeline state check**: If pipeline is `processing` for a different batch → `stale_rejected`.
    Returning 200 prevents Cloud Tasks retry.
@@ -265,7 +265,7 @@ For each scene:
 | `quota_events` | auto | GNews + TTS + Imagen quota tracking |
 | `social_metrics` | `"youtube"` / `"youtube_stories"` | Cached YouTube channel stats |
 | `idempotency_keys` | `scope:key` | CREATE command dedup (TTL: 20min) |
-| `video_lock` | `"lock"` | Distributed generation lock |
+| `locks` | `"video_generation"` | Distributed generation lock |
 | `domain_posts` | `"YYYY-MM-DD"` | Domains posted today (resets daily) |
 | `suggested_headlines` | `sha1(headline)` | 14-day news / 30-day story dedup |
 
@@ -383,13 +383,13 @@ Two mechanisms enforce one video at a time **per channel**:
 
 1. **Firestore `pipeline_state`** — keyed by `channel_id` (`"news"` / `"stories"`). Tracks
    active batch and state: `processing` / `completed` / `failed` / `skipped`.
-2. **Firestore `video_lock`** — single global distributed lock (shared across both channels).
+2. **Firestore `locks/video_generation`** — single global distributed lock (shared across both channels).
    Acquired in `generator_agent.run()`, released in the `finally` block.
 
 **If the pipeline gets stuck in `processing`:**
 - Set `pipeline_state` doc's `state` field to `"failed"` in Firestore console, OR
 - Trigger `/research/retry-failed` — it checks for stale state automatically, OR
-- Delete the `video_lock` document to release the lock.
+- Delete the `locks/video_generation` document to release the lock.
 
 **Never manually delete** `pipeline_state`, `news_batches`, or `jobs` documents while a video
 is being generated — it orphans the Cloud Tasks task and causes infinite retries.
@@ -537,7 +537,7 @@ Env vars set via `update` persist across `--source .` deploys.
 | `quota_events` | GNews + TTS + Imagen quota tracking | Used by circuit-breakers and daily digest |
 | `social_metrics` | Cached YouTube channel stats (both channels) | Safe to delete — re-fetched on next STATS |
 | `idempotency_keys` | Dedup for CREATE command | Safe to delete — allows re-submission |
-| `video_lock` | Distributed generation lock | If stuck: delete the document to unblock |
+| `locks` | Distributed generation lock (`video_generation` doc) | If stuck: delete `locks/video_generation` to unblock |
 | `domain_posts` | Tracks which domains posted today | Resets daily; safe to delete if domain coverage is wrong |
 | `suggested_headlines` | 14-day news / 30-day story dedup | Safe to delete — just enables re-use of same topic |
 
@@ -582,7 +582,7 @@ Run these after every deploy:
 | Hindi story has English title | LLM used narration lang instruction for title too | `_TITLE_CAPTION_LANG_INSTRUCTIONS` provides explicit title language rule |
 | 15-second stub video uploaded | 1/3 scenes succeeded but pipeline didn't abort | `MIN_CLIPS = 2` guard prevents upload below threshold |
 | Videos keep failing with quota errors | Imagen QPM exhausted | Inner 30/60/120s retry + outer 120s delay. Check quota in Firestore `quota_events`. |
-| Pipeline stuck in `processing` | Cloud Run OOM/timeout mid-generation | Set `pipeline_state.state = "failed"` in Firestore, or delete `video_lock` doc |
+| Pipeline stuck in `processing` | Cloud Run OOM/timeout mid-generation | Set `pipeline_state.state = "failed"` in Firestore, or delete `locks/video_generation` doc |
 | REDO uploads with wrong title | Job stored raw topic, not reviewed title | `reviewed_title` persisted to Firestore immediately after script review |
 | Webhook returns 403 | Service not public | Run: `gcloud run services add-iam-policy-binding autoframe --member="allUsers" --role="roles/run.invoker" ...` |
 | CREATE rejects valid topic | No source article found in last 72h | Provide article URL: `CREATE <topic> \| <url>` |
