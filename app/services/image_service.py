@@ -15,14 +15,25 @@ ensure_dir(TEMP_DIR)
 
 model = ImageGenerationModel.from_pretrained(MODEL_NAME)
 
-# Exponential backoff delays (seconds) for 429 / quota-exhausted errors.
-# Short retries are useless against per-minute quotas; wait long enough for
-# the rate-limit window to reset.
-_RETRY_DELAYS = [30, 60, 120]
+# Retry delays (seconds) for Imagen quota / rate-limit errors (429).
+# Quota window is 1 minute, so each wait must be long enough for the bucket
+# to refill before the next attempt.
+_QUOTA_RETRY_DELAYS = [30, 60, 120]
+
+# Prefix added to exceptions that the caller should NOT retry
+# (same prompt → same rejection, so outer retries are wasted).
+SAFETY_FILTER_ERROR_PREFIX = "imagen_safety_filter:"
 
 
-def generate_image(prompt: str, idx: int, aspect_ratio: str = "16:9"):
+def generate_image(prompt: str, idx: int, aspect_ratio: str = "16:9") -> str:
+    """Generate one image for a scene. Returns the local file path.
 
+    Retry behaviour:
+    - Quota / rate-limit (429): up to 3 retries with increasing waits (30s / 60s / 120s).
+    - Safety-filter rejection (empty response): raises immediately with
+      SAFETY_FILTER_ERROR_PREFIX so the caller can skip retrying.
+    - Other errors: raises immediately (auth, bad prompt shape, etc.).
+    """
     GLOBAL_STYLE = """
     animated explainer video, flat design,
     consistent color palette, modern UI style,
@@ -47,7 +58,9 @@ def generate_image(prompt: str, idx: int, aspect_ratio: str = "16:9"):
     {style_hint}
     """
 
-    for attempt, wait in enumerate(_RETRY_DELAYS, start=1):
+    last_exc: Exception | None = None
+
+    for attempt, wait in enumerate(_QUOTA_RETRY_DELAYS, start=1):
         try:
             images = model.generate_images(
                 prompt=enhanced_prompt,
@@ -60,8 +73,17 @@ def generate_image(prompt: str, idx: int, aspect_ratio: str = "16:9"):
                 ),
             )
 
+            if not images:
+                # Safety / content-policy filter: Imagen accepted the request but
+                # returned zero images. Retrying the same prompt will produce the
+                # same result — raise with a detectable prefix so the caller skips
+                # outer retries for this scene.
+                raise Exception(
+                    f"{SAFETY_FILTER_ERROR_PREFIX} Imagen returned 0 images for scene {idx} "
+                    "(prompt blocked by safety or content policy)"
+                )
+
             path = f"{TEMP_DIR}/scene_{idx}.png"
-            # Use the public save() API instead of the private _image_bytes attr.
             images[0].save(location=path)
             return path
 
@@ -69,13 +91,18 @@ def generate_image(prompt: str, idx: int, aspect_ratio: str = "16:9"):
             err = str(e)
             is_rate_limit = "429" in err or "quota" in err.lower() or "resource exhausted" in err.lower()
 
+            if err.startswith(SAFETY_FILTER_ERROR_PREFIX):
+                # Never retry safety-filter rejections — the same prompt = same block.
+                raise
+
             if is_rate_limit:
                 print(f"Retry {attempt} failed (rate limit – waiting {wait}s): {e}")
+                last_exc = e
                 time.sleep(wait)
             else:
-                # Non-rate-limit errors (bad prompt, auth, etc.) fail fast
-                # after a short pause – no point in a long wait.
-                print(f"Retry {attempt} failed: {e}")
-                time.sleep(5)
+                # Unexpected non-quota error — raise immediately.
+                raise
 
-    raise Exception(f"Image generation failed after {len(_RETRY_DELAYS)} retries using {MODEL_NAME}")
+    raise Exception(
+        f"Image generation failed after {len(_QUOTA_RETRY_DELAYS)} quota retries using {MODEL_NAME}: {last_exc}"
+    )

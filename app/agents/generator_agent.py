@@ -27,8 +27,18 @@ logger = logging.getLogger(__name__)
 
 # Maximum scenes to generate — keeps us under free-tier Imagen quota (5 images/min)
 MAX_SCENES = 3
+
+# How many times the outer wrapper retries a fully-exhausted scene.
+# image_service already does 3 internal quota retries (30s/60s/120s).
+# Each outer retry gives Imagen another full backoff cycle after the inner
+# one is exhausted, so 2 outer retries = up to ~9 total quota attempts.
 SCENE_MAX_RETRIES = 3
-BACKOFF_BASE_SECONDS = 2
+
+# Delay between outer retries when Imagen quota is exhausted.
+# Must be long enough for the per-minute quota window to refill.
+QUOTA_OUTER_RETRY_DELAY = 120  # seconds
+
+BACKOFF_BASE_SECONDS = 2  # for non-quota errors only
 
 
 def _is_quota_error(exc: Exception) -> bool:
@@ -36,17 +46,39 @@ def _is_quota_error(exc: Exception) -> bool:
     return ("quota" in text) or ("resource_exhausted" in text) or ("429" in text)
 
 
+def _is_safety_filter_error(exc: Exception) -> bool:
+    from app.services.image_service import SAFETY_FILTER_ERROR_PREFIX
+    return str(exc).startswith(SAFETY_FILTER_ERROR_PREFIX)
+
+
 def _run_with_backoff(fn: Callable[[], Any], max_retries: int = SCENE_MAX_RETRIES):
+    """Call fn() up to max_retries times with smart backoff.
+
+    - Quota errors: wait QUOTA_OUTER_RETRY_DELAY seconds before the next attempt
+      so the Imagen per-minute bucket has time to refill.
+    - Safety-filter errors: raise immediately — retrying the same prompt is pointless.
+    - Other errors: short exponential backoff (2s / 4s / ...).
+    """
     last_exc = None
     for attempt in range(1, max_retries + 1):
         try:
             return fn(), (attempt - 1)
         except Exception as exc:
             last_exc = exc
+            if _is_safety_filter_error(exc):
+                # Same prompt will keep being rejected — don't waste retries.
+                raise
             if attempt >= max_retries:
                 break
-            delay = BACKOFF_BASE_SECONDS * (2 ** (attempt - 1))
-            time.sleep(delay)
+            if _is_quota_error(exc):
+                logger.warning(
+                    f"Quota error on attempt {attempt}/{max_retries} — "
+                    f"waiting {QUOTA_OUTER_RETRY_DELAY}s before retry"
+                )
+                time.sleep(QUOTA_OUTER_RETRY_DELAY)
+            else:
+                delay = BACKOFF_BASE_SECONDS * (2 ** (attempt - 1))
+                time.sleep(delay)
     raise last_exc
 
 
@@ -321,16 +353,19 @@ def run(
                     "failed",
                     error=str(e),
                 )
-                if _is_quota_error(e):
+                if _is_safety_filter_error(e):
+                    firestore_service.record_quota_event("image_safety_filter", str(e))
+                elif _is_quota_error(e):
                     firestore_service.record_quota_event("image_quota_error", str(e))
                 else:
                     firestore_service.record_quota_event("image_error", str(e))
-                # If ALL scenes have failed due to quota/image errors, notify and abort early
+                # If ALL scenes have failed, notify and abort early
                 if image_failures >= MAX_SCENES:
                     send_message(
                         _chat_id,
-                        f"❌ Image generation failed for *{code}* after 3 attempts "
-                        f"(Imagen quota may be exhausted). Please try again later.",
+                        f"❌ Image generation failed for *{code}* — all scenes failed "
+                        f"(Imagen quota exhausted or prompts blocked by safety filter). "
+                        f"The video has been dropped. Please try again later.",
                         channel_id=channel_id,
                     )
                     firestore_service.create_or_update_job(
@@ -351,18 +386,24 @@ def run(
                     _set_batch_terminal_state(batch_id, "failed", channel_id=channel_id)
                     return
 
-        if not video_clips:
+        # Require at least 2 out of MAX_SCENES clips. A single successful scene
+        # produces a ~15s stub that looks broken on YouTube. Treat it as a failure
+        # so Cloud Tasks does NOT retry a partial video upload.
+        MIN_CLIPS = max(1, MAX_SCENES - 1)
+        if len(video_clips) < MIN_CLIPS:
+            clip_count = len(video_clips)
             send_message(
                 _chat_id,
-                f"❌ Video generation failed for *{code}* — no scenes could be generated. "
-                f"Please try again later.",
+                f"❌ Video generation failed for *{code}* — only {clip_count}/{MAX_SCENES} scenes "
+                f"could be generated (Imagen quota or safety filter). Please try again later.",
                 channel_id=channel_id,
             )
             firestore_service.create_or_update_job(
                 effective_job_id,
                 {
                     "status": "failed",
-                    "error_type": "no_video_clips",
+                    "error_type": "insufficient_video_clips",
+                    "error_message": f"{clip_count}/{MAX_SCENES} scenes generated",
                     "finished_at": datetime.now(timezone.utc).isoformat(),
                 },
             )
