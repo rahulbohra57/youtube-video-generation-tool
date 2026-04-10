@@ -85,6 +85,19 @@ def run(
     channel_id: str = "news",
     script_type: str = "news",
 ):
+    # ── Idempotency guard ─────────────────────────────────────────────────
+    # Prevents Cloud Tasks duplicate/retry deliveries from uploading twice.
+    # A job in a terminal state means this task already completed successfully.
+    if job_id:
+        _existing = firestore_service.get_job(job_id) or {}
+        if _existing.get("status") in ("completed", "delivered_manual", "cancelled"):
+            logger.info(
+                f"Job {job_id} already terminal ({_existing.get('status')}) — "
+                "skipping duplicate task delivery"
+            )
+            return
+    # ──────────────────────────────────────────────────────────────────────
+
     ensure_dir(TEMP_DIR)
     ensure_dir(OUTPUT_DIR)
     cleanup_files_older_than(TEMP_DIR, TMP_RETENTION_DAYS)
@@ -222,6 +235,9 @@ def run(
         scenes = reviewed.get("scenes") or scenes
         reviewed_title = reviewed.get("title") or headline
         reviewed_caption = reviewed.get("caption") or ""
+
+        # Persist the reviewed title so REDO uses the same title as the original upload
+        firestore_service.create_or_update_job(effective_job_id, {"reviewed_title": reviewed_title})
 
         # Cap at MAX_SCENES to stay within free-tier Imagen quota
         scenes = scenes[:MAX_SCENES]

@@ -692,13 +692,19 @@ Input scenes:
     return scenes
 
 
+_TITLE_CAPTION_LANG_INSTRUCTIONS = {
+    "en": "Write the title and caption in English.",
+    "hi": "Write the title and caption in Hindi (Devanagari script). Do NOT use English for the title or caption body.",
+}
+
+
 def review_title_and_caption_with_senior_reviewer(
     topic: str,
     scenes: list[dict],
     language: str = "en",
     genre: str = "",
 ) -> dict:
-    lang_instruction = _LANG_INSTRUCTIONS.get(language, _LANG_INSTRUCTIONS["en"])
+    title_caption_lang = _TITLE_CAPTION_LANG_INSTRUCTIONS.get(language, _TITLE_CAPTION_LANG_INSTRUCTIONS["en"])
     genre_hint = f" Focus hashtags around the {genre} domain." if genre else ""
     prompt = f"""
 You are a senior script reviewer.
@@ -715,9 +721,9 @@ Rules:
 - Do not exaggerate or promise things not in script.
 - Always include #Shorts and #YouTubeShorts in the hashtags.
 - Return ONLY a valid JSON object with keys: title, caption, hashtags (array of strings).
+- Language rule: {title_caption_lang}
 
 Topic: {topic}
-Language: {lang_instruction}
 Script scenes:
 {_scene_list_to_json_prompt(scenes)}
 """

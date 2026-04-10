@@ -444,7 +444,7 @@ def handle_reply(chat_id: str, body: str, channel_id: str = "news"):
         if not job_id or not job:
             _send_local(chat_id, f"No job found for ID `{redo_id}`.")
             return
-        title = job.get("topic") or job.get("headline", "")
+        title = job.get("reviewed_title") or job.get("topic") or job.get("headline", "")
         if not title:
             _send_local(chat_id, f"Cannot REDO `{redo_id}` — no topic found.")
             return
@@ -735,6 +735,7 @@ def _enqueue_generate(
             "parent": queue_path,
             "task": {
                 "name": f"{queue_path}/tasks/{task_name}",
+                "dispatch_deadline": {"seconds": 1800},  # 30 min — prevents retry before task completes
                 "http_request": {
                     "http_method": tasks_v2.HttpMethod.POST,
                     "url": task_url,
@@ -744,8 +745,6 @@ def _enqueue_generate(
                         "service_account_email": "353645494126-compute@developer.gserviceaccount.com",
                     },
                 },
-                # retry_config is queue-level only — not settable per-task.
-                # Dedup is handled via deterministic task name + single-video guard.
             },
         })
         firestore_service.create_or_update_job(

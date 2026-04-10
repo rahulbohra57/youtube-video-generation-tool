@@ -166,6 +166,7 @@ def run() -> str | None:
             "parent": queue_path,
             "task": {
                 "name": f"{queue_path}/tasks/{task_name}",
+                "dispatch_deadline": {"seconds": 1800},  # 30 min — prevents retry before task completes
                 "http_request": {
                     "http_method": tasks_v2.HttpMethod.POST,
                     "url": f"{CLOUD_RUN_URL}/generate/stories-task",
