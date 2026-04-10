@@ -734,7 +734,10 @@ def test_handle_reply_force_create_bypasses_duplicate_status(mock_fs, mock_teleg
 @patch(
     "app.agents.generator_agent.review_package",
     return_value={
-        "scenes": [{"scene": 1, "narration": "Big AI news story.", "visual": "AI illustration"}],
+        "scenes": [
+            {"scene": 1, "narration": "Big AI news story.", "visual": "AI illustration"},
+            {"scene": 2, "narration": "Second scene narration.", "visual": "Tech illustration"},
+        ],
         "title": "Big AI news story",
         "caption": "Great caption #ai",
         "estimated_seconds": 22.0,
@@ -755,7 +758,10 @@ def test_generator_agent_run_calls_social_media_agent(
     mock_image, mock_video, mock_review, mock_social_post
 ):
     mock_script.return_value = "[]"
-    mock_extract.return_value = [{"scene": 1, "narration": "draft", "visual": "draft"}]
+    mock_extract.return_value = [
+        {"scene": 1, "narration": "draft", "visual": "draft"},
+        {"scene": 2, "narration": "draft2", "visual": "draft2"},
+    ]
 
     from app.agents import generator_agent
     generator_agent.run("Big AI news story", "TECH01")
