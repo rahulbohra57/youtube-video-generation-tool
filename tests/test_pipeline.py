@@ -1,6 +1,7 @@
 # tests/test_pipeline.py
 
 from unittest.mock import MagicMock, patch
+from datetime import datetime, timedelta, timezone
 import pytest
 
 
@@ -356,7 +357,9 @@ def test_lead_researcher_falls_back_to_new_domain_when_primary_exhausted(
         "headline": "Health breakthrough announced",
         "url": "https://example.com/health",
         "description": "Scientists discover cure",
-        "published_at": "2026-04-09T10:00:00Z",
+        "published_at": (
+            datetime.now(timezone.utc) - timedelta(hours=1)
+        ).isoformat(timespec="seconds").replace("+00:00", "Z"),
         "source": "HealthNews",
     }
 
