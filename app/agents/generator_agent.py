@@ -257,6 +257,13 @@ def run(
                 raw_script = generate_script_with_search(headline, language="en", aspect_ratio="9:16", context=details or "")
             except Exception as _search_exc:
                 logger.warning("Search-grounded script generation failed (%s), falling back to standard", _search_exc)
+                send_message(
+                    _chat_id,
+                    f"⚠️ Search-grounded script failed for `{public_id or effective_job_id}` — "
+                    f"falling back to standard generation (content may be less accurate).\n"
+                    f"Reason: {str(_search_exc)[:200]}",
+                    channel_id=channel_id,
+                )
                 raw_script = generate_script(headline, language="en", aspect_ratio="9:16", context=details or "")
         try:
             scenes = extract_json(raw_script)
@@ -447,6 +454,13 @@ def run(
             firestore_service.create_or_update_job(effective_job_id, {"gcs_video_url": gcs_url})
         except Exception as gcs_err:
             logger.warning(f"GCS upload failed, video at local path only: {gcs_err}")
+            send_message(
+                _chat_id,
+                f"⚠️ GCS upload failed for `{public_id or effective_job_id}` — "
+                f"REDO and RESEND will *not* work for this video.\n"
+                f"Error: {str(gcs_err)[:200]}",
+                channel_id=channel_id,
+            )
 
         caption = reviewed_caption
 

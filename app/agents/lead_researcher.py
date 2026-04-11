@@ -431,6 +431,14 @@ def run() -> str | None:
 
     state = firestore_service.get_pipeline_state() or {}
     if state.get("state") == "processing":
+        slot_domain = _get_slot_domain(firestore_service.get_domain_schedule())
+        send_message(
+            TELEGRAM_CHAT_ID,
+            f"⏭️ Scheduler slot skipped — pipeline is busy processing batch "
+            f"`{state.get('active_batch_id', '?')}`. "
+            f"Assigned domain for this slot: *{slot_domain}*.",
+            channel_id="news",
+        )
         return None
 
     lookback_hours = 24
@@ -540,6 +548,12 @@ def run() -> str | None:
                 break
 
     if not selected_item:
+        send_message(
+            TELEGRAM_CHAT_ID,
+            f"⚠️ Slot skipped — no usable articles found for assigned domain *{assigned_domain}* "
+            f"or any fallback domain. All sources exhausted for this scheduler run.",
+            channel_id="news",
+        )
         return None
 
     batch_id = f"auto_{datetime.now(timezone.utc):%Y%m%d_%H%M%S}"

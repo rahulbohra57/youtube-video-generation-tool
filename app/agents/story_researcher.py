@@ -92,6 +92,12 @@ def run() -> str | None:
     state = firestore_service.get_pipeline_state(channel_id="stories")
     if state.get("state") == "processing":
         logger.info("Stories pipeline busy — skipping this run")
+        send_message(
+            STORIES_CHAT_ID,
+            f"⏭️ Stories scheduler slot skipped — pipeline is busy processing batch "
+            f"`{state.get('active_batch_id', '?')}`.",
+            channel_id="stories",
+        )
         return None
 
     # Generate a new story idea (title + mood + premise, all in Hindi)
@@ -115,10 +121,20 @@ def run() -> str | None:
 
     if not title:
         logger.warning("Story idea returned empty title — skipping")
+        send_message(
+            STORIES_CHAT_ID,
+            f"⚠️ Story slot skipped — LLM returned an empty title for genre *{target_genre}*. Will retry next slot.",
+            channel_id="stories",
+        )
         return None
 
     if _is_story_already_used(title):
         logger.info(f"Story already used recently: {title}")
+        send_message(
+            STORIES_CHAT_ID,
+            f"⏭️ Story slot skipped — recently used title detected: _{title}_. A new idea will be generated next slot.",
+            channel_id="stories",
+        )
         return None
 
     # Build a deterministic batch + task name
