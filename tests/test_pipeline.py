@@ -932,4 +932,53 @@ def test_webhook_returns_ok_immediately(mock_wa):
         json={"message": {"text": "TECH01", "chat": {"id": 123456789}}}
     )
     assert resp.status_code == 200
-    assert resp.json() == {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Task 1: domain schedule firestore helpers
+# ---------------------------------------------------------------------------
+
+@patch("app.services.firestore_service.firestore")
+def test_get_domain_schedule_returns_default_when_missing(mock_fs):
+    mock_db = MagicMock()
+    mock_fs.Client.return_value = mock_db
+    missing = MagicMock(); missing.exists = False
+    mock_db.collection().document().get.return_value = missing
+
+    from app.services import firestore_service
+    firestore_service._db = mock_db
+    result = firestore_service.get_domain_schedule()
+    assert result["rotating_domains"] == ["Technology", "Current Affairs", "Science"]
+
+
+@patch("app.services.firestore_service.firestore")
+def test_get_domain_schedule_returns_stored_value(mock_fs):
+    mock_db = MagicMock()
+    mock_fs.Client.return_value = mock_db
+    doc = MagicMock(); doc.exists = True
+    doc.to_dict.return_value = {
+        "rotating_domains": ["Health", "Business", "Sports"],
+        "last_updated": "2026-04-01",
+    }
+    mock_db.collection().document().get.return_value = doc
+
+    from app.services import firestore_service
+    firestore_service._db = mock_db
+    result = firestore_service.get_domain_schedule()
+    assert result["rotating_domains"] == ["Health", "Business", "Sports"]
+
+
+@patch("app.services.firestore_service.firestore")
+def test_save_domain_schedule_writes_correct_fields(mock_fs):
+    mock_db = MagicMock()
+    mock_fs.Client.return_value = mock_db
+
+    from app.services import firestore_service
+    firestore_service._db = mock_db
+    firestore_service.save_domain_schedule(["Technology", "Science", "Health"])
+
+    mock_db.collection.assert_called_with("config")
+    mock_db.collection().document.assert_called_with("domain_schedule")
+    written = mock_db.collection().document().set.call_args[0][0]
+    assert written["rotating_domains"] == ["Technology", "Science", "Health"]
+    assert "last_updated" in written

@@ -782,3 +782,57 @@ def get_genre_performance_weekly() -> dict[str, float]:
         return {g: sum(v) / len(v) for g, v in totals.items()}
     except Exception:
         return {}
+
+
+def get_genre_performance_fortnightly() -> dict[str, float]:
+    """Return average view_count per genre over the last 14 days.
+
+    Only considers completed jobs that have analytics data.
+    Returns {genre_lower: avg_views}. Genres with no data are absent from the dict.
+    """
+    try:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
+        docs = (
+            _get_db()
+            .collection("jobs")
+            .where("status", "==", "completed")
+            .where("updated_at", ">=", cutoff)
+            .stream()
+        )
+        totals: dict[str, list[int]] = {}
+        for d in docs:
+            data = d.to_dict() or {}
+            genre = (data.get("genre") or "").strip().lower()
+            analytics = data.get("analytics") or {}
+            views = int(analytics.get("view_count", 0))
+            if genre:
+                totals.setdefault(genre, []).append(views)
+        return {g: sum(v) / len(v) for g, v in totals.items()}
+    except Exception:
+        return {}
+
+
+_DEFAULT_DOMAIN_SCHEDULE = {
+    "rotating_domains": ["Technology", "Current Affairs", "Science"],
+    "last_updated": "2000-01-01",
+}
+
+
+def get_domain_schedule() -> dict:
+    """Return the current domain schedule config, or defaults if not set."""
+    try:
+        doc = _get_db().collection("config").document("domain_schedule").get()
+        if doc.exists:
+            return doc.to_dict() or _DEFAULT_DOMAIN_SCHEDULE
+        return _DEFAULT_DOMAIN_SCHEDULE
+    except Exception:
+        return _DEFAULT_DOMAIN_SCHEDULE
+
+
+def save_domain_schedule(rotating_domains: list[str]) -> None:
+    """Persist the rotating domain list and today's date to Firestore."""
+    from datetime import date
+    _get_db().collection("config").document("domain_schedule").set({
+        "rotating_domains": rotating_domains,
+        "last_updated": date.today().isoformat(),
+    })
