@@ -250,8 +250,22 @@ Additional format constraints:
 - Maximum {max_scenes} scenes total
 """
 
-    response = search_model.generate_content(prompt)
-    return _response_text(response)
+    last_exc: Exception | None = None
+    for attempt in range(3):
+        try:
+            response = search_model.generate_content(prompt)
+            return _response_text(response)
+        except Exception as exc:
+            last_exc = exc
+            logger.warning(
+                "generate_script_with_search attempt %d/3 failed: %s",
+                attempt + 1,
+                exc,
+            )
+            if attempt < 2:
+                import time
+                time.sleep(5)
+    raise last_exc  # type: ignore[misc]
 
 
 def _response_text(response) -> str:
