@@ -1038,6 +1038,82 @@ def test_get_slot_domain_rotating_4pm_day0():
         assert result == "Current Affairs"
 
 
+# ---------------------------------------------------------------------------
+# Task 4: update_domain_schedule
+# ---------------------------------------------------------------------------
+
+def test_update_domain_schedule_skips_if_updated_recently():
+    """Should no-op when last_updated is less than 14 days ago."""
+    from datetime import date, timedelta
+    recent = (date.today() - timedelta(days=5)).isoformat()
+
+    with patch("app.agents.lead_researcher.firestore_service") as mock_fs:
+        mock_fs.get_domain_schedule.return_value = {
+            "rotating_domains": ["Technology", "Current Affairs", "Science"],
+            "last_updated": recent,
+        }
+        from app.agents import lead_researcher
+        result = lead_researcher.update_domain_schedule()
+        assert result is False
+        mock_fs.save_domain_schedule.assert_not_called()
+
+
+def test_update_domain_schedule_updates_when_overdue():
+    """Should update rotating_domains when last_updated >= 14 days ago."""
+    from datetime import date, timedelta
+    old = (date.today() - timedelta(days=15)).isoformat()
+
+    perf = {
+        "health": 5000.0,
+        "business": 3000.0,
+        "sports": 2000.0,
+        "science": 500.0,
+        "current affairs": 400.0,
+        "technology": 300.0,
+    }
+
+    with patch("app.agents.lead_researcher.firestore_service") as mock_fs, \
+         patch("app.agents.lead_researcher.send_message"):
+        mock_fs.get_domain_schedule.return_value = {
+            "rotating_domains": ["Technology", "Current Affairs", "Science"],
+            "last_updated": old,
+        }
+        mock_fs.get_genre_performance_fortnightly.return_value = perf
+        from app.agents import lead_researcher
+        result = lead_researcher.update_domain_schedule()
+        assert result is True
+        saved = mock_fs.save_domain_schedule.call_args[0][0]
+        # Top 3 eligible (excluding Trending, AI): Health, Business, Sports
+        assert saved == ["Health", "Business", "Sports"]
+
+
+def test_update_domain_schedule_excludes_fixed_domains():
+    """Trending and Artificial Intelligence must never appear in rotating_domains."""
+    from datetime import date, timedelta
+    old = (date.today() - timedelta(days=20)).isoformat()
+
+    perf = {
+        "trending": 99999.0,
+        "artificial intelligence": 99999.0,
+        "technology": 1000.0,
+        "science": 800.0,
+        "health": 600.0,
+    }
+
+    with patch("app.agents.lead_researcher.firestore_service") as mock_fs, \
+         patch("app.agents.lead_researcher.send_message"):
+        mock_fs.get_domain_schedule.return_value = {
+            "rotating_domains": ["Technology", "Current Affairs", "Science"],
+            "last_updated": old,
+        }
+        mock_fs.get_genre_performance_fortnightly.return_value = perf
+        from app.agents import lead_researcher
+        lead_researcher.update_domain_schedule()
+        saved = mock_fs.save_domain_schedule.call_args[0][0]
+        assert "Trending" not in saved
+        assert "Artificial Intelligence" not in saved
+
+
 def test_get_slot_domain_rotating_8pm_day0():
     with patch("app.agents.lead_researcher._ist_now_hour", return_value=20), \
          patch("app.agents.lead_researcher._ist_day_of_year", return_value=3):

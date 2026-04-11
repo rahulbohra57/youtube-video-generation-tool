@@ -368,6 +368,49 @@ def retry_failed_pipeline() -> str | None:
     return batch_id
 
 
+_FIXED_DOMAIN_NAMES = {"trending", "artificial intelligence"}
+
+
+def update_domain_schedule() -> bool:
+    """Fortnightly: re-rank rotating domains by 14-day avg views and update Firestore.
+
+    Returns True if the schedule was updated, False if skipped (updated < 14 days ago).
+    Trending and Artificial Intelligence are never candidates — only the 3 rotating
+    slots are updated.
+    """
+    from datetime import date
+    schedule = firestore_service.get_domain_schedule()
+    try:
+        last_updated = date.fromisoformat(schedule.get("last_updated", "2000-01-01"))
+    except Exception:
+        last_updated = date(2000, 1, 1)
+
+    if (date.today() - last_updated).days < 14:
+        logger.info("update_domain_schedule: last update was < 14 days ago, skipping.")
+        return False
+
+    genre_perf = firestore_service.get_genre_performance_fortnightly()
+
+    # Eligible: primaries excluding fixed domains, plus all fallback domains
+    candidates = [
+        d for d in _primary_domain_query_map()
+        if d.lower() not in _FIXED_DOMAIN_NAMES
+    ] + list(_fallback_domain_query_map().keys())
+
+    # Sort by avg views descending; domains with no data score 0 (rank last, still eligible)
+    ranked = sorted(candidates, key=lambda d: genre_perf.get(d.lower(), 0.0), reverse=True)
+    new_rotating = ranked[:3]
+
+    firestore_service.save_domain_schedule(new_rotating)
+    logger.info(f"update_domain_schedule: updated rotating domains to {new_rotating}")
+    send_message(
+        TELEGRAM_CHAT_ID,
+        f"📅 Domain schedule updated: {', '.join(new_rotating)}",
+        channel_id="news",
+    )
+    return True
+
+
 def run() -> str | None:
     _expire_stale_digest_if_needed()
 
