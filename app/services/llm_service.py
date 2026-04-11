@@ -154,7 +154,10 @@ def _get_search_model():
     if _search_model is None:
         from vertexai.generative_models import Tool, grounding as vgrounding
         search_tool = Tool.from_google_search_retrieval(vgrounding.GoogleSearchRetrieval())
-        _search_model = GenerativeModel("gemini-2.5-flash", tools=[search_tool])
+        # gemini-2.0-flash supports google_search_retrieval tool type.
+        # gemini-2.5-flash dropped that API (returns 400) — grounding quality
+        # is driven by search results, not model version, so 2.0-flash is correct here.
+        _search_model = GenerativeModel("gemini-2.0-flash", tools=[search_tool])
     return _search_model
 
 

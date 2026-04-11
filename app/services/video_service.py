@@ -165,8 +165,18 @@ def _make_word_caption_clips(
     """
     import re
 
+    # Strip markdown formatting characters the LLM may include in narration
+    # before rendering as plain subtitles.
+    # Remove *bold* and _italic_ markers, keeping the inner text.
+    clean = re.sub(r'\*([^*]+)\*', r'\1', narration)
+    clean = re.sub(r'_([^_]+)_', r'\1', clean)
+    # Remove single-quotes used as emphasis markers (at word boundaries) but
+    # preserve apostrophes inside words like "Microsoft's" or "don't".
+    # A quote is an emphasis marker if it is NOT between two word characters.
+    clean = re.sub(r"(?<!\w)'|'(?!\w)", '', clean)
+
     # Split at sentence-ending punctuation, preserving the punctuation on the left side
-    raw = re.split(r'(?<=[.!?])\s+', narration.strip())
+    raw = re.split(r'(?<=[.!?])\s+', clean.strip())
     sentences = [s.strip() for s in raw if s.strip()]
 
     if not sentences:
