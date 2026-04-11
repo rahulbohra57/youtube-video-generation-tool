@@ -118,7 +118,8 @@ VISUAL PROMPT RULES:
 
 FACTUAL / COPYRIGHT SAFETY:
 - TODAY'S DATE: {today_str}. Use this to determine verb tense. Events that occurred before today MUST be written in past tense ("launched", "announced", "was approved"). Do NOT write "will", "is expected to", "is set to", or "is scheduled to" for any event that has already taken place as of {today_str}. If uncertain whether an event has occurred, hedge with "reportedly" or "as of [date]" — never assume it is still upcoming.
-- If context articles are provided above, prefer those facts. For any fact NOT in the provided context, only include it if you are confident it occurred. Phrase uncertain claims as "reportedly", "according to reports", or "as of [year]".
+- CRITICAL — YEARS AND DATES: When NEWS CONTEXT is provided above, ALL specific years and dates in the narration MUST come exclusively from that context. Do NOT use your training-data knowledge to supply a year or date that is not explicitly stated in the context. If the context does not mention a specific year for an event, do NOT guess or infer one — omit the year entirely or write "recently". This rule exists because your training data may describe an older planned version of the event (e.g. an earlier scheduled date) that has since changed. The provided context reflects the actual published date of the article and supersedes your prior knowledge.
+- If context articles are provided above, prefer those facts. For any fact NOT in the provided context, only include it if you are certain it occurred and is not date-sensitive. Phrase uncertain claims as "reportedly", "according to reports", or "as of [year]".
 - Do NOT fabricate specific dates, statistics, or event details. If uncertain, omit or hedge explicitly.
 - Do not include direct quotes longer than 8 words from songs, books, movies, or articles.
 - Do not include song lyrics.
@@ -225,7 +226,8 @@ VISUAL PROMPT RULES:
 
 FACTUAL / COPYRIGHT SAFETY:
 - TODAY'S DATE: {today_str}. Use this to determine verb tense. Events that occurred before today MUST be written in past tense ("launched", "announced", "was approved"). Do NOT write "will", "is expected to", "is set to", or "is scheduled to" for any event that has already taken place as of {today_str}. If uncertain whether an event has occurred, hedge with "reportedly" or "as of [date]" — never assume it is still upcoming.
-- Prefer facts retrieved via search. For any fact NOT confirmed by search results, only include it if you are confident it occurred. Phrase uncertain claims as "reportedly", "according to reports", or "as of [year]".
+- CRITICAL — YEARS AND DATES: When NEWS CONTEXT is provided above, ALL specific years and dates in the narration MUST come exclusively from that context or from your live search results for this specific article. Do NOT fall back on training-data knowledge to supply a year — your training data may describe an older planned or scheduled version of the event that has since changed. If neither the context nor search results mention a specific year for a detail, omit the year or write "recently" rather than guessing.
+- Prefer facts retrieved via search. For any fact NOT confirmed by search results or the provided context, only include it if you are confident it occurred. Phrase uncertain claims as "reportedly", "according to reports", or "as of [year]".
 - Do NOT fabricate specific dates, statistics, or event details. If uncertain, omit or hedge explicitly.
 - Do not include direct quotes longer than 8 words from songs, books, movies, or articles.
 - Do not include song lyrics.
@@ -324,7 +326,7 @@ def _extract_json_object(text: str) -> dict:
     return json.loads(match.group())
 
 
-def fact_check_scenes(topic: str, scenes: list[dict], language: str = "en") -> list[dict]:
+def fact_check_scenes(topic: str, scenes: list[dict], language: str = "en", context: str = "") -> list[dict]:
     """Run a fast fact-check + safety rewrite pass while preserving structure."""
     if not scenes:
         return scenes
@@ -332,19 +334,25 @@ def fact_check_scenes(topic: str, scenes: list[dict], language: str = "en") -> l
     from datetime import date
     today_str = date.today().isoformat()
     lang_instruction = _LANG_INSTRUCTIONS.get(language, _LANG_INSTRUCTIONS["en"])
+    context_block = (
+        f"\nSOURCE CONTEXT (authoritative — all dates/years must match this):\n{context.strip()}\n"
+        if context and context.strip()
+        else ""
+    )
     prompt = f"""
 You are a strict fact-check and policy safety editor for short educational videos.
 
-TODAY'S DATE: {today_str}
+TODAY'S DATE: {today_str}{context_block}
 
 Task:
 1) Review each scene's narration for likely factual errors, overclaims, or missing caution.
 2) Flag and correct any claim that presents a past event (more than a few weeks ago) as if it just happened or is "breaking news".
-3) Replace fabricated or unverifiable specific dates/numbers with hedged language ("reportedly", "as of [year]", "estimated"). Remove them entirely if they add no value.
-4) Keep same number of scenes and same `scene` numbers.
-5) Keep visual prompts in English and remove risky copyright/trademark references.
-6) Remove profanity and offensive wording.
-7) Ensure visuals contain zero readable text.
+3) CRITICAL — YEAR HALLUCINATION CHECK: Identify every specific year mentioned in the narrations. For each year, verify it is explicitly present in the SOURCE CONTEXT above. If a year appears in the narration but NOT in the source context, it was fabricated from training-data knowledge — remove it or replace with "recently". Training data often contains outdated planned/scheduled dates for ongoing events (e.g. a mission planned for 2025 that actually launched in 2026); the source context is always authoritative.
+4) Replace fabricated or unverifiable specific dates/numbers with hedged language ("reportedly", "as of [year]", "estimated"). Remove them entirely if they add no value.
+5) Keep same number of scenes and same `scene` numbers.
+6) Keep visual prompts in English and remove risky copyright/trademark references.
+7) Remove profanity and offensive wording.
+8) Ensure visuals contain zero readable text.
 
 Topic: {topic}
 Language rule: {lang_instruction}
@@ -365,9 +373,9 @@ Input scenes:
     return scenes
 
 
-def apply_quality_controls(topic: str, scenes: list[dict], language: str = "en") -> list[dict]:
+def apply_quality_controls(topic: str, scenes: list[dict], language: str = "en", context: str = "") -> list[dict]:
     """Apply fact-check + profanity + copyright sanitization."""
-    reviewed = fact_check_scenes(topic, scenes, language=language)
+    reviewed = fact_check_scenes(topic, scenes, language=language, context=context)
     cleaned = []
     for s in reviewed:
         narration = strip_markdown_formatting(str(s.get("narration", "")))
