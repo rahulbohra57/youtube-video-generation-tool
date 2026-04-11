@@ -236,9 +236,11 @@ def _expire_stale_digest_if_needed():
     firestore_service.set_pipeline_and_batch_state(batch_id, "skipped")
 
 
+
 def send_daily_digest():
     """Send a daily summary report to Telegram."""
     from zoneinfo import ZoneInfo
+    from datetime import date as _date
     from app.services import youtube_service as yt_svc
     ist = ZoneInfo("Asia/Kolkata")
     now_ist = datetime.now(ist)
@@ -266,12 +268,21 @@ def send_daily_digest():
     # GNews calls in previous window
     gnews_today = firestore_service.get_gnews_calls_today(window_start=prev_window_start)
 
-    all_domains = ["technology", "artificial intelligence", "current affairs", "trending", "science"]
+    # Domain slot coverage: show each slot's assigned domain and whether it was posted
+    schedule = firestore_service.get_domain_schedule()
+    rotating = schedule.get("rotating_domains") or ["Technology", "Current Affairs", "Science"]
+    last_updated = schedule.get("last_updated", "never")
+    prev_day_of_year = _date.fromisoformat(prev_day_key).timetuple().tm_yday
     domains_today = firestore_service.get_domains_posted_today(day_key=prev_day_key)
     domain_lines = []
-    for d in all_domains:
-        mark = "✅" if d in domains_today else "⬜"
-        domain_lines.append(f"  {mark} {d.title()}")
+    for hour in [0, 4, 8, 12, 16, 20]:
+        if hour in _FIXED_SLOTS:
+            domain = _FIXED_SLOTS[hour]
+        else:
+            slot_pos = _ROTATING_SLOT_POSITIONS.get(hour, 0)
+            domain = rotating[(prev_day_of_year % 3 + slot_pos) % len(rotating)]
+        mark = "✅" if domain.lower() in domains_today else "⬜"
+        domain_lines.append(f"  {mark} {hour:02d}h → {domain}")
 
     top = firestore_service.get_top_performers(n=1)
     top_line = ""
@@ -313,8 +324,9 @@ def send_daily_digest():
         f"📊 API Usage Today\n"
         f"  TTS chars: {tts_chars_today:,} today | {tts_chars_month:,} this month ({tts_pct}% of 1M free tier)\n"
         f"  GNews calls: {gnews_today}/100\n\n"
-        f"🗂️ Domain Coverage Today\n"
+        f"🗂️ Slot Coverage Yesterday\n"
         + "\n".join(domain_lines)
+        + f"\n  🔄 Rotating: {', '.join(rotating)} (updated: {last_updated})"
         + top_line
         + failed_lines
     )
