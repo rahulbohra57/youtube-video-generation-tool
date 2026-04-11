@@ -586,3 +586,12 @@ Run these after every deploy:
 | REDO uploads with wrong title | Job stored raw topic, not reviewed title | `reviewed_title` persisted to Firestore immediately after script review |
 | Webhook returns 403 | Service not public | Run: `gcloud run services add-iam-policy-binding autoframe --member="allUsers" --role="roles/run.invoker" ...` |
 | CREATE rejects valid topic | No source article found in last 72h | Provide article URL: `CREATE <topic> \| <url>` |
+
+## graphify
+
+This project has a graphify knowledge graph at graphify-out/.
+
+Rules:
+- Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
+- If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
+- After modifying code files in this session, run `python3 -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"` to keep the graph current
