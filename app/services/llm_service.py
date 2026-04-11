@@ -5,6 +5,9 @@ import vertexai
 import re
 import json
 import random
+import logging
+
+logger = logging.getLogger(__name__)
 
 vertexai.init()
 
@@ -263,8 +266,7 @@ Additional format constraints:
                 exc,
             )
             if attempt < 2:
-                import time
-                time.sleep(5)
+                import time; time.sleep(5)
     raise last_exc  # type: ignore[misc]
 
 
