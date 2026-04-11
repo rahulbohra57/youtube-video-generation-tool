@@ -260,13 +260,13 @@ def test_lead_researcher_run_creates_batch_and_enqueues_video(
     mock_window, mock_gnews, mock_rate, mock_fs, mock_send_message, mock_enqueue
 ):
     mock_fs.get_pipeline_state.return_value = {}
-    mock_fs.get_domains_posted_today.return_value = {}
+    mock_fs.get_domain_schedule.return_value = {
+        "rotating_domains": ["Technology", "Current Affairs", "Science"],
+        "last_updated": "2026-04-01",
+    }
     mock_fs.get_top_performers.return_value = []
     mock_fs.get_genre_performance_weekly.return_value = {}
     mock_fs.get_recently_suggested_headlines.return_value = []
-    mock_gnews.fetch_top_headlines.return_value = [
-        {"headline": f"News {i}", "url": "https://x", "description": "desc"} for i in range(10)
-    ]
     mock_gnews.search_news.return_value = [
         {"headline": f"Search News {i}", "url": "https://x", "description": "desc"} for i in range(10)
     ]
@@ -345,9 +345,12 @@ def test_lead_researcher_skips_outside_allowed_hours(mock_window):
 def test_lead_researcher_falls_back_to_new_domain_when_primary_exhausted(
     mock_window, mock_gnews, mock_rate, mock_fs, mock_send, mock_enqueue
 ):
-    """When all 5 primary domains have no quality articles, Phase 3 fetches a fallback domain."""
+    """When all 5 primary domains have no quality articles, run() fetches a fallback domain."""
     mock_fs.get_pipeline_state.return_value = {}
-    mock_fs.get_domains_posted_today.return_value = {}
+    mock_fs.get_domain_schedule.return_value = {
+        "rotating_domains": ["Technology", "Current Affairs", "Science"],
+        "last_updated": "2026-04-01",
+    }
     mock_fs.get_top_performers.return_value = []
     mock_fs.get_genre_performance_weekly.return_value = {}
     mock_fs.get_recently_suggested_headlines.return_value = []
@@ -389,7 +392,10 @@ def test_lead_researcher_falls_back_to_new_domain_when_primary_exhausted(
 @patch("app.agents.lead_researcher._within_suggestion_window", return_value=True)
 def test_lead_researcher_uses_news_only_recently_covered(mock_window, mock_gnews, mock_fs):
     mock_fs.get_pipeline_state.return_value = {}
-    mock_fs.get_domains_posted_today.return_value = {}
+    mock_fs.get_domain_schedule.return_value = {
+        "rotating_domains": ["Technology", "Current Affairs", "Science"],
+        "last_updated": "2026-04-01",
+    }
     mock_fs.get_top_performers.return_value = []
     mock_fs.get_genre_performance_weekly.return_value = {}
     mock_fs.get_recently_suggested_headlines.return_value = []
@@ -414,7 +420,10 @@ def test_lead_researcher_returns_none_when_all_domains_truly_empty(
 ):
     """Returns None only when primary AND all fallback domains yield nothing."""
     mock_fs.get_pipeline_state.return_value = {}
-    mock_fs.get_domains_posted_today.return_value = {}
+    mock_fs.get_domain_schedule.return_value = {
+        "rotating_domains": ["Technology", "Current Affairs", "Science"],
+        "last_updated": "2026-04-01",
+    }
     mock_fs.get_top_performers.return_value = []
     mock_fs.get_genre_performance_weekly.return_value = {}
     mock_fs.get_recently_suggested_headlines.return_value = []

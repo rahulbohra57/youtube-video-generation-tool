@@ -115,7 +115,7 @@ def _get_slot_domain(schedule: dict) -> str:
     hour = _ist_now_hour()
     if hour in _FIXED_SLOTS:
         return _FIXED_SLOTS[hour]
-    rotating = schedule.get("rotating_domains", ["Technology", "Current Affairs", "Science"])
+    rotating = schedule.get("rotating_domains") or ["Technology", "Current Affairs", "Science"]
     slot_pos = _ROTATING_SLOT_POSITIONS.get(hour, 0)
     day_offset = _ist_day_of_year() % 3
     return rotating[(day_offset + slot_pos) % len(rotating)]
@@ -382,16 +382,31 @@ def run() -> str | None:
     from_date = (
         datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
     ).isoformat(timespec="seconds").replace("+00:00", "Z")
-    domains = _primary_domain_query_map()
-    domain_results: dict[str, list[dict]] = {}
+
+    schedule = firestore_service.get_domain_schedule()
+    assigned_domain = _get_slot_domain(schedule)
 
     top_performers = firestore_service.get_top_performers(n=3)
-    recently_covered = firestore_service.get_recently_suggested_headlines(days=14, limit=20, channel_id="news")
+    recently_covered = firestore_service.get_recently_suggested_headlines(
+        days=14, limit=20, channel_id="news"
+    )
+    genre_perf = firestore_service.get_genre_performance_weekly()
 
-    for domain, cfg in domains.items():
-        # One search call per domain (sorted by publishedAt already covers top headlines).
-        # Avoids the previous 10-call pattern (fetch_top + search × 5 domains) that
-        # could exhaust the GNews free-tier quota (~100 req/day) within a few hours.
+    all_primary = _primary_domain_query_map()
+    # Try assigned domain first, then remaining primaries in performance-weighted order
+    domain_order = [assigned_domain] + _performance_weighted_order(
+        [d for d in all_primary if d != assigned_domain],
+        genre_perf,
+    )
+
+    selected_domain = ""
+    selected_item = None
+    domain_articles: list[dict] = []
+
+    for domain in domain_order:
+        cfg = all_primary.get(domain)
+        if not cfg:
+            continue
         try:
             search = gnews_service.search_news(
                 query=cfg["query"],
@@ -401,16 +416,16 @@ def run() -> str | None:
             )
         except Exception as e:
             logger.warning(f"GNews search failed for domain '{domain}', skipping: {e}")
-            domain_results[domain] = []
             continue
         raw = [a for a in search if _is_recent_article(a, lookback_hours)]
         candidates = _dedupe_and_filter_unsuggested(raw)
         if not candidates:
-            domain_results[domain] = []
             continue
-        # Build lookup so we can re-attach published_at / url that rate_and_select_news drops
+        # Re-attach published_at / url that rate_and_select_news drops
         _orig_lookup = {_norm_headline(c.get("headline", "")): c for c in candidates}
-        rated = rate_and_select_news(candidates, top_performers=top_performers, recently_covered=recently_covered)[:5]
+        rated = rate_and_select_news(
+            candidates, top_performers=top_performers, recently_covered=recently_covered
+        )[:5]
         for item in rated:
             orig = _orig_lookup.get(_norm_headline(item.get("headline", ""))) or {}
             item.setdefault("published_at", orig.get("published_at", ""))
@@ -418,119 +433,78 @@ def run() -> str | None:
             item.setdefault("source", orig.get("source", ""))
         enriched = []
         for item in rated:
-            h = item.get("headline", "")
             score = float(item.get("rating", 0))
-            rigorous = (score * 0.60) + (_recency_score(item) * 2.0) + _trend_bonus(h)
             if score < 3.8:
                 continue
-            enriched.append(
-                {
-                    **item,
-                    "genre": domain,
-                    "rigorous_score": round(min(5.0, rigorous), 2),
-                }
+            rigorous = (
+                (score * 0.60)
+                + (_recency_score(item) * 2.0)
+                + _trend_bonus(item.get("headline", ""))
             )
-        domain_results[domain] = sorted(enriched, key=lambda x: x.get("rigorous_score", 0), reverse=True)[:5]
-
-    # Cross-domain deduplication: same story (e.g. "OpenAI launches X") can surface
-    # in both Technology and Artificial Intelligence. Keep the highest-scored copy only.
-    seen_cross: set[str] = set()
-    for d in list(domain_results.keys()):
-        unique = []
-        for item in domain_results[d]:
-            key = _norm_headline(item.get("headline", ""))
-            if key and key not in seen_cross:
-                seen_cross.add(key)
-                unique.append(item)
-        domain_results[d] = unique
-
-    today_posted = firestore_service.get_domains_posted_today()
-    missing_domains = [d for d in domains.keys() if d.lower() not in today_posted]
-
-    # Weekly genre performance — avg views per genre over last 7 days.
-    # Used to weight domain selection probability; every missing domain stays eligible.
-    genre_perf = firestore_service.get_genre_performance_weekly()
-    # Baseline weight 1.0 ensures domains with no history are always selectable.
-    # Add 1.0 to the avg-view score so even a 0-view genre gets weight 1.0, not 0.
-    _BASE = 1.0
-
-    selected_domain = ""
-    selected_item = None
-    import random
-
-    # Phase 1: weighted selection from domains not yet posted today (mandatory coverage).
-    # Build a weighted-shuffle by repeatedly picking with weights, without replacement.
-    pool = [(d, _BASE + genre_perf.get(d.lower(), 0.0)) for d in missing_domains]
-    while pool:
-        domains_list, w_list = zip(*pool)
-        pick = random.choices(domains_list, weights=w_list, k=1)[0]
-        pool = [(d, w) for d, w in pool if d != pick]
-        if domain_results.get(pick):
-            selected_domain = pick
-            selected_item = domain_results[pick][0]
+            enriched.append({
+                **item,
+                "genre": domain,
+                "rigorous_score": round(min(5.0, rigorous), 2),
+            })
+        if enriched:
+            enriched = sorted(enriched, key=lambda x: x.get("rigorous_score", 0), reverse=True)
+            selected_domain = domain
+            selected_item = enriched[0]
+            domain_articles = enriched
             break
 
-    # Phase 2: all domains covered today — pick extra video weighted by
-    # blended score (rigorous_score * genre performance multiplier).
+    # Fallback: try fallback domains if all primaries returned nothing usable
     if not selected_item:
-        all_candidates = []
-        for d, rows in domain_results.items():
-            if rows:
-                all_candidates.append((d, rows[0]))
-        if not all_candidates:
-            # Phase 3: all primary domains exhausted — try a fallback domain.
-            # Fallback domains are fetched live here (not during the primary loop)
-            # to avoid wasting GNews quota on every cycle.
-            fallback_domains = _fallback_domain_query_map()
-            fallback_names = list(fallback_domains.keys())
-            random.shuffle(fallback_names)
-            for fallback_name in fallback_names:
-                cfg = fallback_domains[fallback_name]
-                fallback_search = gnews_service.search_news(
+        fallback_domains = _fallback_domain_query_map()
+        fallback_names = list(fallback_domains.keys())
+        random.shuffle(fallback_names)
+        for fallback_name in fallback_names:
+            cfg = fallback_domains[fallback_name]
+            try:
+                search = gnews_service.search_news(
                     query=cfg["query"],
                     max_results=25,
                     from_date=from_date,
                     category=cfg["category"],
                 )
-                fallback_raw = [a for a in fallback_search if _is_recent_article(a, lookback_hours)]
-                fallback_candidates = _dedupe_and_filter_unsuggested(fallback_raw)
-                if fallback_candidates:
-                    selected_domain = fallback_name
-                    # No quality floor — any article is acceptable in last-resort fallback.
-                    selected_item = {
-                        **fallback_candidates[0],
-                        "genre": fallback_name,
-                        "rigorous_score": 3.5,
-                    }
-                    break
-            if not selected_item:
-                return None
-        else:
-            perf_max = max(genre_perf.values(), default=1.0) or 1.0
-            selected_domain, selected_item = sorted(
-                all_candidates,
-                key=lambda pair: pair[1].get("rigorous_score", 0)
-                * (1 + genre_perf.get(pair[0].lower(), 0.0) / perf_max),
-                reverse=True,
-            )[0]
+            except Exception as e:
+                logger.warning(f"GNews search failed for fallback '{fallback_name}', skipping: {e}")
+                continue
+            raw = [a for a in search if _is_recent_article(a, lookback_hours)]
+            candidates = _dedupe_and_filter_unsuggested(raw)
+            if candidates:
+                selected_domain = fallback_name
+                selected_item = {
+                    **candidates[0],
+                    "genre": fallback_name,
+                    "rigorous_score": 3.5,
+                }
+                domain_articles = [selected_item]
+                break
+
+    if not selected_item:
+        return None
 
     batch_id = f"auto_{datetime.now(timezone.utc):%Y%m%d_%H%M%S}"
     prefix = _prefix_for_domain(selected_domain)
     code = f"{prefix}01"
     selected_item["code"] = code
-    items = _assign_codes(domain_results.get(selected_domain, [selected_item]), prefix)
+    items = _assign_codes(domain_articles[:5], prefix)
+    items[code] = selected_item  # ensure the chosen item is keyed by its primary code
 
     firestore_service.save_news_batch(batch_id, selected_domain.lower(), items)
     firestore_service.set_pipeline_and_batch_state(batch_id, "processing")
 
     from app.agents import whatsapp_agent
-    task_name = whatsapp_agent._task_name(batch_id, code)  # shared deterministic id
+    task_name = whatsapp_agent._task_name(batch_id, code)
     public_id = whatsapp_agent._public_video_id(task_name)
-    context_summary = selected_item.get("context") or selected_item.get("description") or "Top trending story selected."
+    context_summary = (
+        selected_item.get("context")
+        or selected_item.get("description")
+        or "Top trending story selected."
+    )
     pub_date = selected_item.get("published_at", "")
     source_url = selected_item.get("url", "")
-    # Prepend the GNews publication date + URL so the script generator knows the exact event date
-    # and can instruct Google Search grounding to find the right (recent) version of the story.
     date_prefix = f"[Article published: {pub_date}]" if pub_date else ""
     url_suffix = f" Source: {source_url}" if source_url else ""
     details = f"{date_prefix} {context_summary}{url_suffix}".strip()
