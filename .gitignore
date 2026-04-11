@@ -26,3 +26,9 @@ Output/
 
 # Misc
 *.sqlite3
+
+# Graphify
+graphify-out/
+
+# Finance-user
+Finance.md
