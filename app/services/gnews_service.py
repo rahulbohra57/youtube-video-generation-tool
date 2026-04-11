@@ -43,6 +43,9 @@ def fetch_top_headlines(
     if query:
         params["q"] = query
     response = httpx.get(_GNEWS_URL, params=params, timeout=10)
+    if response.status_code == 429:
+        logger.warning("GNews returned 429 Too Many Requests for fetch_top_headlines — treating as quota exhausted.")
+        return []
     response.raise_for_status()
     firestore_service.record_quota_event("gnews_call")
     return _map_articles(response.json())
@@ -71,6 +74,9 @@ def search_news(
     if category:
         params["topic"] = category
     response = httpx.get(_GNEWS_SEARCH_URL, params=params, timeout=10)
+    if response.status_code == 429:
+        logger.warning("GNews returned 429 Too Many Requests for search_news — treating as quota exhausted.")
+        return []
     response.raise_for_status()
     firestore_service.record_quota_event("gnews_call")
     return _map_articles(response.json())
