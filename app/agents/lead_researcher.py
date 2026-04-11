@@ -1,10 +1,14 @@
 # app/agents/lead_researcher.py
 
+import logging
+import random
 from datetime import datetime, timezone, timedelta
 from app.services import gnews_service, firestore_service
 from app.services.llm_service import rate_and_select_news
 from app.services.telegram_service import send_message
 from app.config import TELEGRAM_CHAT_ID
+
+logger = logging.getLogger(__name__)
 
 
 def _within_suggestion_window() -> bool:
@@ -78,6 +82,60 @@ def _prefix_for_domain(domain: str) -> str:
         "entertainment": "ENT",
         "environment": "ENV",
     }.get(domain.lower(), "NEWS")
+
+
+def _ist_now_hour() -> int:
+    """Return the current hour in IST (0-23). Extracted for testability."""
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("Asia/Kolkata")).hour
+
+
+def _ist_day_of_year() -> int:
+    """Return the current day-of-year in IST. Extracted for testability."""
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("Asia/Kolkata")).timetuple().tm_yday
+
+
+_FIXED_SLOTS: dict[int, str] = {
+    0: "Trending",
+    8: "Artificial Intelligence",
+    12: "Trending",
+}
+_ROTATING_SLOT_POSITIONS: dict[int, int] = {4: 0, 16: 1, 20: 2}
+
+
+def _get_slot_domain(schedule: dict) -> str:
+    """Return the domain assigned to the current IST scheduler slot.
+
+    Fixed slots (0h, 8h, 12h IST) are hardcoded.
+    Rotating slots (4h, 16h, 20h IST) cycle through schedule['rotating_domains']
+    using day_of_year % 3 as the rotation index so every domain gets equal
+    exposure across all time slots over a 3-day cycle.
+    """
+    hour = _ist_now_hour()
+    if hour in _FIXED_SLOTS:
+        return _FIXED_SLOTS[hour]
+    rotating = schedule.get("rotating_domains", ["Technology", "Current Affairs", "Science"])
+    slot_pos = _ROTATING_SLOT_POSITIONS.get(hour, 0)
+    day_offset = _ist_day_of_year() % 3
+    return rotating[(day_offset + slot_pos) % len(rotating)]
+
+
+def _performance_weighted_order(domains: list[str], genre_perf: dict[str, float]) -> list[str]:
+    """Return domains in a performance-weighted random order (highest-weight tends first).
+
+    Uses weighted-sampling-without-replacement so high-performing domains are more
+    likely to appear early in the fallback sequence.
+    """
+    _BASE = 1.0
+    pool = [(d, _BASE + genre_perf.get(d.lower(), 0.0)) for d in domains]
+    ordered: list[str] = []
+    while pool:
+        names, weights = zip(*pool)
+        pick = random.choices(names, weights=weights, k=1)[0]
+        pool = [(d, w) for d, w in pool if d != pick]
+        ordered.append(pick)
+    return ordered
 
 
 def _primary_domain_query_map() -> dict[str, dict]:
@@ -334,12 +392,17 @@ def run() -> str | None:
         # One search call per domain (sorted by publishedAt already covers top headlines).
         # Avoids the previous 10-call pattern (fetch_top + search × 5 domains) that
         # could exhaust the GNews free-tier quota (~100 req/day) within a few hours.
-        search = gnews_service.search_news(
-            query=cfg["query"],
-            max_results=25,
-            from_date=from_date,
-            category=cfg["category"],
-        )
+        try:
+            search = gnews_service.search_news(
+                query=cfg["query"],
+                max_results=25,
+                from_date=from_date,
+                category=cfg["category"],
+            )
+        except Exception as e:
+            logger.warning(f"GNews search failed for domain '{domain}', skipping: {e}")
+            domain_results[domain] = []
+            continue
         raw = [a for a in search if _is_recent_article(a, lookback_hours)]
         candidates = _dedupe_and_filter_unsuggested(raw)
         if not candidates:
