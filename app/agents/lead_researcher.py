@@ -436,7 +436,9 @@ def run() -> str | None:
     genre_perf = firestore_service.get_genre_performance_weekly()
 
     all_primary = _primary_domain_query_map()
-    # Try assigned domain first, then remaining primaries in performance-weighted order
+    all_query_configs = {**all_primary, **_fallback_domain_query_map()}
+    # Try assigned domain first, then remaining primaries in performance-weighted order.
+    # assigned_domain may be a promoted fallback domain — all_query_configs covers both maps.
     domain_order = [assigned_domain] + _performance_weighted_order(
         [d for d in all_primary if d != assigned_domain],
         genre_perf,
@@ -447,7 +449,7 @@ def run() -> str | None:
     domain_articles: list[dict] = []
 
     for domain in domain_order:
-        cfg = all_primary.get(domain)
+        cfg = all_query_configs.get(domain)
         if not cfg:
             continue
         try:

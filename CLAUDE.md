@@ -58,18 +58,34 @@ and the same Imagen / TTS / LLM services.
 
 Triggered by Cloud Scheduler → `lead_researcher.run()`:
 
-1. **Fetch news** via GNews for 5 primary domains: Technology, Artificial Intelligence,
-   Current Affairs, Trending, Science. One API call per domain, 25 results each.
-2. **Filter** by recency (last 24h) and dedup against Firestore `suggested_headlines`.
-3. **Rate & select** each domain's top articles using Gemini 2.5 Flash via `rate_and_select_news()`.
-4. **Score** with a composite formula: `(LLM rating × 0.60) + (recency × 2.0) + trend_bonus`.
-5. **Domain selection**: prioritize domains not yet posted today (weighted by historical performance).
-   Falls back to highest-scoring article if all domains covered; uses fallback domains (Health,
-   Business, Sports, Entertainment, Environment) as last resort.
+1. **Slot-domain resolution**: Each scheduler slot has a pre-assigned domain (fetches one domain
+   per run, not all five):
+   - **Fixed slots**: `0h → Trending`, `8h → Artificial Intelligence`, `12h → Trending`
+   - **Rotating slots** (`4h`, `16h`, `20h`): cycle through `schedule['rotating_domains']`
+     (default: Technology, Current Affairs, Science). Rotation uses `day_of_year % 3` so every
+     domain gets equal exposure across all time slots over a 3-day cycle.
+   - Domain schedule stored in Firestore `config/domain_schedule`; updated fortnightly.
+2. **Fetch news** via GNews for the assigned domain only (25 results, one API call per run).
+   Falls back through remaining primary domains (performance-weighted), then fallback domains
+   (Health, Business, Sports, Entertainment, Environment) if assigned domain yields nothing.
+3. **Filter** by recency (last 24h) and dedup against Firestore `suggested_headlines`.
+4. **Rate & select** top articles using Gemini 2.5 Flash via `rate_and_select_news()`.
+5. **Score** with a composite formula: `(LLM rating × 0.60) + (recency × 2.0) + trend_bonus`.
 6. **Save batch** to Firestore `news_batches` + set `pipeline_state` to `processing`.
 7. **Enqueue Cloud Task** via `whatsapp_agent._enqueue_generate()` → queue item delivered to
    `/generate/task`.
 8. **Notify** the Kurrent Affairs Telegram channel with the selected headline and virality score.
+
+**GNews quota impact**: Single-domain fetch reduces calls from 5/run × 6 runs = 30/day to
+**6 calls/day** (94% reduction). Well within the 100/day free tier.
+
+**Fortnightly domain schedule auto-update** (`update_domain_schedule()`):
+- Triggered by `/research/update-analytics` (Cloud Scheduler, 10pm daily).
+- Skips update if last update was < 14 days ago.
+- Ranks eligible domains (all primaries except Trending/AI + all fallback domains) by 14-day
+  avg views from `get_genre_performance_fortnightly()`.
+- Top 3 by performance become the new rotating domains; persisted to `config/domain_schedule`.
+- Sends a Telegram notification with the updated domain list.
 
 ### Step 2 — Video Generation (`/generate/task`)
 
@@ -268,6 +284,7 @@ For each scene:
 | `locks` | `"video_generation"` | Distributed generation lock |
 | `domain_posts` | `"YYYY-MM-DD"` | Domains posted today (resets daily) |
 | `suggested_headlines` | `sha1(headline)` | 14-day news / 30-day story dedup |
+| `config` | `"domain_schedule"` | Rotating domain list + `last_updated` date (fortnightly) |
 
 **Critical job fields** (used by REDO, RESEND, analytics):
 
@@ -312,7 +329,8 @@ Three layers prevent duplicate videos:
 **All scheduler endpoints require the `X-Scheduler-Secret` header.**
 
 **News cadence quota check:** GNews free tier is 100 calls/day. Current schedule is 6 cycles/day ×
-5 domains = 30 calls/day. A 2h schedule is 60/day (safe), but 1h would be 120/day (quota exhaustion).
+1 domain = 6 calls/day (single-domain scheduling). Even with fallback domains, worst case ~11 calls/day.
+A 1h schedule would be ~16 calls/day — well within quota.
 
 ---
 
@@ -417,7 +435,8 @@ APIs & Services → Credentials, or OAuth flows will fail with `redirect_uri_mis
 
 ### GNews API
 - **Free tier:** 100 requests/day
-- **App usage (12 news/day):** ~60 calls/day (60%)
+- **App usage:** 1 domain/run × 6 runs/day = **6 calls/day (6%)** — single-domain scheduling
+  (previously 5 domains/run = 30 calls/day). Fallback domains add up to ~5 extra calls/day worst case.
 - **Circuit-breaker:** fires at 80 calls/day — returns `[]` without making HTTP call
 - Quota tracked in Firestore `quota_events` (`kind == "gnews_call"`)
 - **Never remove the circuit-breaker** in `gnews_service.py`
@@ -540,6 +559,7 @@ Env vars set via `update` persist across `--source .` deploys.
 | `locks` | Distributed generation lock (`video_generation` doc) | If stuck: delete `locks/video_generation` to unblock |
 | `domain_posts` | Tracks which domains posted today | Resets daily; safe to delete if domain coverage is wrong |
 | `suggested_headlines` | 14-day news / 30-day story dedup | Safe to delete — just enables re-use of same topic |
+| `config` | `domain_schedule` doc: rotating domains + last_updated | Safe to delete — defaults to Technology/Current Affairs/Science |
 
 ---
 
