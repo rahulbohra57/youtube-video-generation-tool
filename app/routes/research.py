@@ -44,11 +44,14 @@ def retry_failed(request: Request):
 
 @router.post("/research/update-analytics")
 def update_analytics(request: Request):
-    """Called by Cloud Scheduler daily. Fetches YouTube analytics for all completed jobs."""
+    """Called by Cloud Scheduler daily. Fetches YouTube analytics and runs fortnightly schedule update."""
     secret = request.headers.get("X-Scheduler-Secret", "")
     if secret != SCHEDULER_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
     try:
+        # Fortnightly domain schedule update (no-ops if < 14 days since last update)
+        schedule_updated = lead_researcher.update_domain_schedule()
+
         from app.services import youtube_service
         jobs = firestore_service.list_recent_jobs(limit=200)
         updated = 0
@@ -62,7 +65,7 @@ def update_analytics(request: Request):
             if analytics:
                 firestore_service.update_job_analytics(job["job_id"], analytics)
                 updated += 1
-        return {"status": "ok", "updated": updated}
+        return {"status": "ok", "updated": updated, "schedule_updated": schedule_updated}
     except Exception as e:
         logger.exception(f"update_analytics failed: {e}")
         raise HTTPException(status_code=500, detail="update_analytics_failed")
