@@ -925,6 +925,7 @@ def test_stories_daily_digest_uses_stories_queue_only(mock_fs, mock_get_channel_
     mock_get_channel_stats.return_value = {"subscriber_count": 1, "view_count": 10, "video_count": 2}
     mock_fs._ist_window_start.return_value = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
     mock_fs.get_queue_snapshot.return_value = {"completed_24h": 1, "failed_24h": 0}
+    mock_fs.get_tts_chars_today.return_value = 5000
     mock_fs.get_tts_chars_this_month.return_value = 100
 
     from app.routes import stories
