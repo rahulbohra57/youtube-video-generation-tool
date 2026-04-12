@@ -5,6 +5,8 @@ from vertexai.preview.vision_models import ImageGenerationModel
 from app.config import TEMP_DIR
 from app.utils.helpers import ensure_dir
 import time
+import hashlib
+from PIL import Image, ImageDraw
 
 # imagen-3.0-generate-002 is the latest Imagen 3 model (Jan 2025) with the
 # highest image quality and prompt adherence. 20 QPM quota is sufficient for
@@ -106,3 +108,39 @@ def generate_image(prompt: str, idx: int, aspect_ratio: str = "16:9") -> str:
     raise Exception(
         f"Image generation failed after {len(_QUOTA_RETRY_DELAYS)} quota retries using {MODEL_NAME}: {last_exc}"
     )
+
+
+def generate_fallback_image(idx: int, aspect_ratio: str = "9:16", hint: str = "") -> str:
+    """Generate a local abstract fallback frame when Imagen is unavailable."""
+    if aspect_ratio == "9:16":
+        width, height = 1080, 1920
+    else:
+        width, height = 1920, 1080
+
+    digest = hashlib.sha1(f"{idx}-{hint}".encode("utf-8")).hexdigest()
+    color_a = tuple(int(digest[i:i + 2], 16) for i in (0, 2, 4))
+    color_b = tuple(int(digest[i:i + 2], 16) for i in (6, 8, 10))
+    color_c = tuple(int(digest[i:i + 2], 16) for i in (12, 14, 16))
+
+    image = Image.new("RGB", (width, height), color_a)
+    draw = ImageDraw.Draw(image, "RGBA")
+
+    for row in range(height):
+        blend = row / max(1, height - 1)
+        r = int(color_a[0] * (1 - blend) + color_b[0] * blend)
+        g = int(color_a[1] * (1 - blend) + color_b[1] * blend)
+        b = int(color_a[2] * (1 - blend) + color_b[2] * blend)
+        draw.line([(0, row), (width, row)], fill=(r, g, b, 255))
+
+    draw.ellipse(
+        [(int(width * 0.10), int(height * 0.15)), (int(width * 0.90), int(height * 0.85))],
+        fill=(color_c[0], color_c[1], color_c[2], 80),
+    )
+    draw.rectangle(
+        [(int(width * 0.12), int(height * 0.70)), (int(width * 0.88), int(height * 0.80))],
+        fill=(255, 255, 255, 45),
+    )
+
+    path = f"{TEMP_DIR}/scene_{idx}_fallback.png"
+    image.save(path)
+    return path

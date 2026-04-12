@@ -62,7 +62,7 @@ def post(video_path: str, caption: str, title: str, job_id: str = "", public_id:
             logger.warning(f"YouTube quota exceeded for job {job_id}")
             send_message(chat_id, "⚠️ YouTube daily quota exceeded — sending video for manual posting.", channel_id=channel_id)
             label = f"{source}_quota" if source else "quota"
-        elif "oauth token expired or revoked" in err.lower() or "reconnect via /auth/youtube" in err.lower():
+        elif "oauth token expired or revoked" in err.lower() or "reconnect via" in err.lower():
             logger.warning("YouTube OAuth requires reconnect for channel %s: %s", channel_id, err)
             send_message(chat_id, f"⚠️ {err}", channel_id=channel_id)
             label = f"{source}_oauth_reauth" if source else "oauth_reauth"

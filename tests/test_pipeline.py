@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 from datetime import datetime, timedelta, timezone
+import os
 import pytest
 
 
@@ -183,6 +184,30 @@ def test_generate_script_with_search_falls_back_to_next_model_on_404():
     assert out.startswith("[")
     assert model_404.generate_content.call_count == 1
     assert model_ok.generate_content.call_count == 1
+
+
+def test_generate_script_with_search_raises_unavailable_when_all_models_404():
+    from app.services import llm_service
+
+    llm_service._search_model = None
+    llm_service._search_grounding_disabled = False
+
+    model_404 = MagicMock()
+    model_404.generate_content.side_effect = Exception(
+        "404 POST .../publishers/google/models/gemini-x:generateContent"
+    )
+
+    with patch("app.services.llm_service._SEARCH_MODEL_CANDIDATES", ("m1", "m2", "m3")):
+        with patch("app.services.llm_service._init_search_model", return_value=model_404):
+            with pytest.raises(llm_service.SearchGroundingUnavailable, match="Search grounding is unavailable"):
+                llm_service.generate_script_with_search("AI update")
+
+
+def test_generate_fallback_image_creates_local_png():
+    from app.services.image_service import generate_fallback_image
+    out = generate_fallback_image(idx=99, aspect_ratio="9:16", hint="test hint")
+    assert out.endswith(".png")
+    assert os.path.exists(out)
 
 
 # ---------------------------------------------------------------------------
@@ -879,8 +904,45 @@ def test_get_credentials_raises_reauth_on_invalid_grant(mock_creds_cls, mock_fs)
     mock_creds_cls.return_value = mock_creds
 
     from app.services import youtube_service
-    with pytest.raises(RuntimeError, match="Reconnect via /auth/youtube"):
+    with pytest.raises(RuntimeError, match="Reconnect via https://"):
         youtube_service.get_credentials()
+
+
+@patch("app.services.youtube_service.firestore_service")
+@patch("app.services.youtube_service.Credentials")
+def test_get_credentials_refreshes_when_token_expiry_missing(mock_creds_cls, mock_fs):
+    mock_fs.get_youtube_tokens.return_value = {
+        "access_token": "tok", "refresh_token": "ref",
+        "token_expiry": None, "client_id": "cid", "client_secret": "csec"
+    }
+    mock_creds = MagicMock()
+    mock_creds.expired = False
+    mock_creds.refresh_token = "ref"
+    mock_creds.token = "new-token"
+    mock_creds.expiry = None
+    mock_creds_cls.return_value = mock_creds
+
+    from app.services import youtube_service
+    youtube_service.get_credentials()
+
+    assert mock_creds.refresh.call_count == 1
+    assert mock_fs.save_youtube_tokens.call_count == 1
+
+
+@patch("app.services.youtube_service.build")
+@patch("app.services.youtube_service.MediaFileUpload")
+@patch("app.services.youtube_service.get_credentials")
+def test_upload_video_raises_reauth_message_on_refresh_error(mock_get_creds, _mock_media, mock_build):
+    from google.auth.exceptions import RefreshError
+
+    mock_get_creds.return_value = MagicMock()
+    mock_request = MagicMock()
+    mock_request.execute.side_effect = RefreshError("invalid_grant: Token has been expired or revoked.")
+    mock_build.return_value.videos().insert.return_value = mock_request
+
+    from app.services import youtube_service
+    with pytest.raises(RuntimeError, match="Reconnect via https://"):
+        youtube_service.upload_video("/tmp/test.mp4", "t", "d")
 
 
 @patch("app.routes.auth.firestore_service")

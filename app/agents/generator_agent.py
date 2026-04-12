@@ -12,12 +12,13 @@ from app.services import firestore_service
 from app.services.llm_service import (
     generate_script,
     generate_script_with_search,
+    SearchGroundingUnavailable,
     generate_story_script,
     classify_music_genre,
     apply_quality_controls,
 )
 from app.services.tts_service import generate_audio, choose_voice_for_video
-from app.services.image_service import generate_image
+from app.services.image_service import generate_image, generate_fallback_image
 from app.services.video_service import create_video
 from app.services.telegram_service import send_message
 from app.utils.helpers import extract_json, ensure_dir, cleanup_files_older_than
@@ -255,6 +256,14 @@ def run(
             language = "en"
             try:
                 raw_script = generate_script_with_search(headline, language="en", aspect_ratio="9:16", context=details or "")
+            except SearchGroundingUnavailable:
+                send_message(
+                    _chat_id,
+                    f"ℹ️ Search grounding is currently unavailable for `{public_id or effective_job_id}`. "
+                    f"Using standard script generation.",
+                    channel_id=channel_id,
+                )
+                raw_script = generate_script(headline, language="en", aspect_ratio="9:16", context=details or "")
             except Exception as _search_exc:
                 logger.warning("Search-grounded script generation failed (%s), falling back to standard", _search_exc)
                 send_message(
@@ -284,6 +293,7 @@ def run(
         music_genre = classify_music_genre(headline)
         video_clips = []
         image_failures = 0
+        backup_visuals_enabled = False
 
         for i, scene in enumerate(scenes):
             if _is_cancel_requested(effective_job_id):
@@ -352,6 +362,38 @@ def run(
                 video_clips.append((image_path, audio_path, narration))
                 time.sleep(2)
             except Exception as e:
+                if channel_id == "stories":
+                    if not backup_visuals_enabled:
+                        backup_visuals_enabled = True
+                        send_message(
+                            _chat_id,
+                            f"⚠️ Imagen is unavailable for `{public_id or effective_job_id}` right now. "
+                            f"Switching to backup visuals so the story can still be posted.",
+                            channel_id=channel_id,
+                        )
+                    if "audio_path" not in locals() or not audio_path:
+                        logger.error("Cannot use backup visual for scene %s because audio_path is missing", i)
+                    else:
+                        try:
+                            backup_image_path = generate_fallback_image(
+                                idx=i,
+                                aspect_ratio="9:16",
+                                hint=narration or visual or headline,
+                            )
+                            firestore_service.mark_scene_checkpoint(
+                                effective_job_id,
+                                i,
+                                "completed",
+                                audio_path=audio_path,
+                                image_path=backup_image_path,
+                                retries_audio=0,
+                                retries_image=0,
+                                note="fallback_visual",
+                            )
+                            video_clips.append((backup_image_path, audio_path, narration))
+                            continue
+                        except Exception as backup_exc:
+                            logger.error(f"Fallback visual generation failed for scene {i}: {backup_exc}")
                 image_failures += 1
                 logger.error(f"Scene {i} failed: {e}")
                 firestore_service.mark_scene_checkpoint(

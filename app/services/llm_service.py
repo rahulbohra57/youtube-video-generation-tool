@@ -155,6 +155,12 @@ _SEARCH_MODEL_CANDIDATES = (
     "gemini-2.0-flash",
     "gemini-2.0-flash-001",
 )
+_search_grounding_disabled = False
+
+
+class SearchGroundingUnavailable(RuntimeError):
+    """Raised when Vertex search grounding is unavailable for all candidate models."""
+    pass
 
 
 def _init_search_model(model_name: str):
@@ -188,6 +194,12 @@ def generate_script_with_search(topic: str, language: str = "en", aspect_ratio: 
     Falls back gracefully — callers should catch exceptions and fall back to
     generate_script() if this fails.
     """
+    global _search_grounding_disabled
+    if _search_grounding_disabled:
+        raise SearchGroundingUnavailable(
+            "Search grounding is unavailable for this project/region. Falling back to standard generation."
+        )
+
     from datetime import date
     today_str = date.today().isoformat()
     lang_instruction = _LANG_INSTRUCTIONS.get(language, _LANG_INSTRUCTIONS["en"])
@@ -268,6 +280,7 @@ Additional format constraints:
 """
 
     last_exc: Exception | None = None
+    not_found_count = 0
     for idx, model_name in enumerate(_SEARCH_MODEL_CANDIDATES):
         search_model = _get_search_model(candidate_index=idx)
         logger.info("generate_script_with_search using model: %s", model_name)
@@ -277,6 +290,7 @@ Additional format constraints:
         except Exception as exc:
             last_exc = exc
             if _is_model_not_found_error(exc):
+                not_found_count += 1
                 logger.warning(
                     "Search model '%s' unavailable for grounding: %s. Trying fallback model.",
                     model_name,
@@ -287,6 +301,11 @@ Additional format constraints:
                 continue
             logger.warning("generate_script_with_search failed on model '%s': %s", model_name, exc)
             break
+    if not_found_count == len(_SEARCH_MODEL_CANDIDATES):
+        _search_grounding_disabled = True
+        raise SearchGroundingUnavailable(
+            "Search grounding is unavailable for this project/region. Falling back to standard generation."
+        )
     raise last_exc  # type: ignore[misc]
 
 

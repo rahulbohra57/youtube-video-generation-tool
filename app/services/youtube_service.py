@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 
 from app.services import firestore_service  # noqa: E402 (used by playlist helpers)
 from app.config import (
+    CLOUD_RUN_URL,
     YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET,
     STORIES_YOUTUBE_CLIENT_ID, STORIES_YOUTUBE_CLIENT_SECRET,
 )
@@ -34,6 +35,14 @@ _GENRE_TO_CATEGORY: dict[str, str] = {
 _DEFAULT_CATEGORY = "28"  # Science & Technology — better default than News & Politics
 
 
+def _auth_path(channel_id: str) -> str:
+    return "/auth/youtube/stories" if channel_id == "stories" else "/auth/youtube"
+
+
+def _auth_url(channel_id: str) -> str:
+    return f"{CLOUD_RUN_URL.rstrip('/')}{_auth_path(channel_id)}"
+
+
 def genre_to_category_id(genre: str) -> str:
     return _GENRE_TO_CATEGORY.get((genre or "").strip().lower(), _DEFAULT_CATEGORY)
 
@@ -52,8 +61,9 @@ def normalize_title(title: str, limit: int = 100) -> str:
 def get_credentials(channel_id: str = "news") -> Credentials:
     tokens = firestore_service.get_youtube_tokens(channel_id=channel_id)
     if not tokens:
-        auth_url = "/auth/youtube/stories" if channel_id == "stories" else "/auth/youtube"
-        raise RuntimeError(f"YouTube OAuth tokens not found for channel '{channel_id}'. Run {auth_url} first.")
+        raise RuntimeError(
+            f"YouTube OAuth tokens not found for channel '{channel_id}'. Reconnect via {_auth_url(channel_id)}."
+        )
 
     client_id = STORIES_YOUTUBE_CLIENT_ID if channel_id == "stories" else YOUTUBE_CLIENT_ID
     client_secret = STORIES_YOUTUBE_CLIENT_SECRET if channel_id == "stories" else YOUTUBE_CLIENT_SECRET
@@ -67,13 +77,14 @@ def get_credentials(channel_id: str = "news") -> Credentials:
         scopes=_SCOPES,
     )
 
-    auth_url = "/auth/youtube/stories" if channel_id == "stories" else "/auth/youtube"
+    reconnect_url = _auth_url(channel_id)
+    needs_refresh = bool(creds.refresh_token) and (creds.expired or not tokens.get("token_expiry"))
 
     try:
-        if creds.expired:
+        if needs_refresh:
             if not creds.refresh_token:
                 raise RuntimeError(
-                    f"YouTube OAuth refresh token missing for channel '{channel_id}'. Reconnect via {auth_url}."
+                    f"YouTube OAuth refresh token missing for channel '{channel_id}'. Reconnect via {reconnect_url}."
                 )
             creds.refresh(Request())
             firestore_service.save_youtube_tokens({
@@ -87,10 +98,10 @@ def get_credentials(channel_id: str = "news") -> Credentials:
         msg = str(e).lower()
         if "invalid_grant" in msg or "expired or revoked" in msg:
             raise RuntimeError(
-                f"YouTube OAuth token expired or revoked for channel '{channel_id}'. Reconnect via {auth_url}."
+                f"YouTube OAuth token expired or revoked for channel '{channel_id}'. Reconnect via {reconnect_url}."
             ) from e
         raise RuntimeError(
-            f"YouTube OAuth refresh failed for channel '{channel_id}'. Reconnect via {auth_url}. Details: {e}"
+            f"YouTube OAuth refresh failed for channel '{channel_id}'. Reconnect via {reconnect_url}. Details: {e}"
         ) from e
 
     return creds
@@ -122,8 +133,21 @@ def upload_video(video_path: str, title: str, description: str, genre: str = "",
     request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
     try:
         response = request.execute()
+    except RefreshError as e:
+        msg = str(e).lower()
+        if "invalid_grant" in msg or "expired or revoked" in msg:
+            raise RuntimeError(
+                f"YouTube OAuth token expired or revoked for channel '{channel_id}'. Reconnect via {_auth_url(channel_id)}."
+            ) from e
+        raise RuntimeError(
+            f"YouTube auth failed for channel '{channel_id}'. Reconnect via {_auth_url(channel_id)}. Details: {e}"
+        ) from e
     except HttpError as e:
         content_str = str(e.content).lower()
+        if e.resp.status in (401, 403) and any(kw in content_str for kw in ("invalid_grant", "expired or revoked")):
+            raise RuntimeError(
+                f"YouTube OAuth token expired or revoked for channel '{channel_id}'. Reconnect via {_auth_url(channel_id)}."
+            ) from e
         if e.resp.status in (403, 429) and any(
             kw in content_str for kw in ("quotaexceeded", "dailylimitexceeded", "userrequestedtoofast", "forbidden")
         ):
