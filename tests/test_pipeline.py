@@ -162,6 +162,29 @@ def test_format_caption_for_youtube_normalizes_spacing_and_hashtags():
     assert "\n\n#AI #Tech" in out
 
 
+def test_generate_script_with_search_falls_back_to_next_model_on_404():
+    from app.services import llm_service
+
+    llm_service._search_model = None
+    model_404 = MagicMock()
+    model_404.generate_content.side_effect = Exception(
+        "404 POST .../publishers/google/models/gemini-2.5-flash:generateContent"
+    )
+    model_ok = MagicMock()
+    model_ok.generate_content.return_value = MagicMock(text='[{"scene":1,"narration":"n","visual":"v"}]')
+
+    def _factory(name: str):
+        return model_404 if name == "gemini-2.5-flash" else model_ok
+
+    with patch("app.services.llm_service._SEARCH_MODEL_CANDIDATES", ("gemini-2.5-flash", "gemini-2.0-flash")):
+        with patch("app.services.llm_service._init_search_model", side_effect=_factory):
+            out = llm_service.generate_script_with_search("AI update")
+
+    assert out.startswith("[")
+    assert model_404.generate_content.call_count == 1
+    assert model_ok.generate_content.call_count == 1
+
+
 # ---------------------------------------------------------------------------
 # Task 5: telegram_service
 # ---------------------------------------------------------------------------
@@ -838,6 +861,40 @@ def test_get_credentials_raises_when_no_tokens(mock_fs):
     from app.services import youtube_service
     with pytest.raises(RuntimeError, match="YouTube OAuth tokens not found"):
         youtube_service.get_credentials()
+
+
+@patch("app.services.youtube_service.firestore_service")
+@patch("app.services.youtube_service.Credentials")
+def test_get_credentials_raises_reauth_on_invalid_grant(mock_creds_cls, mock_fs):
+    from google.auth.exceptions import RefreshError
+
+    mock_fs.get_youtube_tokens.return_value = {
+        "access_token": "tok", "refresh_token": "ref",
+        "token_expiry": None, "client_id": "cid", "client_secret": "csec"
+    }
+    mock_creds = MagicMock()
+    mock_creds.expired = True
+    mock_creds.refresh_token = "ref"
+    mock_creds.refresh.side_effect = RefreshError("invalid_grant: Token has been expired or revoked.")
+    mock_creds_cls.return_value = mock_creds
+
+    from app.services import youtube_service
+    with pytest.raises(RuntimeError, match="Reconnect via /auth/youtube"):
+        youtube_service.get_credentials()
+
+
+@patch("app.routes.auth.firestore_service")
+@patch("app.routes.auth.httpx.post")
+def test_youtube_callback_keeps_existing_refresh_token(mock_post, mock_fs):
+    mock_post.return_value = MagicMock(json=lambda: {"access_token": "new-access"})
+    mock_fs.get_youtube_tokens.return_value = {"refresh_token": "persisted-refresh"}
+
+    from app.routes import auth
+    auth.youtube_callback(code="abc123")
+
+    saved = mock_fs.save_youtube_tokens.call_args[0][0]
+    assert saved["access_token"] == "new-access"
+    assert saved["refresh_token"] == "persisted-refresh"
 
 
 # ---------------------------------------------------------------------------

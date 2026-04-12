@@ -150,18 +150,34 @@ Additional format constraints:
 
 
 _search_model = None  # lazily initialised on first call
+_SEARCH_MODEL_CANDIDATES = (
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-001",
+)
 
 
-def _get_search_model():
+def _init_search_model(model_name: str):
+    from vertexai.generative_models import Tool, grounding as vgrounding
+    search_tool = Tool.from_google_search_retrieval(vgrounding.GoogleSearchRetrieval())
+    return GenerativeModel(model_name, tools=[search_tool])
+
+
+def _get_search_model(candidate_index: int = 0):
     global _search_model
     if _search_model is None:
-        from vertexai.generative_models import Tool, grounding as vgrounding
-        search_tool = Tool.from_google_search_retrieval(vgrounding.GoogleSearchRetrieval())
-        # gemini-2.0-flash-001 is the pinned stable version that supports
-        # google_search_retrieval. The unversioned alias gemini-2.5-flash returns
-        # 404 on this tool type; gemini-2.0-flash-001 is the correct choice.
-        _search_model = GenerativeModel("gemini-2.0-flash-001", tools=[search_tool])
+        model_name = _SEARCH_MODEL_CANDIDATES[min(candidate_index, len(_SEARCH_MODEL_CANDIDATES) - 1)]
+        _search_model = _init_search_model(model_name)
     return _search_model
+
+
+def _is_model_not_found_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return (
+        "404" in msg
+        or "not found" in msg
+        or "publishers/google/models/" in msg
+    )
 
 
 def generate_script_with_search(topic: str, language: str = "en", aspect_ratio: str = "16:9", context: str = "") -> str:
@@ -172,8 +188,6 @@ def generate_script_with_search(topic: str, language: str = "en", aspect_ratio: 
     Falls back gracefully — callers should catch exceptions and fall back to
     generate_script() if this fails.
     """
-    search_model = _get_search_model()
-
     from datetime import date
     today_str = date.today().isoformat()
     lang_instruction = _LANG_INSTRUCTIONS.get(language, _LANG_INSTRUCTIONS["en"])
@@ -254,19 +268,25 @@ Additional format constraints:
 """
 
     last_exc: Exception | None = None
-    for attempt in range(3):
+    for idx, model_name in enumerate(_SEARCH_MODEL_CANDIDATES):
+        search_model = _get_search_model(candidate_index=idx)
+        logger.info("generate_script_with_search using model: %s", model_name)
         try:
             response = search_model.generate_content(prompt)
             return _response_text(response)
         except Exception as exc:
             last_exc = exc
-            logger.warning(
-                "generate_script_with_search attempt %d/3 failed: %s",
-                attempt + 1,
-                exc,
-            )
-            if attempt < 2:
-                import time; time.sleep(5)
+            if _is_model_not_found_error(exc):
+                logger.warning(
+                    "Search model '%s' unavailable for grounding: %s. Trying fallback model.",
+                    model_name,
+                    exc,
+                )
+                global _search_model
+                _search_model = None
+                continue
+            logger.warning("generate_script_with_search failed on model '%s': %s", model_name, exc)
+            break
     raise last_exc  # type: ignore[misc]
 
 

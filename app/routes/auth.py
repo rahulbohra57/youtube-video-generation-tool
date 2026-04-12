@@ -69,9 +69,12 @@ def youtube_callback(code: str, state: str = "", error: str = ""):
             detail=f"Token exchange failed: {token.get('error_description', token['error'])}",
         )
 
+    existing = firestore_service.get_youtube_tokens(channel_id="news") or {}
+    refresh_token = token.get("refresh_token") or existing.get("refresh_token")
+
     firestore_service.save_youtube_tokens({
         "access_token":  token["access_token"],
-        "refresh_token": token.get("refresh_token"),
+        "refresh_token": refresh_token,
         "token_expiry":  None,
         "client_id":     YOUTUBE_CLIENT_ID,
         "client_secret": YOUTUBE_CLIENT_SECRET,
@@ -128,9 +131,12 @@ def youtube_stories_callback(code: str, state: str = "", error: str = ""):
             detail=f"Token exchange failed: {token.get('error_description', token['error'])}",
         )
 
+    existing = firestore_service.get_youtube_tokens(channel_id="stories") or {}
+    refresh_token = token.get("refresh_token") or existing.get("refresh_token")
+
     firestore_service.save_youtube_tokens({
         "access_token":  token["access_token"],
-        "refresh_token": token.get("refresh_token"),
+        "refresh_token": refresh_token,
         "token_expiry":  None,
         "client_id":     STORIES_YOUTUBE_CLIENT_ID,
         "client_secret": STORIES_YOUTUBE_CLIENT_SECRET,

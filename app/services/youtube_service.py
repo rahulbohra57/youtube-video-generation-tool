@@ -2,6 +2,7 @@
 
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
+from google.auth.exceptions import RefreshError
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
@@ -66,15 +67,31 @@ def get_credentials(channel_id: str = "news") -> Credentials:
         scopes=_SCOPES,
     )
 
-    if creds.expired and creds.refresh_token:
-        creds.refresh(Request())
-        firestore_service.save_youtube_tokens({
-            "access_token": creds.token,
-            "refresh_token": creds.refresh_token,
-            "token_expiry": creds.expiry.isoformat() if creds.expiry else None,
-            "client_id": client_id,
-            "client_secret": client_secret,
-        }, channel_id=channel_id)
+    auth_url = "/auth/youtube/stories" if channel_id == "stories" else "/auth/youtube"
+
+    try:
+        if creds.expired:
+            if not creds.refresh_token:
+                raise RuntimeError(
+                    f"YouTube OAuth refresh token missing for channel '{channel_id}'. Reconnect via {auth_url}."
+                )
+            creds.refresh(Request())
+            firestore_service.save_youtube_tokens({
+                "access_token": creds.token,
+                "refresh_token": creds.refresh_token or tokens.get("refresh_token"),
+                "token_expiry": creds.expiry.isoformat() if creds.expiry else None,
+                "client_id": client_id,
+                "client_secret": client_secret,
+            }, channel_id=channel_id)
+    except RefreshError as e:
+        msg = str(e).lower()
+        if "invalid_grant" in msg or "expired or revoked" in msg:
+            raise RuntimeError(
+                f"YouTube OAuth token expired or revoked for channel '{channel_id}'. Reconnect via {auth_url}."
+            ) from e
+        raise RuntimeError(
+            f"YouTube OAuth refresh failed for channel '{channel_id}'. Reconnect via {auth_url}. Details: {e}"
+        ) from e
 
     return creds
 
