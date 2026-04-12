@@ -157,10 +157,10 @@ def _get_search_model():
     if _search_model is None:
         from vertexai.generative_models import Tool, grounding as vgrounding
         search_tool = Tool.from_google_search_retrieval(vgrounding.GoogleSearchRetrieval())
-        # gemini-2.0-flash supports google_search_retrieval tool type.
-        # gemini-2.5-flash dropped that API (returns 400) — grounding quality
-        # is driven by search results, not model version, so 2.0-flash is correct here.
-        _search_model = GenerativeModel("gemini-2.0-flash", tools=[search_tool])
+        # gemini-2.0-flash-001 is the pinned stable version that supports
+        # google_search_retrieval. The unversioned alias gemini-2.5-flash returns
+        # 404 on this tool type; gemini-2.0-flash-001 is the correct choice.
+        _search_model = GenerativeModel("gemini-2.0-flash-001", tools=[search_tool])
     return _search_model
 
 
@@ -533,6 +533,7 @@ VISUAL PROMPT नियम:
 - कोई असली व्यक्ति, धार्मिक प्रतीक, copyright characters नहीं
 - प्रकृति, गाँव, जंगल, नदी जैसी settings को प्राथमिकता दो
 - No text, no words, no signs in the image
+- CRITICAL — SAFETY: ALL visuals must be bright, warm, and child-friendly. Even for mystery/thriller/crime genres, convey curiosity and wonder — NEVER darkness, fear, danger, or violence. No sinister shadows, no weapons, no blood, no frightening creatures, no ominous imagery. Use symbolic and metaphorical visuals (e.g. a glowing lantern for mystery, a winding path for adventure). Imagen will reject dark or frightening content.
 
 सिर्फ valid JSON array return करो, कोई markdown नहीं:
 [
