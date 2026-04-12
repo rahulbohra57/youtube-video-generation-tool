@@ -326,7 +326,7 @@ def run(
             try:
                 audio_path = os.path.join(TEMP_DIR, f"audio_{code}_{i}.mp3")
                 _, audio_retries = _run_with_backoff(
-                    lambda n=narration, p=audio_path: generate_audio(n, p, language=language, voice_name=selected_voice)
+                    lambda n=narration, p=audio_path: generate_audio(n, p, language=language, voice_name=selected_voice, channel_id=channel_id)
                 )
                 firestore_service.mark_scene_checkpoint(
                     effective_job_id,

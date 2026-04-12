@@ -77,7 +77,7 @@ def choose_voice_for_video(language: str = "en", preference: str = "shuffle", do
     return random.choice(selected)["name"]
 
 
-def generate_audio(text: str, output_file: str, language: str = "en", voice_name: str | None = None):
+def generate_audio(text: str, output_file: str, language: str = "en", voice_name: str | None = None, channel_id: str = ""):
     if texttospeech is None:
         raise RuntimeError(
             "google-cloud-texttospeech is not installed or could not be imported."
@@ -114,7 +114,7 @@ def generate_audio(text: str, output_file: str, language: str = "en", voice_name
             print(f"[TTS] Voice: {voice_name}")
             try:
                 from app.services import firestore_service
-                firestore_service.record_quota_event("tts_chars", details=str(len(text or "")))
+                firestore_service.record_quota_event("tts_chars", details=str(len(text or "")), channel_id=channel_id)
             except Exception:
                 pass
             return

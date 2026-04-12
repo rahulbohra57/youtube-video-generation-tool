@@ -363,13 +363,16 @@ def get_queue_snapshot(window_start=None, channel_id: str | None = None) -> dict
     }
 
 
-def record_quota_event(kind: str, details: str = ""):
+def record_quota_event(kind: str, details: str = "", channel_id: str = ""):
     try:
-        _get_db().collection("quota_events").add({
+        doc = {
             "kind": kind,
             "details": details[:500],
             "created_at": datetime.now(timezone.utc).isoformat(),
-        })
+        }
+        if channel_id:
+            doc["channel_id"] = channel_id
+        _get_db().collection("quota_events").add(doc)
     except Exception:
         return
 
@@ -668,7 +671,7 @@ def get_gnews_calls_today(window_start=None) -> int:
         return 0
 
 
-def get_tts_chars_today(window_start=None) -> int:
+def get_tts_chars_today(window_start=None, channel_id: str = "") -> int:
     """Return total TTS chars synthesized since 8am IST today (avoids composite index by filtering in Python)."""
     try:
         window_start_ts = (window_start or _ist_window_start()).timestamp()
@@ -684,6 +687,8 @@ def get_tts_chars_today(window_start=None) -> int:
             data = d.to_dict() or {}
             if data.get("kind") != "tts_chars":
                 continue
+            if channel_id and data.get("channel_id", "") != channel_id:
+                continue
             ts = _parse_iso(data.get("created_at"))
             if not ts or ts.timestamp() < window_start_ts:
                 continue
@@ -696,7 +701,7 @@ def get_tts_chars_today(window_start=None) -> int:
         return 0
 
 
-def get_tts_chars_this_month() -> int:
+def get_tts_chars_this_month(channel_id: str = "") -> int:
     """Return total TTS chars synthesized since the 1st of the current UTC month.
 
     Uses the same quota_events collection as get_tts_chars_today but with a
@@ -722,6 +727,8 @@ def get_tts_chars_this_month() -> int:
             if ts.timestamp() < month_start_ts:
                 break  # descending order — everything remaining is older
             if data.get("kind") != "tts_chars":
+                continue
+            if channel_id and data.get("channel_id", "") != channel_id:
                 continue
             try:
                 total += int(data.get("details", "0") or "0")

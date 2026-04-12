@@ -67,7 +67,8 @@ def _send_stories_daily_digest():
     prev_window_start = current_window_start - timedelta(hours=24)
 
     queue = firestore_service.get_queue_snapshot(window_start=prev_window_start, channel_id="stories")
-    tts_chars_month = firestore_service.get_tts_chars_this_month()
+    tts_chars_today = firestore_service.get_tts_chars_today(window_start=prev_window_start, channel_id="stories")
+    tts_chars_month = firestore_service.get_tts_chars_this_month(channel_id="stories")
     tts_pct = round((tts_chars_month / 1_000_000) * 100, 1)
 
     message = (
@@ -79,8 +80,8 @@ def _send_stories_daily_digest():
         f"⚙️ Pipeline (24h)\n"
         f"  Completed: {queue.get('completed_24h', 0)}\n"
         f"  Failed: {queue.get('failed_24h', 0)}\n\n"
-        f"📊 TTS Usage This Month\n"
-        f"  {tts_chars_month:,} chars ({tts_pct}% of 1M free tier)"
+        f"📊 TTS Usage Today\n"
+        f"  {tts_chars_today:,} today | {tts_chars_month:,} this month ({tts_pct}% of 1M free tier)"
     )
     telegram_service.send_message(STORIES_CHAT_ID, message, channel_id="stories")
 

@@ -261,8 +261,8 @@ def send_daily_digest():
     quota = firestore_service.get_quota_usage_snapshot()
 
     # TTS usage: daily (previous window) + actual month-to-date cumulative total
-    tts_chars_today = firestore_service.get_tts_chars_today(window_start=prev_window_start)
-    tts_chars_month = firestore_service.get_tts_chars_this_month()
+    tts_chars_today = firestore_service.get_tts_chars_today(window_start=prev_window_start, channel_id="news")
+    tts_chars_month = firestore_service.get_tts_chars_this_month(channel_id="news")
     tts_pct = round((tts_chars_month / 1_000_000) * 100, 1)
 
     # GNews calls in previous window
