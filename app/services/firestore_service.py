@@ -687,8 +687,13 @@ def get_tts_chars_today(window_start=None, channel_id: str = "") -> int:
             data = d.to_dict() or {}
             if data.get("kind") != "tts_chars":
                 continue
-            if channel_id and data.get("channel_id", "") != channel_id:
-                continue
+            if channel_id:
+                event_channel = data.get("channel_id", "")
+                # Events recorded before channel_id was added have no field — treat
+                # them as "news" (the only channel that existed at that time).
+                effective_channel = event_channel if event_channel else "news"
+                if effective_channel != channel_id:
+                    continue
             ts = _parse_iso(data.get("created_at"))
             if not ts or ts.timestamp() < window_start_ts:
                 continue
@@ -728,8 +733,11 @@ def get_tts_chars_this_month(channel_id: str = "") -> int:
                 break  # descending order — everything remaining is older
             if data.get("kind") != "tts_chars":
                 continue
-            if channel_id and data.get("channel_id", "") != channel_id:
-                continue
+            if channel_id:
+                event_channel = data.get("channel_id", "")
+                effective_channel = event_channel if event_channel else "news"
+                if effective_channel != channel_id:
+                    continue
             try:
                 total += int(data.get("details", "0") or "0")
             except (ValueError, TypeError):
