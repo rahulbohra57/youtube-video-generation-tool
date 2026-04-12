@@ -27,6 +27,24 @@ _QUOTA_RETRY_DELAYS = [30, 60, 120]
 SAFETY_FILTER_ERROR_PREFIX = "imagen_safety_filter:"
 
 
+def _first_generated_image(images_response):
+    """Return first generated image object across SDK response shapes."""
+    if images_response is None:
+        return None
+
+    nested = getattr(images_response, "images", None)
+    if nested:
+        return nested[0]
+
+    try:
+        if len(images_response) > 0:
+            return images_response[0]
+    except Exception:
+        pass
+
+    return None
+
+
 def generate_image(prompt: str, idx: int, aspect_ratio: str = "16:9") -> str:
     """Generate one image for a scene. Returns the local file path.
 
@@ -75,7 +93,8 @@ def generate_image(prompt: str, idx: int, aspect_ratio: str = "16:9") -> str:
                 ),
             )
 
-            if not images:
+            first_image = _first_generated_image(images)
+            if first_image is None:
                 # Safety / content-policy filter: Imagen accepted the request but
                 # returned zero images. Retrying the same prompt will produce the
                 # same result — raise with a detectable prefix so the caller skips
@@ -86,7 +105,7 @@ def generate_image(prompt: str, idx: int, aspect_ratio: str = "16:9") -> str:
                 )
 
             path = f"{TEMP_DIR}/scene_{idx}.png"
-            images[0].save(location=path)
+            first_image.save(location=path)
             return path
 
         except Exception as e:

@@ -388,7 +388,6 @@ def run(
                                 image_path=backup_image_path,
                                 retries_audio=0,
                                 retries_image=0,
-                                note="fallback_visual",
                             )
                             video_clips.append((backup_image_path, audio_path, narration))
                             continue

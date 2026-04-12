@@ -210,6 +210,22 @@ def test_generate_fallback_image_creates_local_png():
     assert os.path.exists(out)
 
 
+@patch("app.services.image_service.model")
+def test_generate_image_empty_response_raises_safety_filter(mock_model):
+    class _EmptyTruthy:
+        def __bool__(self):
+            return True
+
+        def __len__(self):
+            return 0
+
+    mock_model.generate_images.return_value = _EmptyTruthy()
+
+    from app.services.image_service import generate_image, SAFETY_FILTER_ERROR_PREFIX
+    with pytest.raises(Exception, match=SAFETY_FILTER_ERROR_PREFIX):
+        generate_image("test prompt", idx=1, aspect_ratio="9:16")
+
+
 # ---------------------------------------------------------------------------
 # Task 5: telegram_service
 # ---------------------------------------------------------------------------
