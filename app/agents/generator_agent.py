@@ -18,7 +18,7 @@ from app.services.llm_service import (
     apply_quality_controls,
 )
 from app.services.tts_service import generate_audio, choose_voice_for_video
-from app.services.image_service import generate_image, generate_fallback_image
+from app.services.image_service import generate_image
 from app.services.video_service import create_video
 from app.services.telegram_service import send_message
 from app.utils.helpers import extract_json, ensure_dir, cleanup_files_older_than
@@ -293,7 +293,6 @@ def run(
         music_genre = classify_music_genre(headline)
         video_clips = []
         image_failures = 0
-        backup_visuals_enabled = False
 
         for i, scene in enumerate(scenes):
             if _is_cancel_requested(effective_job_id):
@@ -360,39 +359,8 @@ def run(
                     retries_image=image_retries,
                 )
                 video_clips.append((image_path, audio_path, narration))
-                time.sleep(2)
+                time.sleep(8)
             except Exception as e:
-                if channel_id == "stories":
-                    if not backup_visuals_enabled:
-                        backup_visuals_enabled = True
-                        send_message(
-                            _chat_id,
-                            f"⚠️ Imagen is unavailable for `{public_id or effective_job_id}` right now. "
-                            f"Switching to backup visuals so the story can still be posted.",
-                            channel_id=channel_id,
-                        )
-                    if "audio_path" not in locals() or not audio_path:
-                        logger.error("Cannot use backup visual for scene %s because audio_path is missing", i)
-                    else:
-                        try:
-                            backup_image_path = generate_fallback_image(
-                                idx=i,
-                                aspect_ratio="9:16",
-                                hint=narration or visual or headline,
-                            )
-                            firestore_service.mark_scene_checkpoint(
-                                effective_job_id,
-                                i,
-                                "completed",
-                                audio_path=audio_path,
-                                image_path=backup_image_path,
-                                retries_audio=0,
-                                retries_image=0,
-                            )
-                            video_clips.append((backup_image_path, audio_path, narration))
-                            continue
-                        except Exception as backup_exc:
-                            logger.error(f"Fallback visual generation failed for scene {i}: {backup_exc}")
                 image_failures += 1
                 logger.error(f"Scene {i} failed: {e}")
                 firestore_service.mark_scene_checkpoint(
@@ -403,17 +371,20 @@ def run(
                 )
                 if _is_safety_filter_error(e):
                     firestore_service.record_quota_event("image_safety_filter", str(e))
+                    _scene_err_reason = "prompt blocked by safety filter"
                 elif _is_quota_error(e):
                     firestore_service.record_quota_event("image_quota_error", str(e))
+                    _scene_err_reason = "Imagen quota exhausted"
                 else:
                     firestore_service.record_quota_event("image_error", str(e))
+                    _scene_err_reason = str(e)[:120]
                 # If ALL scenes have failed, notify and abort early
                 if image_failures >= MAX_SCENES:
                     send_message(
                         _chat_id,
-                        f"❌ Image generation failed for *{code}* — all scenes failed "
-                        f"(Imagen quota exhausted or prompts blocked by safety filter). "
-                        f"The video has been dropped. Please try again later.",
+                        f"❌ Image generation failed for *{code}* — all {MAX_SCENES} scenes failed.\n"
+                        f"Reason: {_scene_err_reason}\n"
+                        f"Video has been dropped. Please try again later.",
                         channel_id=channel_id,
                     )
                     firestore_service.create_or_update_job(

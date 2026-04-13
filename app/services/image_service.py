@@ -34,7 +34,11 @@ def _first_generated_image(images_response):
 
     nested = getattr(images_response, "images", None)
     if nested:
-        return nested[0]
+        try:
+            return nested[0]
+        except (IndexError, Exception):
+            # SDK wrapper is truthy but empty — treat as filtered response.
+            return None
 
     try:
         if len(images_response) > 0:
@@ -111,10 +115,19 @@ def generate_image(prompt: str, idx: int, aspect_ratio: str = "16:9") -> str:
         except Exception as e:
             err = str(e)
             is_rate_limit = "429" in err or "quota" in err.lower() or "resource exhausted" in err.lower()
+            # SDK sometimes raises IndexError instead of returning an empty list
+            # when a response is filtered. Treat it the same as a safety filter.
+            is_index_error = isinstance(e, IndexError) or "list index out of range" in err
 
             if err.startswith(SAFETY_FILTER_ERROR_PREFIX):
                 # Never retry safety-filter rejections — the same prompt = same block.
                 raise
+
+            if is_index_error:
+                raise Exception(
+                    f"{SAFETY_FILTER_ERROR_PREFIX} Imagen SDK raised IndexError for scene {idx} "
+                    "(likely empty/filtered response)"
+                )
 
             if is_rate_limit:
                 print(f"Retry {attempt} failed (rate limit – waiting {wait}s): {e}")
@@ -129,36 +142,101 @@ def generate_image(prompt: str, idx: int, aspect_ratio: str = "16:9") -> str:
     )
 
 
-def generate_fallback_image(idx: int, aspect_ratio: str = "9:16", hint: str = "") -> str:
-    """Generate a local abstract fallback frame when Imagen is unavailable."""
+def generate_fallback_image(idx: int, aspect_ratio: str = "9:16", hint: str = "", language: str = "en") -> str:
+    """Generate a text-card fallback frame when Imagen is unavailable.
+
+    Renders the narration text centred on a gradient background so the frame
+    carries actual content rather than looking like a blank slide.
+    """
+    from PIL import ImageFont
+
     if aspect_ratio == "9:16":
         width, height = 1080, 1920
     else:
         width, height = 1920, 1080
 
+    # Deterministic but visually distinct palette per scene — kept dark so
+    # white text remains readable regardless of which colours are chosen.
     digest = hashlib.sha1(f"{idx}-{hint}".encode("utf-8")).hexdigest()
-    color_a = tuple(int(digest[i:i + 2], 16) for i in (0, 2, 4))
-    color_b = tuple(int(digest[i:i + 2], 16) for i in (6, 8, 10))
-    color_c = tuple(int(digest[i:i + 2], 16) for i in (12, 14, 16))
 
-    image = Image.new("RGB", (width, height), color_a)
+    def _dark(hex_pair: str) -> int:
+        return max(20, min(100, int(hex_pair, 16)))
+
+    top_color = tuple(_dark(digest[i:i + 2]) for i in (0, 2, 4))
+    bot_color = tuple(_dark(digest[i:i + 2]) for i in (6, 8, 10))
+
+    image = Image.new("RGB", (width, height), top_color)
     draw = ImageDraw.Draw(image, "RGBA")
 
+    # Vertical gradient from top_color → bot_color
     for row in range(height):
         blend = row / max(1, height - 1)
-        r = int(color_a[0] * (1 - blend) + color_b[0] * blend)
-        g = int(color_a[1] * (1 - blend) + color_b[1] * blend)
-        b = int(color_a[2] * (1 - blend) + color_b[2] * blend)
+        r = int(top_color[0] * (1 - blend) + bot_color[0] * blend)
+        g = int(top_color[1] * (1 - blend) + bot_color[1] * blend)
+        b = int(top_color[2] * (1 - blend) + bot_color[2] * blend)
         draw.line([(0, row), (width, row)], fill=(r, g, b, 255))
 
-    draw.ellipse(
-        [(int(width * 0.10), int(height * 0.15)), (int(width * 0.90), int(height * 0.85))],
-        fill=(color_c[0], color_c[1], color_c[2], 80),
+    # Semi-transparent card behind the text for legibility
+    pad_x = int(width * 0.08)
+    card_top = int(height * 0.25)
+    card_bot = int(height * 0.75)
+    draw.rounded_rectangle(
+        [(pad_x, card_top), (width - pad_x, card_bot)],
+        radius=40,
+        fill=(0, 0, 0, 140),
     )
-    draw.rectangle(
-        [(int(width * 0.12), int(height * 0.70)), (int(width * 0.88), int(height * 0.80))],
-        fill=(255, 255, 255, 45),
-    )
+
+    # ── Font loading (mirrors video_service._load_font) ───────────────────
+    font_size = max(52, min(80, width // 12))
+    _FONT_EN = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    _FONT_HI = "/usr/share/fonts/truetype/lohit-devanagari/Lohit-Devanagari.ttf"
+    _FONT_FALLBACKS = [
+        ("/System/Library/Fonts/HelveticaNeue.ttc", 1),
+        ("/System/Library/Fonts/Kohinoor.ttc", 3),
+        ("/Library/Fonts/Arial Unicode.ttf", 0),
+    ]
+    font: ImageFont.FreeTypeFont | None = None
+    primary_path = _FONT_HI if language == "hi" else _FONT_EN
+    for path, *index in [(primary_path,)] + _FONT_FALLBACKS:
+        try:
+            font = ImageFont.truetype(path, font_size, index=index[0] if index else 0)
+            break
+        except Exception:
+            continue
+    if font is None:
+        font = ImageFont.load_default()
+
+    # ── Word-wrap the hint text ───────────────────────────────────────────
+    text = hint.strip() if hint else ""
+    max_text_w = width - pad_x * 2 - 40  # inner card padding
+
+    words = text.split()
+    lines: list[str] = []
+    current: list[str] = []
+    for word in words:
+        candidate = " ".join(current + [word])
+        bb = draw.textbbox((0, 0), candidate, font=font)
+        if bb[2] - bb[0] > max_text_w and current:
+            lines.append(" ".join(current))
+            current = [word]
+        else:
+            current.append(word)
+    if current:
+        lines.append(" ".join(current))
+
+    # ── Render centred text block ─────────────────────────────────────────
+    line_h = draw.textbbox((0, 0), "Ag", font=font)[3] + 12
+    block_h = len(lines) * line_h
+    card_center_y = (card_top + card_bot) // 2
+    start_y = card_center_y - block_h // 2
+
+    cx = width // 2
+    for li, line in enumerate(lines):
+        ty = start_y + li * line_h
+        # Shadow
+        draw.text((cx + 2, ty + 2), line, font=font, fill=(0, 0, 0, 180), anchor="mt")
+        # White text
+        draw.text((cx, ty), line, font=font, fill=(255, 255, 255, 255), anchor="mt")
 
     path = f"{TEMP_DIR}/scene_{idx}_fallback.png"
     image.save(path)
