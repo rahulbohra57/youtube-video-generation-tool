@@ -118,6 +118,7 @@ VISUAL PROMPT RULES:
 - STRICT: Avoid text-bearing compositions like newspaper front pages, posters, billboards, screenshots, UI panels, signs, or subtitles.
 - Be highly specific: lighting, composition, mood, style, camera angle.
 - Avoid copyrighted fictional characters/franchises (e.g., superheroes, movie/cartoon characters, game mascots), trademarked logos, or branded products.
+- CRITICAL — VISUAL SAFETY: Visual prompts must NEVER depict violence, weapons, blood, physical harm, or injury, even for news stories about such events. Use symbolic or abstract representations instead — for example: a broken chain for conflict, a gavel for law/justice, a city skyline for politics, a shield for protection, a first-aid cross for medical events. Imagen will reject prompts containing violent or harmful imagery.
 
 FACTUAL / COPYRIGHT SAFETY:
 - TODAY'S DATE: {today_str}. Use this to determine verb tense. Events that occurred before today MUST be written in past tense ("launched", "announced", "was approved"). Do NOT write "will", "is expected to", "is set to", or "is scheduled to" for any event that has already taken place as of {today_str}. If uncertain whether an event has occurred, hedge with "reportedly" or "as of [date]" — never assume it is still upcoming.
@@ -255,6 +256,7 @@ VISUAL PROMPT RULES:
 - STRICT: Avoid text-bearing compositions like newspaper front pages, posters, billboards, screenshots, UI panels, signs, or subtitles.
 - Be highly specific: lighting, composition, mood, style, camera angle.
 - Avoid copyrighted fictional characters/franchises (e.g., superheroes, movie/cartoon characters, game mascots), trademarked logos, or branded products.
+- CRITICAL — VISUAL SAFETY: Visual prompts must NEVER depict violence, weapons, blood, physical harm, or injury, even for news stories about such events. Use symbolic or abstract representations instead — for example: a broken chain for conflict, a gavel for law/justice, a city skyline for politics, a shield for protection, a first-aid cross for medical events. Imagen will reject prompts containing violent or harmful imagery.
 
 FACTUAL / COPYRIGHT SAFETY:
 - TODAY'S DATE: {today_str}. Use this to determine verb tense. Events that occurred before today MUST be written in past tense ("launched", "announced", "was approved"). Do NOT write "will", "is expected to", "is set to", or "is scheduled to" for any event that has already taken place as of {today_str}. If uncertain whether an event has occurred, hedge with "reportedly" or "as of [date]" — never assume it is still upcoming.

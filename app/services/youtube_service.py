@@ -1,5 +1,8 @@
 # app/services/youtube_service.py
 
+import logging
+from datetime import datetime, timezone, timedelta
+
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from google.auth.exceptions import RefreshError
@@ -7,6 +10,8 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
 
 from app.services import firestore_service  # noqa: E402 (used by playlist helpers)
 from app.config import (
@@ -58,6 +63,19 @@ def normalize_title(title: str, limit: int = 100) -> str:
     return (truncated or clean[:limit]).strip()
 
 
+_TOKEN_REFRESH_BUFFER = timedelta(minutes=10)
+
+
+def _parse_expiry(expiry_str: str | None) -> datetime | None:
+    if not expiry_str:
+        return None
+    try:
+        dt = datetime.fromisoformat(expiry_str)
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
 def get_credentials(channel_id: str = "news") -> Credentials:
     tokens = firestore_service.get_youtube_tokens(channel_id=channel_id)
     if not tokens:
@@ -68,6 +86,8 @@ def get_credentials(channel_id: str = "news") -> Credentials:
     client_id = STORIES_YOUTUBE_CLIENT_ID if channel_id == "stories" else YOUTUBE_CLIENT_ID
     client_secret = STORIES_YOUTUBE_CLIENT_SECRET if channel_id == "stories" else YOUTUBE_CLIENT_SECRET
 
+    stored_expiry = _parse_expiry(tokens.get("token_expiry"))
+
     creds = Credentials(
         token=tokens.get("access_token"),
         refresh_token=tokens.get("refresh_token"),
@@ -75,10 +95,15 @@ def get_credentials(channel_id: str = "news") -> Credentials:
         client_id=client_id,
         client_secret=client_secret,
         scopes=_SCOPES,
+        expiry=stored_expiry,
     )
 
     reconnect_url = _auth_url(channel_id)
-    needs_refresh = bool(creds.refresh_token) and (creds.expired or not tokens.get("token_expiry"))
+    now = datetime.now(timezone.utc)
+    # Refresh if: no expiry stored, token already expired, or expiring within 10 minutes
+    needs_refresh = bool(creds.refresh_token) and (
+        not stored_expiry or stored_expiry <= now + _TOKEN_REFRESH_BUFFER
+    )
 
     try:
         if needs_refresh:
@@ -87,13 +112,17 @@ def get_credentials(channel_id: str = "news") -> Credentials:
                     f"YouTube OAuth refresh token missing for channel '{channel_id}'. Reconnect via {reconnect_url}."
                 )
             creds.refresh(Request())
+            new_expiry = creds.expiry.isoformat() if creds.expiry else (
+                now + timedelta(hours=1)
+            ).isoformat()
             firestore_service.save_youtube_tokens({
                 "access_token": creds.token,
                 "refresh_token": creds.refresh_token or tokens.get("refresh_token"),
-                "token_expiry": creds.expiry.isoformat() if creds.expiry else None,
+                "token_expiry": new_expiry,
                 "client_id": client_id,
                 "client_secret": client_secret,
             }, channel_id=channel_id)
+            logger.info("YouTube access token refreshed for channel '%s', expires %s", channel_id, new_expiry)
     except RefreshError as e:
         msg = str(e).lower()
         if "invalid_grant" in msg or "expired or revoked" in msg:
@@ -105,6 +134,18 @@ def get_credentials(channel_id: str = "news") -> Credentials:
         ) from e
 
     return creds
+
+
+def refresh_all_tokens() -> dict[str, str]:
+    """Proactively refresh access tokens for both channels. Returns {channel_id: 'ok'|error_msg}."""
+    results = {}
+    for channel_id in ["news", "stories"]:
+        try:
+            get_credentials(channel_id=channel_id)
+            results[channel_id] = "ok"
+        except Exception as e:
+            results[channel_id] = str(e)
+    return results
 
 
 def upload_video(video_path: str, title: str, description: str, genre: str = "", channel_id: str = "news") -> str:

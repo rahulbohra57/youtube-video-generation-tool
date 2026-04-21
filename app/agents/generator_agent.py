@@ -41,6 +41,24 @@ QUOTA_OUTER_RETRY_DELAY = 120  # seconds
 
 BACKOFF_BASE_SECONDS = 2  # for non-quota errors only
 
+# Pre-approved safe fallback visual prompts per story genre.
+# Used when the LLM-generated prompt is rejected by Imagen's safety filter.
+# Each prompt uses the same watercolor style and is guaranteed content-policy safe.
+_STORY_GENRE_SAFE_PROMPTS = {
+    "inspiring": "Soft watercolor illustration, warm earthy palette — a child planting a seedling in golden morning light, hopeful atmosphere, no text, no words",
+    "heartfelt": "Soft watercolor illustration, warm earthy palette — two silhouettes holding hands beside a glowing window, gentle candlelight, no text, no words",
+    "comedy": "Soft watercolor illustration, bright cheerful palette — a small animal tripping over a flower pot in a sunny garden, playful, no text, no words",
+    "crime": "Soft watercolor illustration, warm earthy palette — a winding road leading toward a distant glowing village at dusk, symbolic journey, no text, no words",
+    "action": "Soft watercolor illustration, vibrant palette — a figure leaping across stepping stones in a sunlit river, dynamic energy, no text, no words",
+    "sci-fi": "Soft watercolor illustration, cool blue-purple palette — a glowing orb floating above an open hand in a misty forest, futuristic yet gentle, no text, no words",
+    "mythology": "Soft watercolor illustration, golden earthy palette — an ancient tree with glowing roots in a sacred forest clearing, no text, no words",
+    "thriller": "Soft watercolor illustration, warm amber palette — a lit lantern glowing on a forest path, sense of curiosity and wonder, no text, no words",
+    "mystery": "Soft watercolor illustration, warm earthy palette — a child holding a glowing lantern with a curious expression, garden at dusk, no text, no words",
+    "adventure": "Soft watercolor illustration, vibrant greens and blues — a traveller looking at a map on a sunlit hilltop at sunrise, no text, no words",
+    "slice-of-life": "Soft watercolor illustration, warm earthy palette — a family sharing a meal at a wooden table in a cosy kitchen, warm light, no text, no words",
+    "historical": "Soft watercolor illustration, muted sepia palette — an ancient palace courtyard with blossoming trees, serene and regal, no text, no words",
+}
+
 
 def _is_quota_error(exc: Exception) -> bool:
     text = str(exc).lower()
@@ -293,6 +311,7 @@ def run(
         music_genre = classify_music_genre(headline)
         video_clips = []
         image_failures = 0
+        _last_scene_err_reason = "unknown"
 
         for i, scene in enumerate(scenes):
             if _is_cancel_requested(effective_job_id):
@@ -361,16 +380,49 @@ def run(
                 video_clips.append((image_path, audio_path, narration))
                 time.sleep(8)
             except Exception as e:
+                # For story scenes blocked by safety filter, try a pre-approved
+                # genre-safe fallback prompt once before counting the scene as failed.
+                if _is_safety_filter_error(e) and script_type == "story":
+                    logger.warning(
+                        f"Scene {i} safety-filtered (genre={genre!r}). "
+                        f"Rejected prompt: {visual!r}. Retrying with genre fallback."
+                    )
+                    firestore_service.record_quota_event(
+                        "image_safety_filter",
+                        f"scene={i} genre={genre} rejected_prompt={visual[:300]}",
+                    )
+                    fallback_visual = _STORY_GENRE_SAFE_PROMPTS.get(
+                        (genre or "inspiring").lower(),
+                        _STORY_GENRE_SAFE_PROMPTS["inspiring"],
+                    )
+                    try:
+                        image_path, image_retries = _run_with_backoff(
+                            lambda fp=fallback_visual, idx=i: generate_image(fp, idx, aspect_ratio="9:16")
+                        )
+                        firestore_service.record_quota_event("image_success")
+                        firestore_service.mark_scene_checkpoint(
+                            effective_job_id,
+                            i,
+                            "completed",
+                            audio_path=audio_path,
+                            image_path=image_path,
+                            retries_audio=0,
+                            retries_image=image_retries,
+                        )
+                        video_clips.append((image_path, audio_path, narration))
+                        time.sleep(8)
+                        continue  # scene recovered via fallback — skip failure handling
+                    except Exception as fallback_exc:
+                        e = fallback_exc  # fall through to normal failure handling below
+
                 image_failures += 1
                 logger.error(f"Scene {i} failed: {e}")
-                firestore_service.mark_scene_checkpoint(
-                    effective_job_id,
-                    i,
-                    "failed",
-                    error=str(e),
-                )
                 if _is_safety_filter_error(e):
-                    firestore_service.record_quota_event("image_safety_filter", str(e))
+                    logger.warning(f"Scene {i} safety-filtered. Rejected prompt: {visual!r}")
+                    firestore_service.record_quota_event(
+                        "image_safety_filter",
+                        f"scene={i} rejected_prompt={visual[:300]}",
+                    )
                     _scene_err_reason = "prompt blocked by safety filter"
                 elif _is_quota_error(e):
                     firestore_service.record_quota_event("image_quota_error", str(e))
@@ -378,6 +430,13 @@ def run(
                 else:
                     firestore_service.record_quota_event("image_error", str(e))
                     _scene_err_reason = str(e)[:120]
+                _last_scene_err_reason = _scene_err_reason
+                firestore_service.mark_scene_checkpoint(
+                    effective_job_id,
+                    i,
+                    "failed",
+                    error=str(e),
+                )
                 # If ALL scenes have failed, notify and abort early
                 if image_failures >= MAX_SCENES:
                     send_message(
@@ -414,7 +473,7 @@ def run(
             send_message(
                 _chat_id,
                 f"❌ Video generation failed for *{code}* — only {clip_count}/{MAX_SCENES} scenes "
-                f"could be generated (Imagen quota or safety filter). Please try again later.",
+                f"could be generated. Reason: {_last_scene_err_reason}. Please try again later.",
                 channel_id=channel_id,
             )
             firestore_service.create_or_update_job(

@@ -6,6 +6,7 @@
 
 import secrets
 import urllib.parse
+from datetime import datetime, timezone, timedelta
 
 import httpx
 from fastapi import APIRouter, HTTPException
@@ -71,11 +72,13 @@ def youtube_callback(code: str, state: str = "", error: str = ""):
 
     existing = firestore_service.get_youtube_tokens(channel_id="news") or {}
     refresh_token = token.get("refresh_token") or existing.get("refresh_token")
+    expires_in = int(token.get("expires_in", 3600))
+    token_expiry = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
 
     firestore_service.save_youtube_tokens({
         "access_token":  token["access_token"],
         "refresh_token": refresh_token,
-        "token_expiry":  None,
+        "token_expiry":  token_expiry,
         "client_id":     YOUTUBE_CLIENT_ID,
         "client_secret": YOUTUBE_CLIENT_SECRET,
     })
@@ -133,11 +136,13 @@ def youtube_stories_callback(code: str, state: str = "", error: str = ""):
 
     existing = firestore_service.get_youtube_tokens(channel_id="stories") or {}
     refresh_token = token.get("refresh_token") or existing.get("refresh_token")
+    expires_in = int(token.get("expires_in", 3600))
+    token_expiry = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
 
     firestore_service.save_youtube_tokens({
         "access_token":  token["access_token"],
         "refresh_token": refresh_token,
-        "token_expiry":  None,
+        "token_expiry":  token_expiry,
         "client_id":     STORIES_YOUTUBE_CLIENT_ID,
         "client_secret": STORIES_YOUTUBE_CLIENT_SECRET,
     }, channel_id="stories")
