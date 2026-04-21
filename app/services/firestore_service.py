@@ -799,23 +799,25 @@ def get_genre_performance_weekly() -> dict[str, float]:
         return {}
 
 
-def get_genre_performance_fortnightly() -> dict[str, float]:
+def get_genre_performance_fortnightly(channel_id: str | None = None) -> dict[str, float]:
     """Return average view_count per genre over the last 14 days.
 
     Only considers completed jobs that have analytics data.
     Returns {genre_lower: avg_views}. Genres with no data are absent from the dict.
+    Pass channel_id to scope results to a single channel ("news" or "stories").
     """
     try:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
-        docs = (
+        query = (
             _get_db()
             .collection("jobs")
             .where("status", "==", "completed")
             .where("updated_at", ">=", cutoff)
-            .stream()
         )
+        if channel_id:
+            query = query.where("channel_id", "==", channel_id)
         totals: dict[str, list[int]] = {}
-        for d in docs:
+        for d in query.stream():
             data = d.to_dict() or {}
             genre = (data.get("genre") or "").strip().lower()
             analytics = data.get("analytics") or {}

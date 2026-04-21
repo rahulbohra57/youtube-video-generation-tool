@@ -4,6 +4,7 @@
 # Cloud Scheduler → /stories/run → this module → Cloud Task → /generate/stories-task
 
 import re
+import random
 import hashlib
 import logging
 from datetime import datetime, timezone
@@ -59,8 +60,28 @@ def _recently_used_titles(limit: int = 20) -> list[str]:
 
 
 def _select_story_genre() -> str:
-    # Deterministic IST schedule-slot rotation so genres stay diverse over time.
-    # Stories run at 07:00, 11:00, 14:00, 18:00 IST.
+    """Select genre using performance-weighted randomization with deterministic fallback.
+
+    When 14-day view data exists for this channel, genres that performed better get
+    proportionally higher selection probability. Genres with no data receive the median
+    score so new genres still get a fair share of slots. Falls back to deterministic
+    slot rotation when no performance data is available (e.g. early in channel life).
+    """
+    from app.services.firestore_service import get_genre_performance_fortnightly
+
+    try:
+        perf = get_genre_performance_fortnightly(channel_id="stories")
+    except Exception:
+        perf = {}
+
+    if perf:
+        scores = [perf.get(g, 0.0) for g in _STORY_GENRES]
+        known = sorted(s for s in scores if s > 0)
+        baseline = known[len(known) // 2] if known else 100.0
+        weights = [s if s > 0 else baseline for s in scores]
+        return random.choices(_STORY_GENRES, weights=weights, k=1)[0]
+
+    # Fallback: deterministic IST schedule-slot rotation
     now_ist = datetime.now(ZoneInfo("Asia/Kolkata"))
     slot_hours = [7, 11, 14, 18]
     slot_index = None

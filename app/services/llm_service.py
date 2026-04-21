@@ -487,10 +487,18 @@ _STORY_MOODS = [
     "historical",
 ]
 
-_STORY_VISUAL_STYLE = (
-    "Soft watercolor illustration, warm earthy palette, gentle diffused lighting, "
-    "painterly texture, no text, no words, no letters"
-)
+_STORY_VISUAL_STYLE_POOL = [
+    "Vibrant storybook illustration, bold outlines, rich saturated colors, dramatic lighting, cinematic composition",
+    "Studio Ghibli-inspired warm painterly style, lush green landscapes, golden sunlight, emotionally expressive characters",
+    "Indian folk art inspired, vivid Madhubani-style patterns, warm terracotta and saffron palette, flat design",
+    "Soft watercolor illustration, warm earthy palette, gentle diffused lighting, painterly texture",
+    "Bold graphic novel style, high contrast colors, dynamic angles, strong silhouettes, vibrant palette",
+]
+
+
+def _is_premise_adequate(premise: str) -> bool:
+    """Quality gate: premise must be at least 15 words to carry enough story specificity."""
+    return len((premise or "").strip().split()) >= 15
 
 
 def generate_story_idea(recently_used_titles: list[str] | None = None, preferred_mood: str = "") -> dict:
@@ -514,63 +522,74 @@ def generate_story_idea(recently_used_titles: list[str] | None = None, preferred
 एक बिल्कुल नई, मौलिक कहानी का विचार दो। कहानी 45-55 सेकंड में पूरी होनी चाहिए।{avoid_block}
 
 नियम:
-- शीर्षक (title) 5-8 शब्दों का हो, जिज्ञासा जगाने वाला हो
+- शीर्षक (title) 5-8 शब्दों का हो, इन patterns में से एक follow करे:
+  (a) Emotional contrast: "जब [पात्र] ने [action] किया, तब सब हैरान रह गए"
+  (b) Question hook: "क्या तुम [situation] में [action] कर सकते हो?"
+  (c) Shocking reversal: "[expected thing] नहीं, [unexpected thing] ने जीत दिलाई"
+  (d) Intriguing premise: "वो [X] जिसने [biggest claim] कर दिया"
 {preferred_rule}
-- premise एक वाक्य में हो: कौन + क्या चुनौती + कौन सी सीख
+- premise में तीन चीज़ें ज़रूर हों: (1) एक named या clearly described पात्र, (2) एक specific चुनौती या संघर्ष, (3) एक moral direction
+- premise कम से कम 15 शब्दों का हो — "एक बच्चा सीखता है" जैसे generic premise बिल्कुल नहीं
 
 सिर्फ एक valid JSON object return करो, कोई markdown नहीं:
 {{"title": "...", "mood": "...", "premise": "..."}}"""
 
-    try:
-        response = model.generate_content(prompt)
-        result = _extract_json_object(_response_text(response))
-        if result.get("title") and result.get("mood") and result.get("premise"):
-            return result
-    except Exception:
-        pass
+    for attempt in range(2):
+        try:
+            response = model.generate_content(prompt)
+            result = _extract_json_object(_response_text(response))
+            if result.get("title") and result.get("mood") and result.get("premise"):
+                if not _is_premise_adequate(result["premise"]):
+                    logger.warning("Story premise quality gate failed (attempt %d): %s", attempt + 1, result["premise"])
+                    continue
+                return result
+        except Exception:
+            pass
     # Fallback
     import random as _random
     return {
         "title": "एक छोटी सी मेहनत, बड़ा बदलाव",
         "mood": preferred or _random.choice(_STORY_MOODS),
-        "premise": "एक बच्चा छोटी सी कोशिश से बड़ा सपना पूरा करता है।",
+        "premise": "एक गरीब किसान का बेटा जब सबने उसे नकार दिया, तब उसने एक असाधारण कदम उठाया जिसने पूरे गाँव की तकदीर बदल दी।",
     }
 
 
 def generate_story_script(title: str, mood: str, premise: str = "") -> str:
-    """Generate a 3-scene Hindi moral story script for YouTube Shorts (<1 min).
+    """Generate a 4-scene Hindi moral story script for YouTube Shorts (<1 min).
 
     Returns JSON array with scene/narration/visual keys (same format as generate_script).
     Narrations are in Hindi (Devanagari). Visual prompts are in English for Imagen.
     """
     premise_block = f"\nकहानी का सार: {premise}" if premise else ""
+    video_style = random.choice(_STORY_VISUAL_STYLE_POOL)
 
     prompt = f"""तुम एक YouTube Shorts के लिए Hindi में छोटी नैतिक कहानी लिखने वाले scriptwriter हो।
 
 कहानी: {title}{premise_block}
 मूड: {mood}
 
-3 दृश्य (scenes) लिखो। कुल अवधि 45-55 सेकंड होनी चाहिए।
+4 दृश्य (scenes) लिखो। कुल अवधि 45-55 सेकंड होनी चाहिए।
 
 हर scene में:
-- "narration": हिंदी में (देवनागरी लिपि), 18-22 शब्द, बोलने में स्वाभाविक
+- "narration": हिंदी में (देवनागरी लिपि), 15-18 शब्द, बोलने में स्वाभाविक
 - "visual": अंग्रेज़ी में (Imagen के लिए), बहुत विस्तृत image generation prompt
 
 Scene structure:
-- Scene 1 (शुरुआत ~15s): पात्र और उसकी चुनौती का परिचय। दर्शक को बाँधे।
-- Scene 2 (मोड़ ~15s): निर्णायक क्षण — पात्र एक महत्वपूर्ण कदम उठाता है।
-- Scene 3 (अंत ~15s): परिणाम और एक काव्यात्मक नैतिक वाक्य।
+- Scene 1 (Hook ~12s): पहले वाक्य में ही एक shocking situation, emotional paradox, या unexpected moment दो — दर्शक पहले 3 सेकंड में रुक जाए। "एक बार की बात है", "आज मैं", "नमस्ते दोस्तों" जैसा कोई भी generic opening बिल्कुल नहीं।
+- Scene 2 (Rising Action ~12s): tension बढ़ाओ — पात्र एक कठिन निर्णय या असंभव चुनौती के सामने है।
+- Scene 3 (Turning Point ~12s): निर्णायक क्षण — पात्र एक surprising, unexpected कदम उठाता है।
+- Scene 4 (Resolution ~12s): नतीजा दिखाओ — पात्र की दुनिया में, उसके रिश्तों में, या समाज में क्या बदला? नैतिक lesson directly मत बोलो ("इसलिए हमेशा", "सीख यह है" जैसे phrases बिल्कुल नहीं) — दर्शक खुद feel करे।
 
 NARRATION नियम:
 - हिंदी (देवनागरी) में लिखो — Roman script नहीं
-- 18-22 शब्द प्रति scene — इससे अधिक नहीं
-- "एक बार की बात है" से शुरू मत करो
-- Scene 1-2 में सीधे नैतिक उपदेश मत दो — कार्य के ज़रिए दिखाओ
+- 15-18 शब्द प्रति scene — इससे अधिक नहीं
+- "एक बार की बात है", "इसलिए हमेशा", "सीख यह है", "दोस्तों" जैसे clichés बिल्कुल नहीं
+- Scene 1-3 में सीधे नैतिक उपदेश मत दो — कार्य और परिणाम के ज़रिए दिखाओ
 - सरल, बोधगम्य भाषा
 
 VISUAL PROMPT नियम:
 - अंग्रेज़ी में लिखो
-- इस style prefix से शुरू करो: "{_STORY_VISUAL_STYLE} — "
+- इस style prefix से शुरू करो: "{video_style} — "
 - कोई असली व्यक्ति, धार्मिक प्रतीक, copyright characters नहीं
 - प्रकृति, गाँव, जंगल, नदी जैसी settings को प्राथमिकता दो
 - No text, no words, no signs in the image
@@ -580,7 +599,8 @@ VISUAL PROMPT नियम:
 [
   {{"scene": 1, "narration": "...", "visual": "..."}},
   {{"scene": 2, "narration": "...", "visual": "..."}},
-  {{"scene": 3, "narration": "...", "visual": "..."}}
+  {{"scene": 3, "narration": "...", "visual": "..."}},
+  {{"scene": 4, "narration": "...", "visual": "..."}}
 ]"""
 
     response = model.generate_content(prompt)
