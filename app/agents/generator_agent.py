@@ -135,6 +135,7 @@ def run(
     idempotency_key: str | None = None,
     channel_id: str = "news",
     script_type: str = "news",
+    language: str | None = None,
 ):
     # ── Idempotency guard ─────────────────────────────────────────────────
     # Prevents Cloud Tasks duplicate/retry deliveries from uploading twice.
@@ -175,7 +176,8 @@ def run(
             "started_at": datetime.now(timezone.utc).isoformat(),
         },
     )
-    _voice_lang = "hi" if script_type == "story" else "en"
+    # language defaults to "hi" for stories (backward compat with in-flight tasks)
+    _voice_lang = (language or "hi") if script_type == "story" else "en"
     selected_voice = choose_voice_for_video(language=_voice_lang, preference="shuffle", domain=genre or "")
     firestore_service.create_or_update_job(
         effective_job_id,
@@ -265,10 +267,10 @@ def run(
         # ──────────────────────────────────────────────────────────────────
 
         if script_type == "story":
-            # Stories: pure LLM generation in Hindi, no web search
-            language = "hi"
+            # Stories: pure LLM generation, language from payload (default "hi" for backward compat)
+            language = language or "hi"
             mood = genre or "inspiring"
-            raw_script = generate_story_script(headline, mood=mood, premise=details or "")
+            raw_script = generate_story_script(headline, mood=mood, premise=details or "", language=language)
         else:
             # News: search-grounded script generation in English
             language = "en"

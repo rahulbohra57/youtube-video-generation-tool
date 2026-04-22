@@ -102,6 +102,7 @@ def generate_stories_task(payload: dict):
     genre = payload.get("genre", "inspiring")
     details = payload.get("details", "")
     virality_score = float(payload.get("virality_score", 0) or 0)
+    language = payload.get("language", "hi")
 
     if not headline or not code:
         raise HTTPException(status_code=400, detail="headline and code required")
@@ -120,6 +121,7 @@ def generate_stories_task(payload: dict):
             virality_score=virality_score,
             channel_id="stories",
             script_type="story",
+            language=language,
         )
     except Exception as e:
         firestore_service.create_or_update_job(
