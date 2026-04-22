@@ -60,6 +60,24 @@ _STORY_GENRE_SAFE_PROMPTS = {
 }
 
 
+# English-story safe fallback prompts — realistic/photorealistic style.
+# Used when an English story scene is rejected by Imagen's safety filter.
+_STORY_GENRE_SAFE_PROMPTS_EN = {
+    "inspiring": "Cinematic photorealistic scene — a young person standing on a sunlit hilltop at golden sunrise, arms wide open, warm light, no text, no words",
+    "heartfelt": "Documentary-style photography — two elderly hands clasped together on a wooden table, warm afternoon light streaming through a window, no text, no words",
+    "comedy": "Candid natural light photography — a small dog wearing oversized sunglasses sitting at a cafe table, cheerful sunny atmosphere, no text, no words",
+    "crime": "Cinematic photorealistic — a detective's desk with scattered papers and a glowing desk lamp, warm moody atmosphere, no text, no words",
+    "action": "Dramatic natural lighting photography — a person mid-sprint across a sun-drenched open field, motion blur on grass, dynamic energy, no text, no words",
+    "sci-fi": "High-resolution realistic render — a glowing holographic sphere floating above an open palm in a bright sunlit laboratory, futuristic and clean, no text, no words",
+    "mythology": "Cinematic photorealistic — an ancient stone temple surrounded by lush green trees in morning mist, golden light filtering through leaves, serene, no text, no words",
+    "thriller": "Moody cinematic photograph — a lit lantern on a cobblestone path at dusk, warm amber glow, sense of curiosity and wonder, no text, no words",
+    "mystery": "Documentary-style photography — an old wooden chest half-open in a sunlit attic, warm dust particles floating in light, curious atmosphere, no text, no words",
+    "adventure": "Cinematic photorealistic — a hiker standing at a scenic mountain viewpoint at sunrise, vast green valley below, no text, no words",
+    "slice-of-life": "Natural light photography — a family sharing breakfast at a bright kitchen table, warm morning sunlight, genuine smiles, no text, no words",
+    "historical": "Cinematic photorealistic — ancient stone ruins draped in ivy bathed in golden afternoon light, serene and regal, no text, no words",
+}
+
+
 def _is_quota_error(exc: Exception) -> bool:
     text = str(exc).lower()
     return ("quota" in text) or ("resource_exhausted" in text) or ("429" in text)
@@ -394,9 +412,14 @@ def run(
                         "image_safety_filter",
                         f"scene={i} genre={genre} rejected_prompt={visual[:300]}",
                     )
-                    fallback_visual = _STORY_GENRE_SAFE_PROMPTS.get(
+                    _safe_prompts = (
+                        _STORY_GENRE_SAFE_PROMPTS_EN
+                        if language == "en"
+                        else _STORY_GENRE_SAFE_PROMPTS
+                    )
+                    fallback_visual = _safe_prompts.get(
                         (genre or "inspiring").lower(),
-                        _STORY_GENRE_SAFE_PROMPTS["inspiring"],
+                        _safe_prompts["inspiring"],
                     )
                     try:
                         image_path, image_retries = _run_with_backoff(
