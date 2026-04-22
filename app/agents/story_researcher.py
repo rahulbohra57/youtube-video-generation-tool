@@ -49,6 +49,24 @@ def _mark_story_used(title: str, mood: str = ""):
     firestore_service.mark_headline_suggested(title, genre=mood, channel_id="stories")
 
 
+def _story_language() -> str:
+    """Return 'hi' for today's rotating Hindi slot, 'en' for all other slots.
+
+    4 daily slots map to indices by IST hour: 7am→0, 11am→1, 2pm→2, 6pm→3.
+    The Hindi slot index is day_of_year % 4, rotating on a 4-day cycle so each
+    slot gets exactly one Hindi run every 4 days.
+    """
+    from zoneinfo import ZoneInfo
+    now_ist = datetime.now(ZoneInfo("Asia/Kolkata"))
+    slot_hours = [7, 11, 14, 18]
+    slot_index = 0
+    for idx, hour in enumerate(slot_hours):
+        if now_ist.hour >= hour:
+            slot_index = idx
+    hindi_slot = now_ist.timetuple().tm_yday % 4
+    return "hi" if slot_index == hindi_slot else "en"
+
+
 def _recently_used_titles(limit: int = 20) -> list[str]:
     """Return recent story titles from suggested_headlines to pass to the LLM to avoid repeats."""
     try:
@@ -121,13 +139,17 @@ def run() -> str | None:
         )
         return None
 
-    # Generate a new story idea (title + mood + premise, all in Hindi)
+    # Determine language for this scheduler slot (3 English : 1 Hindi per day, rotating)
+    language = _story_language()
+
+    # Generate a new story idea (title + mood + premise)
     recently_used = _recently_used_titles()
     target_genre = _select_story_genre()
     try:
         idea = generate_story_idea(
             recently_used_titles=recently_used,
             preferred_mood=target_genre,
+            language=language,
         )
     except Exception as e:
         logger.exception(f"Story idea generation failed: {e}")
@@ -190,6 +212,7 @@ def run() -> str | None:
         "genre": mood,
         "details": premise,
         "channel_id": "stories",
+        "language": language,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
 
@@ -209,6 +232,7 @@ def run() -> str | None:
         "virality_score": 0.0,
         "channel_id": "stories",
         "script_type": "story",
+        "language": language,
     }).encode()
 
     try:
@@ -244,7 +268,7 @@ def run() -> str | None:
     if STORIES_CHAT_ID:
         send_message(
             STORIES_CHAT_ID,
-            f"📖 Generating story...\n"
+            f"📖 Generating {'Hindi' if language == 'hi' else 'English'} story...\n"
             f"Title: *{title}*\n"
             f"Genre: {mood.title()}\n"
             f"Id: `{public_id}`",
