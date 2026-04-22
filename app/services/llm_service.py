@@ -487,12 +487,20 @@ _STORY_MOODS = [
     "historical",
 ]
 
-_STORY_VISUAL_STYLE_POOL = [
+_STORY_VISUAL_STYLE_POOL_HI = [
     "Vibrant storybook illustration, bold outlines, rich saturated colors, dramatic lighting, cinematic composition",
     "Studio Ghibli-inspired warm painterly style, lush green landscapes, golden sunlight, emotionally expressive characters",
     "Indian folk art inspired, vivid Madhubani-style patterns, warm terracotta and saffron palette, flat design",
     "Soft watercolor illustration, warm earthy palette, gentle diffused lighting, painterly texture",
     "Bold graphic novel style, high contrast colors, dynamic angles, strong silhouettes, vibrant palette",
+]
+
+_STORY_VISUAL_STYLE_POOL_EN = [
+    "Cinematic photorealistic, dramatic natural lighting, shallow depth of field, vivid detail",
+    "Documentary-style photography, candid composition, warm natural light, authentic atmosphere",
+    "High-resolution realistic render, vivid detail, cinematic color grading, emotionally evocative",
+    "Moody cinematic scene, rich warm tones, dramatic yet inviting atmosphere, photorealistic",
+    "Photorealistic portrait lighting, golden hour glow, emotionally resonant, crisp detail",
 ]
 
 
@@ -501,23 +509,54 @@ def _is_premise_adequate(premise: str) -> bool:
     return len((premise or "").strip().split()) >= 15
 
 
-def generate_story_idea(recently_used_titles: list[str] | None = None, preferred_mood: str = "") -> dict:
-    """Generate a fresh Hindi moral story concept. Returns {title, mood, premise} all in Hindi."""
+def generate_story_idea(recently_used_titles: list[str] | None = None, preferred_mood: str = "", language: str = "hi") -> dict:
+    """Generate a fresh moral story concept. Returns {title, mood, premise}.
+
+    language="hi": output in Hindi (Devanagari).
+    language="en": output in English.
+    """
     avoid_block = ""
     if recently_used_titles:
         lines = "\n".join(f"  - {t}" for t in recently_used_titles[:20])
-        avoid_block = f"\nइन कहानियों को दोबारा मत बनाओ (हाल में बनाई गई):\n{lines}\n"
+        if language == "en":
+            avoid_block = f"\nDo NOT reuse these recently created story titles:\n{lines}\n"
+        else:
+            avoid_block = f"\nइन कहानियों को दोबारा मत बनाओ (हाल में बनाई गई):\n{lines}\n"
 
     preferred = (preferred_mood or "").strip().lower()
     if preferred and preferred not in _STORY_MOODS:
         preferred = ""
     mood_list = ", ".join(_STORY_MOODS)
-    preferred_rule = (
-        f"\n- mood MUST be exactly: {preferred}"
-        if preferred
-        else f"\n- mood इनमें से एक हो: {mood_list}"
-    )
-    prompt = f"""तुम एक रचनात्मक Hindi कहानीकार हो जो YouTube Shorts के लिए छोटी नैतिक कहानियाँ लिखते हो।
+
+    if language == "en":
+        preferred_rule = (
+            f"\n- mood MUST be exactly: {preferred}"
+            if preferred
+            else f"\n- mood must be one of: {mood_list}"
+        )
+        prompt = f"""You are a creative storyteller writing short moral stories in English for YouTube Shorts.
+
+Generate a brand new, original story concept. The story should complete in 45-55 seconds.{avoid_block}
+
+Rules:
+- Title should be 5-8 words in English, following one of these patterns:
+  (a) Emotional contrast: "When [character] [action], everyone was stunned"
+  (b) Question hook: "Could you [action] in [situation]?"
+  (c) Shocking reversal: "Not [expected], but [unexpected] won the day"
+  (d) Intriguing premise: "The [X] that [biggest claim]"
+{preferred_rule}
+- premise must include: (1) a named or clearly described character, (2) a specific challenge or conflict, (3) a moral direction
+- premise must be at least 15 words — avoid generic premises like "a child learns a lesson"
+
+Return only a valid JSON object, no markdown:
+{{"title": "...", "mood": "...", "premise": "..."}}"""
+    else:
+        preferred_rule = (
+            f"\n- mood MUST be exactly: {preferred}"
+            if preferred
+            else f"\n- mood इनमें से एक हो: {mood_list}"
+        )
+        prompt = f"""तुम एक रचनात्मक Hindi कहानीकार हो जो YouTube Shorts के लिए छोटी नैतिक कहानियाँ लिखते हो।
 
 एक बिल्कुल नई, मौलिक कहानी का विचार दो। कहानी 45-55 सेकंड में पूरी होनी चाहिए।{avoid_block}
 
@@ -547,6 +586,12 @@ def generate_story_idea(recently_used_titles: list[str] | None = None, preferred
             pass
     # Fallback
     import random as _random
+    if language == "en":
+        return {
+            "title": "The Day Everything Changed",
+            "mood": preferred or _random.choice(_STORY_MOODS),
+            "premise": "A young farmer facing drought discovers an underground spring that saves his entire village from ruin.",
+        }
     return {
         "title": "एक छोटी सी मेहनत, बड़ा बदलाव",
         "mood": preferred or _random.choice(_STORY_MOODS),
@@ -554,16 +599,58 @@ def generate_story_idea(recently_used_titles: list[str] | None = None, preferred
     }
 
 
-def generate_story_script(title: str, mood: str, premise: str = "") -> str:
-    """Generate a 4-scene Hindi moral story script for YouTube Shorts (<1 min).
+def generate_story_script(title: str, mood: str, premise: str = "", language: str = "hi") -> str:
+    """Generate a 4-scene moral story script for YouTube Shorts (<1 min).
 
-    Returns JSON array with scene/narration/visual keys (same format as generate_script).
-    Narrations are in Hindi (Devanagari). Visual prompts are in English for Imagen.
+    language="hi": narrations in Hindi (Devanagari), painted visual style.
+    language="en": narrations in English, realistic/photorealistic visual style.
+    Returns JSON array with scene/narration/visual keys.
     """
-    premise_block = f"\nकहानी का सार: {premise}" if premise else ""
-    video_style = random.choice(_STORY_VISUAL_STYLE_POOL)
+    if language == "en":
+        premise_block = f"\nStory premise: {premise}" if premise else ""
+        video_style = random.choice(_STORY_VISUAL_STYLE_POOL_EN)
+        prompt = f"""You are a scriptwriter creating short moral stories in English for YouTube Shorts.
 
-    prompt = f"""तुम एक YouTube Shorts के लिए Hindi में छोटी नैतिक कहानी लिखने वाले scriptwriter हो।
+Story: {title}{premise_block}
+Mood: {mood}
+
+Write 4 scenes. Total duration should be 45-55 seconds.
+
+Each scene must have:
+- "narration": In English, 15-18 words, natural to speak aloud
+- "visual": In English (for Imagen), a detailed image generation prompt
+
+Scene structure:
+- Scene 1 (Hook ~12s): Open with a shocking situation, emotional paradox, or unexpected moment — hook the viewer in 3 seconds. Never start with "Once upon a time", "Hi everyone", "Today I want to".
+- Scene 2 (Rising Action ~12s): Build tension — the character faces a hard decision or impossible challenge.
+- Scene 3 (Turning Point ~12s): The decisive moment — the character takes a surprising, unexpected action.
+- Scene 4 (Resolution ~12s): Show the outcome — what changed in the character's world, relationships, or community? Do NOT state the moral directly ("So always remember", "The lesson is") — let the viewer feel it.
+
+NARRATION rules:
+- 15-18 words per scene — no more
+- No clichés: "once upon a time", "the lesson is", "always remember", "friends"
+- No direct moral preaching in scenes 1-3 — show through action and consequence
+- Simple, natural spoken English
+
+VISUAL PROMPT rules:
+- In English
+- Start with this style prefix: "{video_style} — "
+- No real people, religious symbols, copyright characters, brand logos
+- Prefer natural settings: countryside, forests, rivers, small towns
+- No text, no words, no signs in the image
+- CRITICAL — SAFETY: ALL visuals must be bright, warm, and child-friendly. Even for mystery/thriller/crime genres, convey curiosity and wonder — NEVER darkness, fear, danger, or violence. No sinister shadows, no weapons, no blood, no frightening creatures, no ominous imagery. Imagen will reject dark or frightening content.
+
+Return only a valid JSON array, no markdown:
+[
+  {{"scene": 1, "narration": "...", "visual": "..."}},
+  {{"scene": 2, "narration": "...", "visual": "..."}},
+  {{"scene": 3, "narration": "...", "visual": "..."}},
+  {{"scene": 4, "narration": "...", "visual": "..."}}
+]"""
+    else:
+        premise_block = f"\nकहानी का सार: {premise}" if premise else ""
+        video_style = random.choice(_STORY_VISUAL_STYLE_POOL_HI)
+        prompt = f"""तुम एक YouTube Shorts के लिए Hindi में छोटी नैतिक कहानी लिखने वाले scriptwriter हो।
 
 कहानी: {title}{premise_block}
 मूड: {mood}
