@@ -295,12 +295,7 @@ def run(
             try:
                 raw_script = generate_script_with_search(headline, language="en", aspect_ratio="9:16", context=details or "")
             except SearchGroundingUnavailable:
-                send_message(
-                    _chat_id,
-                    f"ℹ️ Search grounding is currently unavailable for `{public_id or effective_job_id}`. "
-                    f"Using standard script generation.",
-                    channel_id=channel_id,
-                )
+                logger.info("Search grounding unavailable for %s, using standard generation", public_id or effective_job_id)
                 raw_script = generate_script(headline, language="en", aspect_ratio="9:16", context=details or "")
             except Exception as _search_exc:
                 logger.warning("Search-grounded script generation failed (%s), falling back to standard", _search_exc)

@@ -67,6 +67,7 @@ _TOKEN_REFRESH_BUFFER = timedelta(minutes=10)
 
 
 def _parse_expiry(expiry_str: str | None) -> datetime | None:
+    """Parse an ISO expiry string into a timezone-aware UTC datetime."""
     if not expiry_str:
         return None
     try:
@@ -74,6 +75,15 @@ def _parse_expiry(expiry_str: str | None) -> datetime | None:
         return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
     except Exception:
         return None
+
+
+def _to_naive_utc(dt: datetime | None) -> datetime | None:
+    """Convert to naive UTC — required by google-auth Credentials.expiry."""
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
 
 
 def get_credentials(channel_id: str = "news") -> Credentials:
@@ -86,7 +96,7 @@ def get_credentials(channel_id: str = "news") -> Credentials:
     client_id = STORIES_YOUTUBE_CLIENT_ID if channel_id == "stories" else YOUTUBE_CLIENT_ID
     client_secret = STORIES_YOUTUBE_CLIENT_SECRET if channel_id == "stories" else YOUTUBE_CLIENT_SECRET
 
-    stored_expiry = _parse_expiry(tokens.get("token_expiry"))
+    stored_expiry = _parse_expiry(tokens.get("token_expiry"))  # timezone-aware for our comparisons
 
     creds = Credentials(
         token=tokens.get("access_token"),
@@ -95,7 +105,7 @@ def get_credentials(channel_id: str = "news") -> Credentials:
         client_id=client_id,
         client_secret=client_secret,
         scopes=_SCOPES,
-        expiry=stored_expiry,
+        expiry=_to_naive_utc(stored_expiry),  # google-auth requires naive UTC
     )
 
     reconnect_url = _auth_url(channel_id)
@@ -112,9 +122,9 @@ def get_credentials(channel_id: str = "news") -> Credentials:
                     f"YouTube OAuth refresh token missing for channel '{channel_id}'. Reconnect via {reconnect_url}."
                 )
             creds.refresh(Request())
-            new_expiry = creds.expiry.isoformat() if creds.expiry else (
-                now + timedelta(hours=1)
-            ).isoformat()
+            # Always store as naive UTC so _parse_expiry → Credentials stays consistent
+            expiry_dt = creds.expiry if creds.expiry else _to_naive_utc(now + timedelta(hours=1))
+            new_expiry = _to_naive_utc(expiry_dt).isoformat()
             firestore_service.save_youtube_tokens({
                 "access_token": creds.token,
                 "refresh_token": creds.refresh_token or tokens.get("refresh_token"),
