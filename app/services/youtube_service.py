@@ -39,6 +39,37 @@ _GENRE_TO_CATEGORY: dict[str, str] = {
 }
 _DEFAULT_CATEGORY = "28"  # Science & Technology — better default than News & Politics
 
+_UPLOAD_DEFAULTS: dict[str, str] = {
+    "news": (
+        "----\n\n"
+        "So, what is Kurrent Affairs?\n\n"
+        "Kurrent Affairs is a modern YouTube channel that keeps you updated with the latest in Tech, AI, and innovation — without the noise.\n\n"
+        "Our goal is simple: save you time by cutting through the clutter and delivering only what truly matters. Instead of scrolling endlessly, you get clear, concise, and relevant updates that help you stay ahead in a fast-moving digital world.\n\n"
+        "We simplify complex topics and break them down into easy-to-understand insights, so you can quickly grasp what's happening and why it matters.\n\n"
+        "On this channel, you'll find:\n\n"
+        "Latest updates in AI and emerging technologies\n"
+        "Quick breakdowns of trending topics\n"
+        "Insights on tools, startups, and digital innovation\n"
+        "No-fluff content designed for speed and clarity\n\n"
+        "Whether you're building, learning, or just staying informed — Kurrent Affairs helps you stay sharp, informed, and future-ready.\n\n"
+        "Stay updated. Stay ahead. Stay Kurrent.\n\n"
+        "📈 YOUTUBE ALGORITHM & SEO KEYWORDS:\n"
+        "ai news 2026, tech news updates, artificial intelligence trends, latest ai tools, generative ai updates, tech explained simple, trending ai news, future of ai technology, daily tech updates, ai tools explained, youtube algorithm 2026, youtube growth 2026, youtube seo 2026, youtube seo optimization, youtube tags optimization, youtube impressions increase, youtube ctr increase, youtube shorts algorithm 2026"
+    ),
+    "stories": (
+        "----\n\n"
+        "Welcome to Short Tales — here you will find short, simple, and heart-touching stories that make your day better.\n\n"
+        "This 1-minute story gives a small yet deep life lesson. Such stories bring you new thoughts, positivity, and a better perspective.\n\n"
+        "🌿 Watch till the end and feel the lesson.\n"
+        "💭 Take a moment to think about the story.\n"
+        "😊 Carry positivity with you.\n\n"
+        "If you enjoy inspiring and heart-touching stories like these, subscribe to the channel and watch a new story every day.\n\n"
+        "🔔 Join for daily new stories:\n"
+        "https://www.youtube.com/@ShortTales\n\n"
+        "#shorts #HindiStories #MoralStories #LifeLessons #ShortTales"
+    ),
+}
+
 
 def _auth_path(channel_id: str) -> str:
     return "/auth/youtube/stories" if channel_id == "stories" else "/auth/youtube"
@@ -166,6 +197,9 @@ def upload_video(video_path: str, title: str, description: str, genre: str = "",
     desc = description or ""
     if "#shorts" not in desc.lower():
         desc = desc.rstrip() + "\n#Shorts"
+
+    # Append channel-specific boilerplate for SEO and subscriber context
+    desc = desc.rstrip() + "\n\n" + _UPLOAD_DEFAULTS.get(channel_id, "")
 
     body = {
         "snippet": {

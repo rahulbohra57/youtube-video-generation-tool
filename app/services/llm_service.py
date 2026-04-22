@@ -426,16 +426,20 @@ Input scenes:
         response = model.generate_content(prompt)
         from app.utils.helpers import extract_json
         checked = extract_json(_response_text(response))
-        if isinstance(checked, list) and checked:
+        if isinstance(checked, list) and len(checked) >= len(scenes):
             return checked
     except Exception:
         pass
     return scenes
 
 
-def apply_quality_controls(topic: str, scenes: list[dict], language: str = "en", context: str = "") -> list[dict]:
-    """Apply fact-check + profanity + copyright sanitization."""
-    reviewed = fact_check_scenes(topic, scenes, language=language, context=context)
+def apply_quality_controls(topic: str, scenes: list[dict], language: str = "en", context: str = "", skip_fact_check: bool = False) -> list[dict]:
+    """Apply fact-check + profanity + copyright sanitization.
+
+    skip_fact_check=True skips the news-oriented fact_check_scenes LLM pass — appropriate
+    for story scripts where fiction shouldn't be treated as news claims.
+    """
+    reviewed = scenes if skip_fact_check else fact_check_scenes(topic, scenes, language=language, context=context)
     cleaned = []
     for s in reviewed:
         narration = strip_markdown_formatting(str(s.get("narration", "")))
@@ -861,7 +865,7 @@ Input scenes:
         response = model.generate_content(prompt)
         from app.utils.helpers import extract_json
         reviewed = extract_json(_response_text(response))
-        if isinstance(reviewed, list) and reviewed:
+        if isinstance(reviewed, list) and len(reviewed) >= len(scenes):
             return reviewed
     except Exception:
         pass

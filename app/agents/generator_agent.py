@@ -311,7 +311,7 @@ def run(
             scenes = extract_json(raw_script)
         except Exception:
             scenes = [{"scene": 1, "narration": headline, "visual": "news concept illustration"}]
-        scenes = apply_quality_controls(headline, scenes, language=language, context=details or "")
+        scenes = apply_quality_controls(headline, scenes, language=language, context=details or "", skip_fact_check=(script_type == "story"))
         reviewed = review_package(headline, scenes, language=language, min_seconds=15, max_seconds=58, genre=genre or "")
         scenes = reviewed.get("scenes") or scenes
         reviewed_title = reviewed.get("title") or headline
