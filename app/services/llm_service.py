@@ -766,8 +766,12 @@ Formatting rules:
 
 Caption:
 {caption}"""
-    response = model.generate_content(prompt)
-    return format_caption_for_youtube(_response_text(response).strip())
+    try:
+        response = model.generate_content(prompt)
+        return format_caption_for_youtube(_response_text(response).strip())
+    except Exception:
+        logger.warning("enhance_caption: Gemini call failed, using original caption")
+        return caption
 
 
 def format_caption_for_youtube(text: str) -> str:

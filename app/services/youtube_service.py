@@ -65,7 +65,7 @@ _UPLOAD_DEFAULTS: dict[str, str] = {
         "😊 Carry positivity with you.\n\n"
         "If you enjoy inspiring and heart-touching stories like these, subscribe to the channel and watch a new story every day.\n\n"
         "🔔 Join for daily new stories:\n"
-        "https://www.youtube.com/@ShortTales\n\n"
+        "https://www.youtube.com/@ShortTales-57\n\n"
         "#shorts #HindiStories #MoralStories #LifeLessons #ShortTales"
     ),
 }
