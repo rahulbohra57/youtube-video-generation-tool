@@ -613,28 +613,44 @@ def generate_story_script(title: str, mood: str, premise: str = "", language: st
     if language == "en":
         premise_block = f"\nStory premise: {premise}" if premise else ""
         video_style = random.choice(_STORY_VISUAL_STYLE_POOL_EN)
-        prompt = f"""You are a scriptwriter creating short moral stories in English for YouTube Shorts.
+        prompt = f"""You are a scriptwriter writing punchy, complete 60-second stories for YouTube Shorts.
 
 Story: {title}{premise_block}
 Mood: {mood}
 
-Write 4 scenes. Total duration should be 45-55 seconds.
+Write exactly 4 scenes. Total duration: 55-65 seconds (~15 seconds per scene).
 
 Each scene must have:
-- "narration": In English, 15-18 words, natural to speak aloud
+- "narration": In English, 25-35 words, COMPLETE sentences (never a fragment or mid-sentence break)
 - "visual": In English (for Imagen), a detailed image generation prompt
 
+CRITICAL: Each scene's narration must be SELF-CONTAINED. A viewer who sees only that scene must understand what is happening. Never write narration that is a continuation of the previous scene's sentence.
+
 Scene structure:
-- Scene 1 (Hook ~12s): Open with a shocking situation, emotional paradox, or unexpected moment — hook the viewer in 3 seconds. Never start with "Once upon a time", "Hi everyone", "Today I want to".
-- Scene 2 (Rising Action ~12s): Build tension — the character faces a hard decision or impossible challenge.
-- Scene 3 (Turning Point ~12s): The decisive moment — the character takes a surprising, unexpected action.
-- Scene 4 (Resolution ~12s): Show the outcome — what changed in the character's world, relationships, or community? Do NOT state the moral directly ("So always remember", "The lesson is") — let the viewer feel it.
+- Scene 1 (Setup + Hook): Name the character, establish the world, then drop a shocking twist or emotional punch. The viewer must be hooked in the first 3 words.
+- Scene 2 (Rising Action): The character discovers something that escalates the stakes — an unexpected detail, revelation, or obstacle that makes the situation harder.
+- Scene 3 (Turning Point): The decisive, surprising action the character takes. Show the moment of choice or courage — something the viewer didn't expect.
+- Scene 4 (Resolution): What changes — in the character, a relationship, or the world around them. End with a line that lands emotionally. No direct moral preaching ("The lesson is", "Always remember").
+
+STYLE EXAMPLES (match this energy and completeness):
+
+Heartfelt example:
+Scene 1: "When Aarav got his first salary, he bought expensive sneakers and proudly showed them to his father — who was still wearing the same torn shoes he'd had for five years."
+Scene 2: "That night, Aarav opened an old drawer. Inside: unpaid medical bills, loan slips, and receipts from every year of his school fees."
+Scene 3: "He didn't sleep. By morning, he had placed a brand-new pair of shoes quietly beside the door before his father woke up."
+Scene 4: "His father stood there, confused. Aarav knelt down and said softly, 'Now it's my turn to carry you.' His father cried for the first time in years."
+
+Comedy example:
+Scene 1: "Rohan bought the world's smartest fridge. First morning, it greeted him with: 'Good morning, Rohan. Maybe skip the cake today.'"
+Scene 2: "At midnight, he sneaked in for ice cream. The fridge light snapped on. 'Interesting choice for someone whose diet started this morning.'"
+Scene 3: "Guests came over. Rohan opened the fridge proudly — and it announced loudly, 'Warning: owner ate half the chocolate cake at 2:14 AM.' Everyone burst out laughing."
+Scene 4: "Furious, Rohan yanked out the power cord. The fridge switched to battery backup and said calmly: 'Nice try.'"
 
 NARRATION rules:
-- 15-18 words per scene — no more
-- No clichés: "once upon a time", "the lesson is", "always remember", "friends"
-- No direct moral preaching in scenes 1-3 — show through action and consequence
-- Simple, natural spoken English
+- 25-35 words per scene — complete, punchy sentences
+- Each scene ends on a period or an exclamation mark — never a comma or mid-thought
+- No clichés: "once upon a time", "the lesson is", "always remember"
+- Show emotion through action and specific detail, not adjectives
 
 VISUAL PROMPT rules:
 - In English
