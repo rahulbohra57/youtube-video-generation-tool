@@ -1,7 +1,49 @@
-# CLAUDE.md — Autoframe YouTube Video Generation Tool
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 Critical operational constraints, deployment rules, system gotchas, and detailed app architecture.
 Read this before making any infrastructure or code change.
+
+---
+
+## Development Commands
+
+### Local Development
+
+```bash
+# Activate virtualenv
+source venv/bin/activate
+
+# Run the server locally (port 8080 matches Cloud Run)
+uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+```
+
+External SDKs (Vertex AI, Firestore, GCS, TTS) require GCP credentials to be set up locally:
+```bash
+gcloud auth application-default login
+```
+
+### Tests
+
+External SDKs are fully mocked in `tests/conftest.py` via `sys.modules` patching — no GCP credentials needed to run tests.
+
+```bash
+# Run all tests
+pytest tests/
+
+# Run a single test file
+pytest tests/test_pipeline.py
+
+# Run a single test by name
+pytest tests/test_pipeline.py::test_video_lock_rejected_when_held
+```
+
+### Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
 
 ---
 
