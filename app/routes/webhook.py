@@ -4,13 +4,10 @@ import logging
 from fastapi import APIRouter, Request
 from app.agents import whatsapp_agent
 from app.config import TELEGRAM_CHAT_ID
+from app.services.firestore_service import is_duplicate_telegram_update
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-# In-memory dedup set — prevents processing the same Telegram update twice
-# (Cloud Run min-instances=1 keeps this alive; good enough for single-user bot)
-_seen_update_ids: set[int] = set()
 
 
 @router.post("/webhook/telegram")
@@ -25,17 +22,11 @@ async def telegram_webhook(request: Request):
     if not text or chat_id != str(TELEGRAM_CHAT_ID):
         return {"ok": True}
 
-    # Deduplicate: Telegram retries unacknowledged updates
-    if update_id is not None:
-        if update_id in _seen_update_ids:
-            logger.info(f"Skipping duplicate update_id={update_id}")
-            return {"ok": True}
-        _seen_update_ids.add(update_id)
-        # Keep the set bounded
-        if len(_seen_update_ids) > 1000:
-            _seen_update_ids.clear()
+    # Deduplicate via Firestore — survives cold starts, safe with min-instances=0
+    if update_id is not None and is_duplicate_telegram_update(update_id, "news"):
+        logger.info(f"Skipping duplicate update_id={update_id}")
+        return {"ok": True}
 
-    # Run synchronously — handle_reply is fast (Firestore read + Cloud Tasks enqueue)
     try:
         whatsapp_agent.handle_reply(chat_id, text)
     except Exception as e:

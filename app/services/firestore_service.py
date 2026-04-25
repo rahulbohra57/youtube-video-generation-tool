@@ -508,6 +508,16 @@ def update_idempotency_key(scope: str, key: str, fields: dict):
     )
 
 
+def is_duplicate_telegram_update(update_id: int, channel: str) -> bool:
+    """Return True if this Telegram update_id was already processed (within 5 minutes).
+
+    Uses idempotency_keys collection so dedup survives cold starts — allows min-instances=0.
+    """
+    scope = f"tg_update_{channel}"
+    acquired, _ = acquire_idempotency_key(scope, str(update_id), ttl_seconds=300)
+    return not acquired
+
+
 def mark_scene_checkpoint(
     job_id: str,
     scene_idx: int,

@@ -8,12 +8,10 @@ import logging
 from fastapi import APIRouter, Request
 from app.agents import stories_agent
 from app.config import STORIES_CHAT_ID
+from app.services.firestore_service import is_duplicate_telegram_update
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-# Separate dedup set from the news bot — prevents cross-contamination
-_seen_update_ids_stories: set[int] = set()
 
 
 @router.post("/webhook/telegram/stories")
@@ -28,14 +26,10 @@ async def telegram_stories_webhook(request: Request):
     if not text or chat_id != str(STORIES_CHAT_ID):
         return {"ok": True}
 
-    # Deduplicate: Telegram retries unacknowledged updates
-    if update_id is not None:
-        if update_id in _seen_update_ids_stories:
-            logger.info(f"Skipping duplicate stories update_id={update_id}")
-            return {"ok": True}
-        _seen_update_ids_stories.add(update_id)
-        if len(_seen_update_ids_stories) > 1000:
-            _seen_update_ids_stories.clear()
+    # Deduplicate via Firestore — survives cold starts, safe with min-instances=0
+    if update_id is not None and is_duplicate_telegram_update(update_id, "stories"):
+        logger.info(f"Skipping duplicate stories update_id={update_id}")
+        return {"ok": True}
 
     try:
         stories_agent.handle_reply(chat_id, text)

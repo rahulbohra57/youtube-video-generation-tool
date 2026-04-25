@@ -351,9 +351,9 @@ Three layers prevent duplicate videos:
    where Cloud Tasks delivers the same task twice after a long-running first attempt.
 3. **CREATE topic idempotency** (`idempotency_keys` collection): SHA-1 of the normalized topic
    string, TTL 20 minutes. Prevents duplicate CREATE commands for the same topic.
-4. **Webhook update dedup** (`_seen_update_ids` in `webhook.py`): in-memory set prevents the
-   same Telegram update from being processed twice. Cleared after 1000 entries.
-   Reason `min-instances=1` is required.
+4. **Webhook update dedup** (`idempotency_keys` collection, scope `tg_update_news` /
+   `tg_update_stories`): Firestore-backed, 5-minute TTL. Survives cold starts — allows
+   `min-instances=0`.
 
 ---
 
@@ -396,7 +396,7 @@ to present GCP auth credentials. Using `--no-allow-unauthenticated` blocks all T
 
 | Flag | Current value | Why it must stay this way |
 |---|---|---|
-| `--min-instances=1` | 1 | The in-memory `_seen_update_ids` dedup sets in both webhook modules live in RAM. Cold starts lose dedup history and the bot may double-process commands. |
+| `--min-instances=0` | 0 | Telegram update dedup is Firestore-backed (`idempotency_keys`, 5-min TTL) — survives cold starts. Eliminating the always-on instance saves ~₹4,400/week. |
 | `--cpu-throttling=false` | off | Video encoding (moviepy) and image generation are CPU-heavy. CPU throttling causes `ffmpeg` to time out mid-render. |
 | `--startup-cpu-boost` | on | Reduces cold-start latency. |
 | `--memory=4Gi` | 4 GiB | moviepy/PIL load full video frames into memory. Less than 4 GiB causes OOM kills mid-generation. |
