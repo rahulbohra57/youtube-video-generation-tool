@@ -16,7 +16,7 @@ from app.services.llm_service import (
     generate_story_script,
     classify_music_genre,
     apply_quality_controls,
-    get_cta_scene,
+    get_cta_narration,
 )
 from app.services.tts_service import generate_audio, choose_voice_for_video
 from app.services.image_service import generate_image
@@ -325,12 +325,6 @@ def run(
         max_scenes = 4 if script_type == "story" else MAX_SCENES
         scenes = scenes[:max_scenes]
 
-        # Append a randomised Like & Subscribe CTA as the final scene
-        cta = get_cta_scene(channel_id=channel_id, language=language)
-        cta["scene"] = len(scenes) + 1
-        scenes.append(cta)
-        max_scenes = len(scenes)
-
         music_genre = classify_music_genre(headline)
         video_clips = []
         image_failures = 0
@@ -539,6 +533,15 @@ def run(
                     {"status": "cancelled", "job_id": effective_job_id},
                 )
             return
+
+        # Append CTA voiceover over the last frame — no new Imagen call needed
+        try:
+            cta_narration = get_cta_narration(channel_id=channel_id, language=language)
+            cta_audio_path = os.path.join(TEMP_DIR, f"audio_{code}_cta.mp3")
+            generate_audio(cta_narration, cta_audio_path, language=language, voice_name=selected_voice, channel_id=channel_id)
+            video_clips.append((video_clips[-1][0], cta_audio_path, cta_narration))
+        except Exception as _cta_err:
+            logger.warning("CTA audio generation failed, skipping CTA: %s", _cta_err)
 
         send_message(_chat_id, "✅ Frames Generated! Now compiling the video...", channel_id=channel_id)
 

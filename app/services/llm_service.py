@@ -561,36 +561,13 @@ _CTA_STORIES_HI = [
     "अगली कहानी का ट्विस्ट आपको चौंका देगा — Subscribe करें।",
 ]
 
-_CTA_VISUAL_NEWS = (
-    "Cinematic 4K, glowing golden notification bell icon radiating warm light beams "
-    "on a deep dark blue gradient background, dramatic modern digital style, "
-    "no text, no words, no signs, no watermark"
-)
-_CTA_VISUAL_STORY_EN = (
-    "Cinematic photorealistic, warm golden light glowing from an open book surrounded "
-    "by floating sparkling stars, magical and joyful atmosphere, "
-    "no text, no words, no signs, no watermark"
-)
-_CTA_VISUAL_STORY_HI = (
-    "Vibrant storybook illustration, bold outlines, rich saturated colors — "
-    "colorful celebration with floating stars and golden sparkles, warm joyful atmosphere, "
-    "no text, no words, no signs, no watermark"
-)
-
-
-def get_cta_scene(channel_id: str = "news", language: str = "en") -> dict:
-    """Return a randomly chosen CTA scene to append at the end of any video script."""
+def get_cta_narration(channel_id: str = "news", language: str = "en") -> str:
+    """Return a randomly chosen CTA narration string. No visual — caller reuses last frame."""
     if channel_id == "stories":
-        if language == "hi":
-            narration = random.choice(_CTA_STORIES_HI)
-            visual = _CTA_VISUAL_STORY_HI
-        else:
-            narration = random.choice(_CTA_STORIES_EN)
-            visual = _CTA_VISUAL_STORY_EN
+        pool = _CTA_STORIES_HI if language == "hi" else _CTA_STORIES_EN
     else:
-        narration = random.choice(_CTA_NEWS)
-        visual = _CTA_VISUAL_NEWS
-    return {"scene": 0, "narration": narration, "visual": visual}
+        pool = _CTA_NEWS
+    return random.choice(pool)
 
 
 def _is_premise_adequate(premise: str) -> bool:
