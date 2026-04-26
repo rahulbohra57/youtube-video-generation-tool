@@ -16,6 +16,7 @@ from app.services.llm_service import (
     generate_story_script,
     classify_music_genre,
     apply_quality_controls,
+    get_cta_scene,
 )
 from app.services.tts_service import generate_audio, choose_voice_for_video
 from app.services.image_service import generate_image
@@ -323,6 +324,12 @@ def run(
         # Stories generate 4 scenes for better pacing; news stays at 3 to control Imagen cost
         max_scenes = 4 if script_type == "story" else MAX_SCENES
         scenes = scenes[:max_scenes]
+
+        # Append a randomised Like & Subscribe CTA as the final scene
+        cta = get_cta_scene(channel_id=channel_id, language=language)
+        cta["scene"] = len(scenes) + 1
+        scenes.append(cta)
+        max_scenes = len(scenes)
 
         music_genre = classify_music_genre(headline)
         video_clips = []

@@ -507,6 +507,91 @@ _STORY_VISUAL_STYLE_POOL_EN = [
     "Photorealistic portrait lighting, golden hour glow, emotionally resonant, crisp detail",
 ]
 
+_CTA_NEWS = [
+    "Subscribe now for daily breaking news updates.",
+    "Stay informed — hit Subscribe and never miss a headline.",
+    "For the latest news first, Subscribe now.",
+    "Like, Share and Subscribe for real-time news alerts.",
+    "Join our community for trusted news every day.",
+    "Subscribe now and stay ahead of the story.",
+    "Get facts, updates, and breaking news — Subscribe today.",
+    "Turn on notifications for instant news updates.",
+    "Stay connected to what matters — Subscribe now.",
+    "Your daily news starts here — Subscribe today.",
+    "Don't miss the next big update — Subscribe now.",
+    "Like this video and Subscribe for more news coverage.",
+    "Stay aware, stay updated, stay subscribed.",
+    "For unbiased news and quick updates, Subscribe now.",
+    "Be the first to know — hit Subscribe now.",
+    "More updates in 60 seconds — Subscribe now.",
+    "Fast news, real facts — Subscribe today.",
+    "One minute news daily — Follow and Subscribe.",
+    "Quick headlines daily — Join now.",
+    "Stay updated in under a minute — Subscribe.",
+]
+
+_CTA_STORIES_EN = [
+    "Subscribe for a new story every day.",
+    "Love stories? Hit Subscribe now.",
+    "Stay till the end for the next amazing story.",
+    "New twists and endings daily — Subscribe now.",
+    "Enter the world of stories — Subscribe today.",
+    "One minute stories, endless emotions — Subscribe.",
+    "Don't miss tomorrow's story — Subscribe now.",
+    "Like, Share and Subscribe for more powerful stories.",
+    "Every story has a lesson — Subscribe for more.",
+    "Ready for the next twist? Subscribe now.",
+    "Stories that stay with you — Subscribe today.",
+    "Turn on notifications for daily story drops.",
+    "Subscribe now for mystery, horror and emotional stories.",
+    "A new ending awaits you — Subscribe now.",
+]
+
+_CTA_STORIES_HI = [
+    "रोज़ नई कहानियों के लिए अभी Subscribe करें।",
+    "अगली कहानी मिस मत करना — Subscribe now।",
+    "हर दिन नई ट्विस्ट वाली कहानी देखने के लिए Subscribe करें।",
+    "1 मिनट की शानदार कहानियों के लिए चैनल Subscribe करें।",
+    "अगला जबरदस्त अंत देखने के लिए जुड़े रहें।",
+    "Like, Share और Subscribe करना मत भूलिए।",
+    "हर कहानी में छुपी है एक सीख — Subscribe करें।",
+    "नई कहानी, नया एहसास — रोज़ देखें।",
+    "अगर कहानी पसंद आई हो तो Subscribe करें।",
+    "रोज़ाना मनोरंजक कहानियों के लिए Bell Icon दबाएं।",
+    "अगली कहानी का ट्विस्ट आपको चौंका देगा — Subscribe करें।",
+]
+
+_CTA_VISUAL_NEWS = (
+    "Cinematic 4K, glowing golden notification bell icon radiating warm light beams "
+    "on a deep dark blue gradient background, dramatic modern digital style, "
+    "no text, no words, no signs, no watermark"
+)
+_CTA_VISUAL_STORY_EN = (
+    "Cinematic photorealistic, warm golden light glowing from an open book surrounded "
+    "by floating sparkling stars, magical and joyful atmosphere, "
+    "no text, no words, no signs, no watermark"
+)
+_CTA_VISUAL_STORY_HI = (
+    "Vibrant storybook illustration, bold outlines, rich saturated colors — "
+    "colorful celebration with floating stars and golden sparkles, warm joyful atmosphere, "
+    "no text, no words, no signs, no watermark"
+)
+
+
+def get_cta_scene(channel_id: str = "news", language: str = "en") -> dict:
+    """Return a randomly chosen CTA scene to append at the end of any video script."""
+    if channel_id == "stories":
+        if language == "hi":
+            narration = random.choice(_CTA_STORIES_HI)
+            visual = _CTA_VISUAL_STORY_HI
+        else:
+            narration = random.choice(_CTA_STORIES_EN)
+            visual = _CTA_VISUAL_STORY_EN
+    else:
+        narration = random.choice(_CTA_NEWS)
+        visual = _CTA_VISUAL_NEWS
+    return {"scene": 0, "narration": narration, "visual": visual}
+
 
 def _is_premise_adequate(premise: str) -> bool:
     """Quality gate: premise must be at least 15 words to carry enough story specificity."""
