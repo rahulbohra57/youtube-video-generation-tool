@@ -457,23 +457,39 @@ def apply_quality_controls(topic: str, scenes: list[dict], language: str = "en",
     return cleaned
 
 
-def classify_music_genre(topic: str) -> str:
-    """Return the best matching genre folder name for a topic, or 'general'."""
-    genre_list = ", ".join(_MUSIC_GENRES)
-    prompt = f"""You are a music curator. Given a video topic, pick the single most fitting background music mood.
+_STORY_GENRE_TO_MUSIC = {
+    "inspiring": "Cheerful",
+    "comedy": "Happy",
+    "heartfelt": "Sad-Emotional",
+    "crime": "Suspense",
+    "action": "Suspense",
+    "sci-fi": "Suspense",
+    "mythology": "Sad-Emotional",
+    "thriller": "Suspense",
+    "mystery": "Suspense",
+    "adventure": "Happy",
+    "slice-of-life": "Happy",
+    "historical": "Sad-Emotional",
+}
 
-Available moods: {genre_list}, General
+_NEWS_KEYWORD_TO_MUSIC = {
+    "Suspense": ["crime", "fraud", "hack", "scam", "murder", "scandal", "arrest", "stolen", "terror", "attack", "lawsuit", "ban"],
+    "Sad-Emotional": ["death", "dies", "dead", "tragedy", "disaster", "flood", "earthquake", "crash", "killed", "victim", "mourning"],
+    "Cheerful": ["award", "record", "wins", "victory", "celebrate", "breakthrough", "milestone", "innovation", "launch", "festival"],
+    "Happy": ["sport", "cricket", "football", "tournament", "entertainment", "film", "movie", "concert", "comedy"],
+    "Party": ["viral", "trending", "meme", "social media"],
+}
 
-Topic: "{topic}"
 
-Reply with ONLY the single mood name from the list above. Nothing else."""
-
-    try:
-        response = model.generate_content(prompt)
-        genre = _response_text(response).strip().strip('"').strip("'")
-        return genre if genre in _MUSIC_GENRES else "general"
-    except Exception:
-        return "general"
+def classify_music_genre(topic: str, story_genre: str = "") -> str:
+    """Return the best matching music folder name using a keyword lookup. No LLM call."""
+    if story_genre and story_genre.lower() in _STORY_GENRE_TO_MUSIC:
+        return _STORY_GENRE_TO_MUSIC[story_genre.lower()]
+    lower = topic.lower()
+    for music_genre, keywords in _NEWS_KEYWORD_TO_MUSIC.items():
+        if any(kw in lower for kw in keywords):
+            return music_genre
+    return "News Bulletin"
 
 
 _STORY_MOODS = [

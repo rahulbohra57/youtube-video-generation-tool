@@ -321,11 +321,9 @@ def run(
         # Persist the reviewed title so REDO uses the same title as the original upload
         firestore_service.create_or_update_job(effective_job_id, {"reviewed_title": reviewed_title})
 
-        # Stories generate 4 scenes for better pacing; news stays at 3 to control Imagen cost
-        max_scenes = 4 if script_type == "story" else MAX_SCENES
-        scenes = scenes[:max_scenes]
+        scenes = scenes[:MAX_SCENES]
 
-        music_genre = classify_music_genre(headline)
+        music_genre = classify_music_genre(headline, story_genre=genre)
         video_clips = []
         image_failures = 0
         _last_scene_err_reason = "unknown"
@@ -395,7 +393,6 @@ def run(
                     retries_image=image_retries,
                 )
                 video_clips.append((image_path, audio_path, narration))
-                time.sleep(8)
             except Exception as e:
                 # For story scenes blocked by safety filter, try a pre-approved
                 # genre-safe fallback prompt once before counting the scene as failed.
@@ -432,7 +429,6 @@ def run(
                             retries_image=image_retries,
                         )
                         video_clips.append((image_path, audio_path, narration))
-                        time.sleep(8)
                         continue  # scene recovered via fallback — skip failure handling
                     except Exception as fallback_exc:
                         e = fallback_exc  # fall through to normal failure handling below
@@ -460,10 +456,10 @@ def run(
                     error=str(e),
                 )
                 # If ALL scenes have failed, notify and abort early
-                if image_failures >= max_scenes:
+                if image_failures >= MAX_SCENES:
                     send_message(
                         _chat_id,
-                        f"❌ Image generation failed for *{code}* — all {max_scenes} scenes failed.\n"
+                        f"❌ Image generation failed for *{code}* — all {MAX_SCENES} scenes failed.\n"
                         f"Reason: {_scene_err_reason}\n"
                         f"Video has been dropped. Please try again later.",
                         channel_id=channel_id,
@@ -486,15 +482,15 @@ def run(
                     _set_batch_terminal_state(batch_id, "failed", channel_id=channel_id)
                     return
 
-        # Require at least max_scenes-1 clips. A single successful scene
+        # Require at least MAX_SCENES-1 clips. A single successful scene
         # produces a ~15s stub that looks broken on YouTube. Treat it as a failure
         # so Cloud Tasks does NOT retry a partial video upload.
-        min_clips = max(1, max_scenes - 1)
+        min_clips = max(1, MAX_SCENES - 1)
         if len(video_clips) < min_clips:
             clip_count = len(video_clips)
             send_message(
                 _chat_id,
-                f"❌ Video generation failed for *{code}* — only {clip_count}/{max_scenes} scenes "
+                f"❌ Video generation failed for *{code}* — only {clip_count}/{MAX_SCENES} scenes "
                 f"could be generated. Reason: {_last_scene_err_reason}. Please try again later.",
                 channel_id=channel_id,
             )
@@ -503,7 +499,7 @@ def run(
                 {
                     "status": "failed",
                     "error_type": "insufficient_video_clips",
-                    "error_message": f"{clip_count}/{max_scenes} scenes generated",
+                    "error_message": f"{clip_count}/{MAX_SCENES} scenes generated",
                     "finished_at": datetime.now(timezone.utc).isoformat(),
                 },
             )

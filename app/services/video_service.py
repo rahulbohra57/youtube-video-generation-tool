@@ -27,14 +27,23 @@ _FONT_FALLBACKS = [
 ]
 
 
+_font_cache: dict[tuple, ImageFont.FreeTypeFont] = {}
+
 def _load_font(size: int, language: str = "en") -> ImageFont.FreeTypeFont:
+    key = (size, language)
+    if key in _font_cache:
+        return _font_cache[key]
     primary = _FONT_HI if language == "hi" else _FONT_EN
     for path, index in [primary] + _FONT_FALLBACKS:
         try:
-            return ImageFont.truetype(path, size, index=index)
+            font = ImageFont.truetype(path, size, index=index)
+            _font_cache[key] = font
+            return font
         except Exception:
             continue
-    return ImageFont.load_default()
+    font = ImageFont.load_default()
+    _font_cache[key] = font
+    return font
 
 
 # ─── Safe-zone constants ───────────────────────────────────────────────────────
@@ -252,24 +261,29 @@ def _make_word_caption_clips(
 
 # ─── Music picker ─────────────────────────────────────────────────────────────
 
+_music_cache: dict[str, list[str]] = {}
+
+def _tracks_in(directory: str) -> list[str]:
+    if directory not in _music_cache:
+        _music_cache[directory] = [
+            os.path.join(directory, f)
+            for f in os.listdir(directory)
+            if f.lower().endswith(('.mp3', '.wav', '.ogg', '.m4a'))
+        ] if os.path.isdir(directory) else []
+    return _music_cache[directory]
+
+
 def _pick_music(genre: str = "general") -> str | None:
     if not os.path.isdir(MUSIC_DIR):
         return None
 
-    def tracks_in(directory: str) -> list[str]:
-        return [
-            os.path.join(directory, f)
-            for f in os.listdir(directory)
-            if f.lower().endswith(('.mp3', '.wav', '.ogg', '.m4a'))
-        ]
-
     if genre and genre.lower() != "general":
-        genre_dir    = os.path.join(MUSIC_DIR, genre)
-        genre_tracks = tracks_in(genre_dir) if os.path.isdir(genre_dir) else []
+        genre_dir = os.path.join(MUSIC_DIR, genre)
+        genre_tracks = _tracks_in(genre_dir)
         if genre_tracks:
             return random.choice(genre_tracks)
 
-    root_tracks = tracks_in(MUSIC_DIR)
+    root_tracks = _tracks_in(MUSIC_DIR)
     return random.choice(root_tracks) if root_tracks else None
 
 
