@@ -68,7 +68,7 @@ independent YouTube Shorts channels:
 
 | Channel | Language | YouTube Name | Telegram Bot | Scheduler |
 |---|---|---|---|---|
-| **News** (`channel_id="news"`) | English | Kurrent Affairs | `TELEGRAM_BOT_TOKEN` | Every 4h (`12am, 4am, 8am, 12pm, 4pm, 8pm IST`) |
+| **News** (`channel_id="news"`) | English | Kurrent Affairs | `TELEGRAM_BOT_TOKEN` | Every 8h (`12am, 8am, 4pm IST`) |
 | **Stories** (`channel_id="stories"`) | Hindi | Short Tales | `STORIES_BOT_TOKEN` | `7am, 11am, 2pm, 6pm IST` |
 
 Each channel has its own:
@@ -96,7 +96,7 @@ and the same Imagen / TTS / LLM services.
 
 ## News Channel Pipeline (Kurrent Affairs)
 
-### Step 1 — Research (`/research/run`, every 4h: 12am, 4am, 8am, 12pm, 4pm, 8pm IST)
+### Step 1 — Research (`/research/run`, every 8h: 12am, 8am, 4pm IST)
 
 Triggered by Cloud Scheduler → `lead_researcher.run()`:
 
@@ -118,8 +118,7 @@ Triggered by Cloud Scheduler → `lead_researcher.run()`:
    `/generate/task`.
 8. **Notify** the Kurrent Affairs Telegram channel with the selected headline and virality score.
 
-**GNews quota impact**: Single-domain fetch reduces calls from 5/run × 6 runs = 30/day to
-**6 calls/day** (94% reduction). Well within the 100/day free tier.
+**GNews quota impact**: Single-domain fetch at 3 runs/day = **3 calls/day** (97% reduction from the original 30/day). Well within the 100/day free tier.
 
 **Fortnightly domain schedule auto-update** (`update_domain_schedule()`):
 - Triggered by `/research/update-analytics` (Cloud Scheduler, 10pm daily).
@@ -361,8 +360,7 @@ Three layers prevent duplicate videos:
 
 | Job ID | Schedule (IST) | Endpoint | Notes |
 |---|---|---|---|
-| `autoframe-lead-researcher` | `0 */4 * * *` (12am, 4am, 8am, 12pm, 4pm, 8pm) | `/research/run` | News pipeline trigger |
-| `autoframe-retry-failed` | `0 */4 * * *` (every 4h) | `/research/retry-failed` | Retry last failed news job |
+| `autoframe-lead-researcher` | `0 0,8,16 * * *` (12am, 8am, 4pm) | `/research/run` | News pipeline trigger |
 | `autoframe-daily-digest` | `0 8 * * *` (8am) | `/research/daily-digest` | News channel daily report |
 | `autoframe-update-analytics` | `0 22 * * *` (10pm) | `/research/update-analytics` | **Paid — $0.10/month** |
 | `autoframe-stories-run` | `0 7,11,14,18 * * *` (7am, 11am, 2pm, 6pm) | `/stories/run` | Stories pipeline trigger |
@@ -370,9 +368,9 @@ Three layers prevent duplicate videos:
 
 **All scheduler endpoints require the `X-Scheduler-Secret` header.**
 
-**News cadence quota check:** GNews free tier is 100 calls/day. Current schedule is 6 cycles/day ×
-1 domain = 6 calls/day (single-domain scheduling). Even with fallback domains, worst case ~11 calls/day.
-A 1h schedule would be ~16 calls/day — well within quota.
+**News cadence quota check:** GNews free tier is 100 calls/day. Current schedule is 3 cycles/day ×
+1 domain = 3 calls/day (single-domain scheduling). Even with fallback domains, worst case ~8 calls/day.
+Well within quota.
 
 ---
 
@@ -385,7 +383,9 @@ gcloud run deploy autoframe \
   --source . \
   --project=youtube-video-generator-492211 \
   --region=us-central1 \
-  --allow-unauthenticated
+  --allow-unauthenticated \
+  --min-instances=0 \
+  --max-instances=1
 ```
 
 **Why:** Both Telegram webhooks are called directly by Telegram's servers. Telegram has no way
@@ -397,6 +397,7 @@ to present GCP auth credentials. Using `--no-allow-unauthenticated` blocks all T
 | Flag | Current value | Why it must stay this way |
 |---|---|---|
 | `--min-instances=0` | 0 | Telegram update dedup is Firestore-backed (`idempotency_keys`, 5-min TTL) — survives cold starts. Eliminating the always-on instance saves ~₹4,400/week. |
+| `--max-instances=1` | 1 | Video generation holds a distributed lock — a second instance would be wasted (rejected by the lock). Caps Cloud Run compute cost. |
 | `--cpu-throttling=false` | off | Video encoding (moviepy) and image generation are CPU-heavy. CPU throttling causes `ffmpeg` to time out mid-render. |
 | `--startup-cpu-boost` | on | Reduces cold-start latency. |
 | `--memory=4Gi` | 4 GiB | moviepy/PIL load full video frames into memory. Less than 4 GiB causes OOM kills mid-generation. |
@@ -411,7 +412,9 @@ gcloud run deploy autoframe \
   --source . \
   --project=youtube-video-generator-492211 \
   --region=us-central1 \
-  --allow-unauthenticated
+  --allow-unauthenticated \
+  --min-instances=0 \
+  --max-instances=1
 ```
 
 ---
@@ -448,7 +451,6 @@ Two mechanisms enforce one video at a time **per channel**:
 
 **If the pipeline gets stuck in `processing`:**
 - Set `pipeline_state` doc's `state` field to `"failed"` in Firestore console, OR
-- Trigger `/research/retry-failed` — it checks for stale state automatically, OR
 - Delete the `locks/video_generation` document to release the lock.
 
 **Never manually delete** `pipeline_state`, `news_batches`, or `jobs` documents while a video
@@ -477,7 +479,7 @@ APIs & Services → Credentials, or OAuth flows will fail with `redirect_uri_mis
 
 ### GNews API
 - **Free tier:** 100 requests/day
-- **App usage:** 1 domain/run × 6 runs/day = **6 calls/day (6%)** — single-domain scheduling
+- **App usage:** 1 domain/run × 3 runs/day = **3 calls/day (3%)** — single-domain scheduling
   (previously 5 domains/run = 30 calls/day). Fallback domains add up to ~5 extra calls/day worst case.
 - **Circuit-breaker:** fires at 80 calls/day — returns `[]` without making HTTP call
 - Quota tracked in Firestore `quota_events` (`kind == "gnews_call"`)

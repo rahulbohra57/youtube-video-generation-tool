@@ -26,22 +26,6 @@ def run_research(request: Request):
     return {"status": "ok", "batch_id": batch_id}
 
 
-@router.post("/research/retry-failed")
-def retry_failed(request: Request):
-    """Called by Cloud Scheduler every 4h (IST) to retry the latest failed auto-pipeline."""
-    secret = request.headers.get("X-Scheduler-Secret", "")
-    if secret != SCHEDULER_SECRET:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    try:
-        batch_id = lead_researcher.retry_failed_pipeline()
-    except Exception as e:
-        logger.exception(f"retry_failed_pipeline() failed: {e}")
-        raise HTTPException(status_code=500, detail="retry_failed_pipeline_error")
-    if not batch_id:
-        return {"status": "skipped", "reason": "no_failed_jobs_or_pipeline_busy"}
-    return {"status": "ok", "batch_id": batch_id}
-
-
 @router.post("/research/update-analytics")
 def update_analytics(request: Request):
     """Called by Cloud Scheduler daily. Fetches YouTube analytics and runs fortnightly schedule update."""

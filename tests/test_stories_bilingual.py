@@ -96,51 +96,60 @@ def test_generate_story_script_hindi_uses_painted_visual_pool():
         assert pool_arg is _STORY_VISUAL_STYLE_POOL_HI
 
 
-# ── _story_language rotation ─────────────────────────────────────────────────
+# ── daily cap ────────────────────────────────────────────────────────────────
 
-def test_story_language_hindi_slot_rotates_by_day():
-    """Hindi slot advances by 1 each day across 4 slots on a 4-day cycle."""
-    from zoneinfo import ZoneInfo
-    from unittest.mock import patch
+def test_story_already_generated_today_returns_true_when_job_exists():
+    """Daily cap fires when a non-terminal stories job was created today (IST)."""
     import datetime as dt
-
-    IST = ZoneInfo("Asia/Kolkata")
-    # slot_hours = [7, 11, 14, 18] → indices 0, 1, 2, 3
-    test_cases = [
-        # (DOY, hour, expected_language)
-        (1, 7,  "en"),   # DOY=1 → hindi_slot=1, running at slot0 → English
-        (1, 11, "hi"),   # DOY=1 → hindi_slot=1, running at slot1 → Hindi
-        (1, 14, "en"),   # DOY=1 → hindi_slot=1, running at slot2 → English
-        (1, 18, "en"),   # DOY=1 → hindi_slot=1, running at slot3 → English
-        (2, 7,  "en"),   # DOY=2 → hindi_slot=2, slot0 → English
-        (2, 14, "hi"),   # DOY=2 → hindi_slot=2, slot2 → Hindi
-        (4, 7,  "hi"),   # DOY=4 → hindi_slot=0, slot0 → Hindi
-        (4, 11, "en"),   # DOY=4 → hindi_slot=0, slot1 → English
-    ]
-
-    for doy, hour, expected in test_cases:
-        fake_now = dt.datetime(2026, 1, doy, hour, 5, 0, tzinfo=IST)
-        with patch("app.agents.story_researcher.datetime") as mock_dt:
-            # Return a real datetime so .hour and .timetuple() work naturally
-            mock_dt.now.return_value = fake_now
-            from app.agents.story_researcher import _story_language
-            result = _story_language()
-        assert result == expected, f"DOY={doy}, hour={hour}: expected {expected}, got {result}"
-
-
-def test_story_language_returns_valid_string_for_off_hours():
-    """If current hour is before all slots, function still returns a valid language string."""
     from zoneinfo import ZoneInfo
-    import datetime as dt
     from unittest.mock import patch
 
     IST = ZoneInfo("Asia/Kolkata")
-    fake_now = dt.datetime(2026, 1, 1, 3, 0, 0, tzinfo=IST)  # 3am — before all slots
-    with patch("app.agents.story_researcher.datetime") as mock_dt:
-        mock_dt.now.return_value = fake_now
-        from app.agents.story_researcher import _story_language
-        result = _story_language()
-    assert result in ("en", "hi")
+    now_ist = dt.datetime(2026, 4, 27, 10, 0, 0, tzinfo=IST)
+    # created_at slightly after IST midnight
+    created_utc = dt.datetime(2026, 4, 26, 18, 30, 0, tzinfo=dt.timezone.utc)  # 2026-04-27 00:00 IST
+
+    fake_job = {
+        "channel_id": "stories",
+        "status": "completed",
+        "created_at": created_utc.isoformat(),
+    }
+
+    with patch("app.agents.story_researcher.datetime") as mock_dt, \
+         patch("app.services.firestore_service.list_recent_jobs", return_value=[fake_job]):
+        mock_dt.now.return_value = now_ist
+        mock_dt.fromisoformat.side_effect = dt.datetime.fromisoformat
+        from app.agents.story_researcher import _story_already_generated_today
+        result = _story_already_generated_today()
+
+    assert result is True
+
+
+def test_story_already_generated_today_returns_false_when_no_job_today():
+    """Daily cap does not fire when the only story job was created yesterday."""
+    import datetime as dt
+    from zoneinfo import ZoneInfo
+    from unittest.mock import patch
+
+    IST = ZoneInfo("Asia/Kolkata")
+    now_ist = dt.datetime(2026, 4, 27, 10, 0, 0, tzinfo=IST)
+    # created_at before IST midnight
+    created_utc = dt.datetime(2026, 4, 26, 17, 0, 0, tzinfo=dt.timezone.utc)  # 2026-04-26 22:30 IST
+
+    fake_job = {
+        "channel_id": "stories",
+        "status": "completed",
+        "created_at": created_utc.isoformat(),
+    }
+
+    with patch("app.agents.story_researcher.datetime") as mock_dt, \
+         patch("app.services.firestore_service.list_recent_jobs", return_value=[fake_job]):
+        mock_dt.now.return_value = now_ist
+        mock_dt.fromisoformat.side_effect = dt.datetime.fromisoformat
+        from app.agents.story_researcher import _story_already_generated_today
+        result = _story_already_generated_today()
+
+    assert result is False
 
 
 # ── generator_agent language threading ──────────────────────────────────────

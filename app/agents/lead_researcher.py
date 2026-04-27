@@ -333,52 +333,6 @@ def send_daily_digest():
     send_message(TELEGRAM_CHAT_ID, message, channel_id="news")
 
 
-def retry_failed_pipeline() -> str | None:
-    """Find the most recent failed auto-generated job and re-enqueue it."""
-    state = firestore_service.get_pipeline_state() or {}
-    if state.get("state") == "processing":
-        return None
-
-    failed_jobs = firestore_service.get_failed_auto_jobs(max_age_hours=12)
-    if not failed_jobs:
-        return None
-
-    job = failed_jobs[0]
-    topic = job.get("topic", "")
-    genre = job.get("genre", "")
-    details = job.get("details", "")
-    original_job_id = job.get("job_id", "")
-
-    if not topic:
-        return None
-
-    firestore_service.create_or_update_job(original_job_id, {"retry_attempted": True})
-
-    batch_id = f"retry_{datetime.now(timezone.utc):%Y%m%d_%H%M%S}"
-    prefix = _prefix_for_domain(genre)
-    code = f"{prefix}01"
-
-    firestore_service.save_news_batch(batch_id, (genre or "general").lower(), {
-        code: {"code": code, "headline": topic, "context": details, "rating": 4.5, "genre": genre}
-    })
-    firestore_service.set_pipeline_and_batch_state(batch_id, "processing")
-
-    from app.agents import whatsapp_agent
-    task_name = whatsapp_agent._task_name(batch_id, code)
-    public_id = whatsapp_agent._public_video_id(task_name)
-
-    send_message(TELEGRAM_CHAT_ID, f"🔁 Auto-retrying failed pipeline\nTopic: _{topic}_", channel_id="news")
-
-    enqueued = whatsapp_agent._enqueue_generate(
-        topic, code, batch_id,
-        public_id=public_id, genre=genre, details=details, source="retry",
-    )
-    if not enqueued:
-        firestore_service.set_pipeline_and_batch_state(batch_id, "failed")
-        return None
-
-    return batch_id
-
 
 _FIXED_DOMAIN_NAMES = {"trending", "artificial intelligence"}
 

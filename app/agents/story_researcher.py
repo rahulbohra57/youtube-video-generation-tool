@@ -49,22 +49,25 @@ def _mark_story_used(title: str, mood: str = ""):
     firestore_service.mark_headline_suggested(title, genre=mood, channel_id="stories")
 
 
-def _story_language() -> str:
-    """Return 'hi' for today's rotating Hindi slot, 'en' for all other slots.
-
-    4 daily slots map to indices by IST hour: 7am→0, 11am→1, 2pm→2, 6pm→3.
-    The Hindi slot index is day_of_year % 4, rotating on a 4-day cycle so each
-    slot gets exactly one Hindi run every 4 days.
-    """
-    from zoneinfo import ZoneInfo
+def _story_already_generated_today() -> bool:
+    """Return True if a story was already enqueued or completed since IST midnight today."""
     now_ist = datetime.now(ZoneInfo("Asia/Kolkata"))
-    slot_hours = [7, 11, 14, 18]
-    slot_index = 0
-    for idx, hour in enumerate(slot_hours):
-        if now_ist.hour >= hour:
-            slot_index = idx
-    hindi_slot = now_ist.timetuple().tm_yday % 4
-    return "hi" if slot_index == hindi_slot else "en"
+    today_midnight_ist = now_ist.replace(hour=0, minute=0, second=0, microsecond=0)
+    cutoff_utc = today_midnight_ist.astimezone(timezone.utc).timestamp()
+    rows = firestore_service.list_recent_jobs(limit=50)
+    for r in rows:
+        if r.get("channel_id") != "stories":
+            continue
+        if r.get("status") in ("cancelled", "failed"):
+            continue
+        created = r.get("created_at", "")
+        try:
+            ts = datetime.fromisoformat(created.replace("Z", "+00:00")).timestamp()
+        except Exception:
+            continue
+        if ts >= cutoff_utc:
+            return True
+    return False
 
 
 def _recently_used_titles(limit: int = 20) -> list[str]:
@@ -139,8 +142,11 @@ def run() -> str | None:
         )
         return None
 
-    # Determine language for this scheduler slot (3 English : 1 Hindi per day, rotating)
-    language = _story_language()
+    if _story_already_generated_today():
+        logger.info("Stories daily cap reached — skipping this slot")
+        return None
+
+    language = "hi"
 
     # Generate a new story idea (title + mood + premise)
     recently_used = _recently_used_titles()
@@ -268,7 +274,7 @@ def run() -> str | None:
     if STORIES_CHAT_ID:
         send_message(
             STORIES_CHAT_ID,
-            f"📖 Generating {'Hindi' if language == 'hi' else 'English'} story...\n"
+            f"📖 Generating Hindi story...\n"
             f"Title: *{title}*\n"
             f"Genre: {mood.title()}\n"
             f"Id: `{public_id}`",
