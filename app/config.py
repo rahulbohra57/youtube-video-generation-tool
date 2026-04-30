@@ -51,6 +51,6 @@ def get_chat_id(channel_id: str) -> str:
 # Cloud Scheduler auth
 SCHEDULER_SECRET = os.getenv("SCHEDULER_SECRET", "")
 
-# Cloud Tasks
-CLOUD_RUN_URL = os.getenv("CLOUD_RUN_URL", "https://autoframe-353645494126.us-central1.run.app")
-TASKS_QUEUE = os.getenv("TASKS_QUEUE", "autoframe-generate")
+# GitHub Actions dispatch
+GITHUB_DISPATCH_TOKEN = os.getenv("GITHUB_DISPATCH_TOKEN", "")
+GITHUB_REPO = os.getenv("GITHUB_REPO", "")
