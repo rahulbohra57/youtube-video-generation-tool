@@ -64,6 +64,50 @@ _VISUAL_STYLE_POOL = [
 ]
 
 
+def _extract_article_year(context: str) -> int | None:
+    """Extract publication year from context string (from [Article published: YYYY-...] or 'As of Month D, YYYY')."""
+    m = re.search(r'\[Article published: (\d{4})-', context)
+    if m:
+        return int(m.group(1))
+    m = re.search(r'As of \w+ \d+,\s*(\d{4})', context)
+    if m:
+        return int(m.group(1))
+    return None
+
+
+def _enforce_article_year(scenes: list[dict], context: str) -> list[dict]:
+    """Deterministically replace years in narrations that are implausibly far from the article year.
+
+    Catches cases where the LLM reviewer fails to remove hallucinated years sourced from
+    training data (e.g. writing '2024' for an article published in 2026).
+    Allows the publication year ±1 to cover events that started the previous year.
+    """
+    article_year = _extract_article_year(context)
+    if not article_year:
+        return scenes
+    result = []
+    for scene in scenes:
+        narration = scene.get("narration", "")
+        def _replace(m: re.Match) -> str:
+            y = int(m.group(0))
+            return m.group(0) if abs(y - article_year) <= 1 else "recently"
+        result.append({**scene, "narration": re.sub(r'\b(19|20)\d{2}\b', _replace, narration)})
+    return result
+
+
+def _build_context_block(context: str, label: str = "NEWS CONTEXT — primary source of truth. The script MUST cover ALL angles and facts below. Do not omit any element") -> str:
+    """Wrap context with a label and a prominent date anchor when a publication year is present."""
+    if not context or not context.strip():
+        return ""
+    article_year = _extract_article_year(context)
+    year_anchor = (
+        f"\n⚠️ DATE ANCHOR: This article was published in {article_year}. "
+        f"Every specific year you write in the narration MUST be {article_year} or a year explicitly present in the context below. "
+        f"Do NOT write any other year — if unsure, omit it or write 'recently'."
+    ) if article_year else ""
+    return f"\n{label}:{year_anchor}\n{context.strip()}\n"
+
+
 def generate_script(topic: str, language: str = "en", aspect_ratio: str = "16:9", context: str = ""):
     from datetime import date
     today_str = date.today().isoformat()
@@ -85,7 +129,7 @@ def generate_script(topic: str, language: str = "en", aspect_ratio: str = "16:9"
         )
         max_scenes = "5"
 
-    context_block = f"\nNEWS CONTEXT — primary source of truth. The script MUST cover ALL angles and facts below. Do not omit any element:\n{context.strip()}\n" if context and context.strip() else ""
+    context_block = _build_context_block(context)
     video_style = random.choice(_VISUAL_STYLE_POOL)
 
     prompt = f"""
@@ -221,13 +265,13 @@ def generate_script_with_search(topic: str, language: str = "en", aspect_ratio: 
         )
         max_scenes = "5"
 
-    context_block = f"\nNEWS CONTEXT — primary source of truth. The script MUST cover ALL angles and facts below. Do not omit any element:\n{context.strip()}\n" if context and context.strip() else ""
+    context_block = _build_context_block(context)
     video_style = random.choice(_VISUAL_STYLE_POOL)
 
     prompt = f"""
 You are an expert scriptwriter for educational YouTube videos. Use your Google Search tool to look up the latest information about this headline, then write a factually accurate video script. The script must faithfully represent ALL angles in the headline and news context. Do NOT substitute outdated training-data knowledge when current search results are available.
 
-CRITICAL: TODAY'S DATE is {today_str}. The NEWS CONTEXT below (if present) describes a RECENT event that occurred close to this date. When searching, look for the most recent version of this story — do NOT write about older events with similar topic names. If the context says "As of [date]", that is the event date to focus on.
+CRITICAL: TODAY'S DATE is {today_str}. The NEWS CONTEXT below (if present) describes a RECENT event that occurred close to this date. When searching, look for the most recent version of this story — do NOT write about older events with similar topic names. If the context says "As of [date]", that is the event date to focus on. If your search returns an older similar story, IGNORE IT — the video is about the specific event described in the NEWS CONTEXT below.
 
 Topic: {topic}{context_block}
 
@@ -394,11 +438,7 @@ def fact_check_scenes(topic: str, scenes: list[dict], language: str = "en", cont
     from datetime import date
     today_str = date.today().isoformat()
     lang_instruction = _LANG_INSTRUCTIONS.get(language, _LANG_INSTRUCTIONS["en"])
-    context_block = (
-        f"\nSOURCE CONTEXT (authoritative — all dates/years must match this):\n{context.strip()}\n"
-        if context and context.strip()
-        else ""
-    )
+    context_block = _build_context_block(context, label="SOURCE CONTEXT (authoritative — all dates/years must match this)")
     prompt = f"""
 You are a strict fact-check and policy safety editor for short educational videos.
 
@@ -407,7 +447,7 @@ TODAY'S DATE: {today_str}{context_block}
 Task:
 1) Review each scene's narration for likely factual errors, overclaims, or missing caution.
 2) Flag and correct any claim that presents a past event (more than a few weeks ago) as if it just happened or is "breaking news".
-3) CRITICAL — YEAR HALLUCINATION CHECK: Identify every specific year mentioned in the narrations. For each year, verify it is explicitly present in the SOURCE CONTEXT above. If a year appears in the narration but NOT in the source context, it was fabricated from training-data knowledge — remove it or replace with "recently". Training data often contains outdated planned/scheduled dates for ongoing events (e.g. a mission planned for 2025 that actually launched in 2026); the source context is always authoritative.
+3) CRITICAL — DATE & YEAR HALLUCINATION CHECK: Identify every specific year AND every specific date (e.g. "April 27th", "March 3rd") mentioned in the narrations. The DATE ANCHOR above states the article's publication year. Any year in the narration that differs from the DATE ANCHOR year (unless explicitly present in the SOURCE CONTEXT) was fabricated — remove it or replace with "recently". Any specific day-month combination that contradicts the SOURCE CONTEXT must also be corrected or removed. Training data often contains older similar events with different dates — the SOURCE CONTEXT is always authoritative.
 4) Replace fabricated or unverifiable specific dates/numbers with hedged language ("reportedly", "as of [year]", "estimated"). Remove them entirely if they add no value.
 5) Keep same number of scenes and same `scene` numbers.
 6) Keep visual prompts in English and remove risky copyright/trademark references.
@@ -440,6 +480,8 @@ def apply_quality_controls(topic: str, scenes: list[dict], language: str = "en",
     for story scripts where fiction shouldn't be treated as news claims.
     """
     reviewed = scenes if skip_fact_check else fact_check_scenes(topic, scenes, language=language, context=context)
+    if not skip_fact_check and context:
+        reviewed = _enforce_article_year(reviewed, context)
     cleaned = []
     for s in reviewed:
         narration = strip_markdown_formatting(str(s.get("narration", "")))
