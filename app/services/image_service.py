@@ -92,9 +92,11 @@ def generate_image(prompt: str, idx: int, aspect_ratio: str = "16:9") -> str:
                 aspect_ratio=aspect_ratio,
                 negative_prompt=(
                     "real person face, celebrity portrait, politician likeness, "
-                    "specific named individual, realistic human portrait, photorealistic face"
-                    ", copyrighted character, trademark logo, brand logo, movie character, cartoon mascot"
+                    "specific named individual, realistic human portrait, photorealistic face, "
+                    "copyrighted character, trademark logo, brand logo, movie character, cartoon mascot"
                 ),
+                safety_filter_level="block_few",
+                person_generation="allow_adult",
             )
 
             first_image = _first_generated_image(images)
