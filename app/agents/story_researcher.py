@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 from app.services import firestore_service
 from app.services.llm_service import generate_story_idea
 from app.services.telegram_service import send_message
-from app.config import STORIES_CHAT_ID, CLOUD_RUN_URL, PROJECT_ID, LOCATION, TASKS_QUEUE
+from app.config import STORIES_CHAT_ID
 
 logger = logging.getLogger(__name__)
 
@@ -120,16 +120,14 @@ def _select_story_genre() -> str:
 
 def run() -> str | None:
     """
-    Main entry point called by POST /stories/run (Cloud Scheduler).
+    Main entry point called by POST /stories/run or GitHub Actions scheduled workflow.
     1. Check pipeline state — skip if already processing.
     2. Generate a fresh Hindi story idea via LLM.
     3. Deduplicate against recent 30-day window.
-    4. Enqueue a Cloud Task to generate the full video.
+    4. Dispatch GitHub Actions workflow to generate the full video.
     5. Notify the stories Telegram channel.
     Returns the public_id string if enqueued, None otherwise.
     """
-    from google.cloud import tasks_v2
-    from google.api_core.exceptions import AlreadyExists
 
     state = firestore_service.get_pipeline_state(channel_id="stories")
     if state.get("state") == "processing":
@@ -222,48 +220,25 @@ def run() -> str | None:
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
 
-    # Enqueue Cloud Task
-    import json
-    client = tasks_v2.CloudTasksClient()
-    queue_path = client.queue_path(PROJECT_ID, LOCATION, TASKS_QUEUE)
-    payload = json.dumps({
-        "headline": title,
-        "code": code,
-        "batch_id": batch_id,
-        "job_id": job_id,
-        "public_id": public_id,
-        "force_run": True,
-        "genre": mood,
-        "details": premise,
-        "virality_score": 0.0,
-        "channel_id": "stories",
-        "script_type": "story",
-        "language": language,
-    }).encode()
-
+    # Dispatch GitHub Actions workflow for video generation
+    from app.agents.github_dispatch import dispatch_video_generation
     try:
-        client.create_task(request={
-            "parent": queue_path,
-            "task": {
-                "name": f"{queue_path}/tasks/{task_name}",
-                "dispatch_deadline": {"seconds": 1800},  # 30 min — prevents retry before task completes
-                "http_request": {
-                    "http_method": tasks_v2.HttpMethod.POST,
-                    "url": f"{CLOUD_RUN_URL}/generate/stories-task",
-                    "headers": {"Content-Type": "application/json"},
-                    "body": payload,
-                    "oidc_token": {
-                        "service_account_email": "353645494126-compute@developer.gserviceaccount.com",
-                    },
-                },
-            },
+        dispatch_video_generation({
+            "headline": title,
+            "code": code,
+            "batch_id": batch_id,
+            "job_id": job_id,
+            "public_id": public_id,
+            "force_run": True,
+            "genre": mood,
+            "details": premise,
+            "virality_score": 0.0,
+            "channel_id": "stories",
+            "script_type": "story",
+            "language": language,
         })
-    except AlreadyExists:
-        logger.warning(f"Stories task {task_name} already exists — skipping duplicate")
-        firestore_service.set_pipeline_and_batch_state(batch_id, "skipped", channel_id="stories")
-        return None
     except Exception as e:
-        logger.exception(f"Failed to enqueue stories task: {e}")
+        logger.exception(f"Failed to dispatch story generation workflow: {e}")
         firestore_service.set_pipeline_and_batch_state(batch_id, "failed", channel_id="stories")
         if STORIES_CHAT_ID:
             send_message(STORIES_CHAT_ID, f"❌ Failed to queue story: {e}", channel_id="stories")

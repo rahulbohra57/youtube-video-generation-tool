@@ -2,8 +2,6 @@
 
 import os
 
-PROJECT_ID = os.getenv("PROJECT_ID", "youtube-video-generator-492211")
-LOCATION = os.getenv("LOCATION", "us-central1")
 BUCKET_NAME = os.getenv("BUCKET_NAME", "yt-gen-app-bucket")
 
 TEMP_DIR = "tmp/"
@@ -50,6 +48,9 @@ def get_chat_id(channel_id: str) -> str:
 
 # Cloud Scheduler auth
 SCHEDULER_SECRET = os.getenv("SCHEDULER_SECRET", "")
+
+# Base URL of the deployed app (used for OAuth redirect URIs in re-auth links)
+APP_BASE_URL = os.getenv("APP_BASE_URL", os.getenv("CLOUD_RUN_URL", "https://autoframe-353645494126.us-central1.run.app"))
 
 # GitHub Actions dispatch
 GITHUB_DISPATCH_TOKEN = os.getenv("GITHUB_DISPATCH_TOKEN", "")
