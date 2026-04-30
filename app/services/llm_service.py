@@ -945,6 +945,39 @@ def format_caption_for_youtube(text: str) -> str:
     return body
 
 
+def inject_source_url(caption: str, source_url: str) -> str:
+    """Insert 'Read More: <url>' before the hashtag line in a YouTube description.
+
+    Result structure:
+        {body text}
+
+        Read More: <url>
+
+        {#hashtag1 #hashtag2 ...}
+    """
+    if not source_url or not caption:
+        return caption
+    raw = (caption or "").replace("\r\n", "\n").replace("\r", "\n")
+    lines = raw.split("\n")
+    # Find the index of the first hashtag-only line (the tag block is always last)
+    first_tag_idx = len(lines)
+    for i in range(len(lines) - 1, -1, -1):
+        stripped = lines[i].strip()
+        if stripped and all(tok.startswith("#") for tok in stripped.split()):
+            first_tag_idx = i
+        elif stripped:
+            break
+    body_lines = lines[:first_tag_idx]
+    tag_lines = lines[first_tag_idx:]
+    # Strip trailing blank lines from body
+    while body_lines and not body_lines[-1].strip():
+        body_lines.pop()
+    read_more = f"Read More: {source_url}"
+    if tag_lines:
+        return "\n".join(body_lines) + f"\n\n{read_more}\n\n" + "\n".join(tag_lines)
+    return "\n".join(body_lines) + f"\n\n{read_more}"
+
+
 def generate_shorts_caption(topic: str, language: str = "en") -> str:
     lang_instruction = _LANG_INSTRUCTIONS.get(language, _LANG_INSTRUCTIONS["en"])
 

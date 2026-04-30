@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 import time
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -561,6 +562,13 @@ def run(
             )
 
         caption = reviewed_caption
+
+        # Append source article link before hashtags for news videos
+        if script_type != "story" and details:
+            _url_match = re.search(r'Source(?:\s+URL)?:\s*(https?://\S+)', details)
+            if _url_match:
+                from app.services.llm_service import inject_source_url
+                caption = inject_source_url(caption, _url_match.group(1))
 
         # Lazy import to avoid circular dependency with social_media_agent → whatsapp_agent
         from app.agents import social_media_agent
