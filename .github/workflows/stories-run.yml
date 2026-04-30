@@ -38,4 +38,5 @@ jobs:
           STORIES_BOT_TOKEN: ${{ secrets.STORIES_BOT_TOKEN }}
           STORIES_CHAT_ID: ${{ secrets.STORIES_CHAT_ID }}
           GITHUB_REPO: ${{ github.repository }}
+          GITHUB_DISPATCH_TOKEN: ${{ github.token }}
         run: python scripts/run_stories.py
