@@ -1,0 +1,17 @@
+{
+  "rewrites": [
+    { "source": "/admin", "destination": "/admin.html" },
+    {
+      "source": "/admin/metrics/:path*",
+      "destination": "/api/admin/metrics/:path*"
+    },
+    {
+      "source": "/webhook/telegram",
+      "destination": "/api/webhook/telegram"
+    },
+    {
+      "source": "/webhook/telegram/stories",
+      "destination": "/api/webhook/stories"
+    }
+  ]
+}

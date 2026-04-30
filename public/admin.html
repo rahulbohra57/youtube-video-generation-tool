@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AUTOFRAME Admin</title>
+  <style>
+    :root {
+      --bg: #0c1324;
+      --card: #13203d;
+      --text: #e8f0ff;
+      --muted: #9fb3d9;
+      --accent: #37c58a;
+      --warn: #e6b93d;
+      --bad: #e05f5f;
+      --tab: #1d3260;
+      --tab-active: #2b4f91;
+    }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at top, #162748, var(--bg) 60%);
+      color: var(--text);
+    }
+    .wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    h1 { margin: 0 0 8px; }
+    .sub { color: var(--muted); margin: 0 0 14px; font-size: 13px; }
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    .tabs {
+      display: inline-flex;
+      border: 1px solid #1d3260;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #101d36;
+    }
+    .tab {
+      border: 0;
+      background: var(--tab);
+      color: var(--text);
+      font-weight: 700;
+      padding: 10px 14px;
+      cursor: pointer;
+    }
+    .tab.active {
+      background: var(--tab-active);
+    }
+    button.primary {
+      background: var(--accent);
+      border: 0;
+      color: #042114;
+      font-weight: 700;
+      padding: 10px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid #1d3260;
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+    .value { font-size: 24px; font-weight: 700; margin-top: 6px; }
+    .meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 8px; border-bottom: 1px solid #20335e; text-align: left; font-size: 13px; }
+    th { color: var(--muted); }
+    .pill { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+    .ok { background: rgba(55, 197, 138, .2); color: #7fe3bb; }
+    .mid { background: rgba(230, 185, 61, .2); color: #f0cc73; }
+    .bad { background: rgba(224, 95, 95, .2); color: #f3a4a4; }
+    pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>AUTOFRAME Admin</h1>
+    <p class="sub">Live dashboard for News and Stories pipelines.</p>
+
+    <div class="toolbar">
+      <div class="tabs">
+        <button class="tab active" id="tab-news" type="button">News</button>
+        <button class="tab" id="tab-stories" type="button">Stories</button>
+      </div>
+      <button class="primary" id="refreshSocialBtn" type="button">Refresh YouTube Stats</button>
+    </div>
+
+    <div class="row" id="cards"></div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="label">Failure Breakdown (24h)</div>
+      <pre id="failures"></pre>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="label">Genre Performance (14d)</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Genre</th><th>Videos</th><th>Views</th><th>Comments</th><th>Avg Views</th><th>Avg Comments</th>
+          </tr>
+        </thead>
+        <tbody id="genrePerfBody"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="label">Recent Jobs</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th><th>Job</th><th>Source</th><th>Status</th><th>Topic</th><th>Error</th>
+          </tr>
+        </thead>
+        <tbody id="jobsBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const adminSecret = params.get("secret") || "";
+    const headers = adminSecret ? { "X-Admin-Secret": adminSecret } : {};
+
+    let currentChannel = "news";
+
+    function fmt(n) { return Number(n || 0).toLocaleString(); }
+    function esc(s) { return (s || "").replace(/[<>&]/g, c => ({ "<":"&lt;", ">":"&gt;", "&":"&amp;" }[c])); }
+    function pillClass(status) {
+      if (status === "completed") return "ok";
+      if (status === "failed") return "bad";
+      if (status === "processing" || status === "queued") return "mid";
+      return "mid";
+    }
+
+    function setActiveTab(channel) {
+      currentChannel = channel;
+      document.getElementById("tab-news").classList.toggle("active", channel === "news");
+      document.getElementById("tab-stories").classList.toggle("active", channel === "stories");
+    }
+
+    async function loadSummary() {
+      const res = await fetch(`/admin/metrics/summary?channel_id=${currentChannel}`, { headers });
+      const data = await res.json();
+      const pressure = data.quota?.pressure || "low";
+      const pressureClass = pressure === "high" ? "bad" : (pressure === "medium" ? "mid" : "ok");
+      const genreRows = (data.genre_performance_14d || []).map(g => `
+        <tr>
+          <td>${esc((g.genre || "unknown").replace(/-/g, " "))}</td>
+          <td>${fmt(g.videos)}</td>
+          <td>${fmt(g.total_views)}</td>
+          <td>${fmt(g.total_comments)}</td>
+          <td>${fmt(g.avg_views)}</td>
+          <td>${fmt(g.avg_comments)}</td>
+        </tr>
+      `).join("") || `<tr><td colspan="6" class="meta">No genre analytics yet</td></tr>`;
+      document.getElementById("genrePerfBody").innerHTML = genreRows;
+      document.getElementById("cards").innerHTML = `
+        <div class="card"><div class="label">Channel</div><div class="value">${currentChannel === "news" ? "News" : "Stories"}</div><div class="meta">live metrics</div></div>
+        <div class="card"><div class="label">Pipeline State</div><div class="value" style="font-size:18px">${esc(data.pipeline?.state || "idle")}</div><div class="meta">batch: ${esc(data.pipeline?.active_batch_id || "-")}</div></div>
+        <div class="card"><div class="label">Queue</div><div class="value">${fmt(data.queue?.queued)}</div><div class="meta">queued</div></div>
+        <div class="card"><div class="label">Processing</div><div class="value">${fmt(data.queue?.processing)}</div><div class="meta">active jobs</div></div>
+        <div class="card"><div class="label">Success Rate (24h)</div><div class="value">${data.jobs_24h?.success_rate_pct || 0}%</div><div class="meta">${fmt(data.jobs_24h?.completed)} / ${fmt(data.jobs_24h?.total)}</div></div>
+        <div class="card"><div class="label">Avg Duration</div><div class="value">${fmt(data.jobs_24h?.avg_duration_seconds)}s</div><div class="meta">completed jobs</div></div>
+        <div class="card"><div class="label">Current Lock Owner</div><div class="value" style="font-size:14px">${esc((data.lock?.owner || "none").slice(0, 36))}</div><div class="meta">${esc(data.lock?.acquired_at || "-")}</div></div>
+        <div class="card"><div class="label">Quota Pressure</div><div class="value"><span class="pill ${pressureClass}">${pressure.toUpperCase()}</span></div><div class="meta">${fmt(data.quota?.images_generated_1m)} imgs/1m · ${fmt(data.quota?.quota_errors_24h)} quota errors</div></div>
+        <div class="card"><div class="label">YouTube Subscribers</div><div class="value">${fmt(data.youtube?.subscriber_count)}</div><div class="meta">updated: ${esc(data.youtube?.updated_at || "-")}</div></div>
+        <div class="card"><div class="label">YouTube Views</div><div class="value">${fmt(data.youtube?.view_count)}</div><div class="meta">videos: ${fmt(data.youtube?.video_count)}</div></div>
+      `;
+    }
+
+    async function loadJobs() {
+      const res = await fetch(`/admin/metrics/jobs?limit=50&channel_id=${currentChannel}`, { headers });
+      const data = await res.json();
+      const rows = (data.jobs || []).map(j => `
+        <tr>
+          <td>${esc(j.updated_at || "-")}</td>
+          <td>${esc(j.job_id || "-")}</td>
+          <td>${esc(j.source || "-")}</td>
+          <td><span class="pill ${pillClass(j.status)}">${esc(j.status || "-")}</span></td>
+          <td>${esc(j.topic || "")}</td>
+          <td>${esc(j.error_type || "")}</td>
+        </tr>
+      `).join("");
+      document.getElementById("jobsBody").innerHTML = rows;
+    }
+
+    async function loadFailures() {
+      const res = await fetch(`/admin/metrics/failures?hours=24&channel_id=${currentChannel}`, { headers });
+      const data = await res.json();
+      document.getElementById("failures").textContent = JSON.stringify(data.by_error_type || {}, null, 2);
+    }
+
+    async function refreshSocial() {
+      const btn = document.getElementById("refreshSocialBtn");
+      btn.disabled = true;
+      try {
+        await fetch(`/admin/metrics/refresh-social?channel_id=${currentChannel}`, { method: "POST", headers });
+        await loadAll();
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function loadAll() {
+      await Promise.all([loadSummary(), loadJobs(), loadFailures()]);
+    }
+
+    document.getElementById("tab-news").addEventListener("click", async () => {
+      setActiveTab("news");
+      await loadAll();
+    });
+
+    document.getElementById("tab-stories").addEventListener("click", async () => {
+      setActiveTab("stories");
+      await loadAll();
+    });
+
+    document.getElementById("refreshSocialBtn").addEventListener("click", refreshSocial);
+    loadAll();
+    setInterval(loadAll, 45000);
+  </script>
+</body>
+</html>
