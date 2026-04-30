@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "30 18,2,10 * * *"  # 12:00am, 8:00am, 4:00pm IST
   workflow_dispatch:
+    inputs:
+      domain:
+        description: "Force a specific domain (e.g. Trending, Artificial Intelligence, Technology). Leave blank to use the time-slot default."
+        required: false
+        default: ""
 
 permissions:
   actions: write
@@ -40,4 +45,5 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GITHUB_REPO: ${{ github.repository }}
           GITHUB_DISPATCH_TOKEN: ${{ github.token }}
+          FORCE_DOMAIN: ${{ inputs.domain }}
         run: python scripts/run_research.py

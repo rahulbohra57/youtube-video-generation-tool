@@ -377,7 +377,7 @@ def update_domain_schedule() -> bool:
     return True
 
 
-def run() -> str | None:
+def run(force_domain: str | None = None) -> str | None:
     _expire_stale_digest_if_needed()
 
     if not _within_suggestion_window():
@@ -385,7 +385,7 @@ def run() -> str | None:
 
     state = firestore_service.get_pipeline_state() or {}
     if state.get("state") == "processing":
-        slot_domain = _get_slot_domain(firestore_service.get_domain_schedule())
+        slot_domain = force_domain or _get_slot_domain(firestore_service.get_domain_schedule())
         send_message(
             TELEGRAM_CHAT_ID,
             f"⏭️ Scheduler slot skipped — pipeline is busy processing batch "
@@ -401,7 +401,7 @@ def run() -> str | None:
     ).isoformat(timespec="seconds").replace("+00:00", "Z")
 
     schedule = firestore_service.get_domain_schedule()
-    assigned_domain = _get_slot_domain(schedule)
+    assigned_domain = force_domain or _get_slot_domain(schedule)
 
     top_performers = firestore_service.get_top_performers(n=3)
     recently_covered = firestore_service.get_recently_suggested_headlines(
