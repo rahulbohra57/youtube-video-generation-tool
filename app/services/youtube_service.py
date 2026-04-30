@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 from app.services import firestore_service  # noqa: E402 (used by playlist helpers)
 from app.config import (
-    CLOUD_RUN_URL,
+    APP_BASE_URL,
     YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET,
     STORIES_YOUTUBE_CLIENT_ID, STORIES_YOUTUBE_CLIENT_SECRET,
 )
@@ -76,7 +76,7 @@ def _auth_path(channel_id: str) -> str:
 
 
 def _auth_url(channel_id: str) -> str:
-    return f"{CLOUD_RUN_URL.rstrip('/')}{_auth_path(channel_id)}"
+    return f"{APP_BASE_URL.rstrip('/')}{_auth_path(channel_id)}"
 
 
 def genre_to_category_id(genre: str) -> str:

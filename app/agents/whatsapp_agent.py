@@ -6,22 +6,10 @@ import os
 import re
 import hashlib
 from datetime import datetime, timezone, timedelta
-try:
-    from google.cloud import tasks_v2
-    from google.api_core.exceptions import AlreadyExists
-except Exception:
-    tasks_v2 = None
-
-    class AlreadyExists(Exception):
-        pass
 from app.services import firestore_service, telegram_service, youtube_service
 from app.config import (
     TELEGRAM_CHAT_ID,
     get_chat_id,
-    PROJECT_ID,
-    LOCATION,
-    CLOUD_RUN_URL,
-    TASKS_QUEUE,
     CREATE_TOPIC_IDEMPOTENCY_TTL_SECONDS,
 )
 
@@ -118,17 +106,8 @@ def _refresh_pipeline_after_stop(job: dict, channel_id: str = "news"):
 
 
 def _delete_queued_task(task_name: str):
-    if not task_name:
-        return
-    if tasks_v2 is None:
-        return
-    client = tasks_v2.CloudTasksClient()
-    queue_path = client.queue_path(PROJECT_ID, LOCATION, TASKS_QUEUE)
-    full_name = f"{queue_path}/tasks/{task_name}"
-    try:
-        client.delete_task(request={"name": full_name})
-    except Exception:
-        return
+    # No-op: Cloud Tasks queue removed; Firestore cancellation flag in generator_agent handles stopping.
+    pass
 
 
 def _send_stats(chat_id: str, channel_id: str = "news"):
@@ -695,24 +674,14 @@ def _enqueue_generate(
     idempotency_key: str | None = None,
     channel_id: str = "news",
 ) -> bool:
-    """Enqueue a Cloud Task to generate a video. Returns True if newly enqueued, False if duplicate."""
-    if tasks_v2 is None:
-        raise RuntimeError(
-            "google-cloud-tasks is not installed or could not be imported."
-        )
-    client = tasks_v2.CloudTasksClient()
-    queue_path = client.queue_path(PROJECT_ID, LOCATION, TASKS_QUEUE)
+    """Dispatch a GitHub Actions workflow to generate a video. Returns True if dispatched."""
+    from app.agents.github_dispatch import dispatch_video_generation
 
-    # Deterministic task name prevents Cloud Tasks from running duplicates
     raw_name = f"generate-{batch_id}-{code}"
     task_name = re.sub(r"[^a-zA-Z0-9_-]", "-", raw_name)
     video_public_id = public_id or _public_video_id(task_name)
     job_id = task_name
-    task_url = (
-        f"{CLOUD_RUN_URL}/generate/stories-task"
-        if channel_id == "stories"
-        else f"{CLOUD_RUN_URL}/generate/task"
-    )
+
     payload_dict = {
         "headline": headline,
         "code": code,
@@ -728,46 +697,26 @@ def _enqueue_generate(
     if idempotency_scope and idempotency_key:
         payload_dict["idempotency_scope"] = idempotency_scope
         payload_dict["idempotency_key"] = idempotency_key
-    payload = json.dumps(payload_dict).encode()
 
-    try:
-        client.create_task(request={
-            "parent": queue_path,
-            "task": {
-                "name": f"{queue_path}/tasks/{task_name}",
-                "dispatch_deadline": {"seconds": 1800},  # 30 min — prevents retry before task completes
-                "http_request": {
-                    "http_method": tasks_v2.HttpMethod.POST,
-                    "url": task_url,
-                    "headers": {"Content-Type": "application/json"},
-                    "body": payload,
-                    "oidc_token": {
-                        "service_account_email": "353645494126-compute@developer.gserviceaccount.com",
-                    },
-                },
-            },
-        })
-        firestore_service.create_or_update_job(
-            job_id,
-            {
-                "job_id": job_id,
-                "batch_id": batch_id,
-                "code": code,
-                "topic": headline,
-                "source": source,
-                "status": "queued",
-                "public_id": video_public_id,
-                "genre": genre,
-                "details": details,
-                "virality_score": float(virality_score or 0),
-                "channel_id": channel_id,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            },
-        )
-        return True
-    except AlreadyExists:
-        logger.warning(f"Task {task_name} already exists in queue — skipping duplicate enqueue")
-        return False
+    firestore_service.create_or_update_job(
+        job_id,
+        {
+            "job_id": job_id,
+            "batch_id": batch_id,
+            "code": code,
+            "topic": headline,
+            "source": source,
+            "status": "queued",
+            "public_id": video_public_id,
+            "genre": genre,
+            "details": details,
+            "virality_score": float(virality_score or 0),
+            "channel_id": channel_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+    dispatch_video_generation(payload_dict)
+    return True
 
 
 def send_post_result(title: str, url: str, public_id: str = "", live_date: str = "", live_time: str = "", domain: str = ""):
