@@ -15,7 +15,7 @@ Read this before making any infrastructure or code change.
 # Activate virtualenv
 source venv/bin/activate
 
-# Run the server locally (port 8080 matches Cloud Run)
+# Run the FastAPI server locally (optional — only needed for OAuth flows)
 uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
 ```
 
@@ -52,53 +52,48 @@ pip install -r requirements.txt
 | Resource | Value |
 |---|---|
 | GCP Project ID | `youtube-video-generator-492211` |
-| Cloud Run service | `autoframe` |
-| Cloud Run region | `us-central1` |
-| Cloud Run URL | `https://autoframe-353645494126.us-central1.run.app` |
 | GCS bucket | `yt-gen-app-bucket` |
-| Cloud Tasks queue | `autoframe-generate` |
 | Service account | `353645494126-compute@developer.gserviceaccount.com` |
+
+> Cloud Run and Cloud Tasks are no longer used. The app runs on Vercel (webhooks + admin) and GitHub Actions (all scheduled tasks and video generation).
 
 ---
 
 ## App Architecture Overview
 
-The app is a single **FastAPI** service (`app/main.py`) running on Cloud Run that manages two
-independent YouTube Shorts channels:
+The app manages two independent YouTube Shorts channels:
 
 | Channel | Language | YouTube Name | Telegram Bot | Scheduler |
 |---|---|---|---|---|
-| **News** (`channel_id="news"`) | English | Kurrent Affairs | `TELEGRAM_BOT_TOKEN` | Every 8h (`12am, 8am, 4pm IST`) |
-| **Stories** (`channel_id="stories"`) | Hindi | Short Tales | `STORIES_BOT_TOKEN` | `7am, 11am, 2pm, 6pm IST` |
+| **News** (`channel_id="news"`) | English | Kurrent Affairs | `TELEGRAM_BOT_TOKEN` | GitHub Actions cron (`12am, 8am, 4pm IST`) |
+| **Stories** (`channel_id="stories"`) | Hindi | Short Tales | `STORIES_BOT_TOKEN` | GitHub Actions cron (`7am, 11am, 2pm, 6pm IST`) |
 
-Each channel has its own:
-- Telegram bot + chat ID
-- YouTube OAuth credentials + channel
-- Firestore `pipeline_state` namespace
-- Scheduler-triggered research pipeline
+**Deployment split:**
 
-Both channels share a single Cloud Tasks queue, the same `generator_agent.run()` pipeline,
-and the same Imagen / TTS / LLM services.
-
-**FastAPI route modules:**
-
-| Module | Prefix | Purpose |
+| Layer | Platform | Handles |
 |---|---|---|
-| `app/routes/webhook.py` | `/webhook/telegram` | News bot incoming messages |
-| `app/routes/stories_webhook.py` | `/webhook/telegram/stories` | Stories bot incoming messages |
-| `app/routes/generate.py` | `/generate`, `/jobs` | Cloud Tasks delivery + web API |
-| `app/routes/stories.py` | `/stories`, `/generate/stories-task` | Stories scheduler + Cloud Tasks delivery |
-| `app/routes/research.py` | `/research` | News scheduler endpoints |
-| `app/routes/auth.py` | `/auth` | YouTube OAuth flow |
-| `app/routes/admin.py` | `/admin` | Admin dashboard |
+| **Webhooks + Admin API** | Vercel serverless (`api/`) | Telegram bot messages, admin dashboard metrics |
+| **Scheduled pipelines** | GitHub Actions (`.github/workflows/`) | Research, story generation, video generation, digests, auth refresh |
+| **Video generation runner** | GitHub Actions (`generate-video.yml`) | Full `generator_agent.run()` invoked as a workflow dispatch |
+| **Core app logic** | Python (`app/`) | Shared by both Vercel functions and GitHub Actions runners |
+
+**Vercel serverless functions (`api/`):**
+
+| File | Route | Purpose |
+|---|---|---|
+| `api/webhook/telegram.py` | `/webhook/telegram` | News bot incoming messages |
+| `api/webhook/stories.py` | `/webhook/telegram/stories` | Stories bot incoming messages |
+| `api/admin/metrics/*.py` | `/admin/metrics/*` | Admin dashboard API endpoints |
+
+**FastAPI app (`app/`) is still present** for the OAuth auth flows (`/auth/youtube`, `/auth/youtube/stories`) which require a persistent server. Run locally when re-authenticating YouTube tokens.
 
 ---
 
 ## News Channel Pipeline (Kurrent Affairs)
 
-### Step 1 — Research (`/research/run`, every 8h: 12am, 8am, 4pm IST)
+### Step 1 — Research (GitHub Actions `research-run.yml`, cron: `12am, 8am, 4pm IST`)
 
-Triggered by Cloud Scheduler → `lead_researcher.run()`:
+Triggered by GitHub Actions schedule → `scripts/run_research.py` → `lead_researcher.run()`:
 
 1. **Slot-domain resolution**: Each scheduler slot has a pre-assigned domain (fetches one domain
    per run, not all five):
@@ -114,26 +109,26 @@ Triggered by Cloud Scheduler → `lead_researcher.run()`:
 4. **Rate & select** top articles using Gemini 2.5 Flash via `rate_and_select_news()`.
 5. **Score** with a composite formula: `(LLM rating × 0.60) + (recency × 2.0) + trend_bonus`.
 6. **Save batch** to Firestore `news_batches` + set `pipeline_state` to `processing`.
-7. **Enqueue Cloud Task** via `whatsapp_agent._enqueue_generate()` → queue item delivered to
-   `/generate/task`.
+7. **Dispatch GitHub Actions workflow** via `github_dispatch.dispatch_video_generation()` →
+   triggers `generate-video.yml` with the job payload.
 8. **Notify** the Kurrent Affairs Telegram channel with the selected headline and virality score.
 
 **GNews quota impact**: Single-domain fetch at 3 runs/day = **3 calls/day** (97% reduction from the original 30/day). Well within the 100/day free tier.
 
 **Fortnightly domain schedule auto-update** (`update_domain_schedule()`):
-- Triggered by `/research/update-analytics` (Cloud Scheduler, 10pm daily).
+- Triggered by `update-analytics.yml` GitHub Actions workflow (10pm IST daily).
 - Skips update if last update was < 14 days ago.
 - Ranks eligible domains (all primaries except Trending/AI + all fallback domains) by 14-day
   avg views from `get_genre_performance_fortnightly()`.
 - Top 3 by performance become the new rotating domains; persisted to `config/domain_schedule`.
 - Sends a Telegram notification with the updated domain list.
 
-### Step 2 — Video Generation (`/generate/task`)
+### Step 2 — Video Generation (`generate-video.yml` workflow dispatch)
 
-Cloud Tasks calls this endpoint with a JSON payload. The endpoint calls `generator_agent.run()`.
-Returns HTTP 200 in all cases to prevent Cloud Tasks auto-retry (which would create duplicates).
+`lead_researcher.run()` dispatches `generate-video.yml` with a JSON payload via the GitHub
+Actions API. The workflow runs `scripts/run_generate_video.py` → `generator_agent.run()`.
 
-### Step 3 — News Bot Commands (via `/webhook/telegram`)
+### Step 3 — News Bot Commands (via `/webhook/telegram` on Vercel)
 
 All bot commands are handled by `whatsapp_agent.handle_reply()`:
 
@@ -141,7 +136,7 @@ All bot commands are handled by `whatsapp_agent.handle_reply()`:
 |---|---|
 | `STATS` | Live YouTube channel stats + pipeline queue summary |
 | `COMMANDS` | Show all available bot commands |
-| `CREATE <topic>` | Search for recent source article (last 72h), then enqueue video |
+| `CREATE <topic>` | Search for recent source article (last 72h), then dispatch video generation |
 | `CREATE <topic> \| <context>` | Same, with extra context or article URL |
 | `FORCE_CREATE <topic>` | Skip pipeline busy check and dedup. No source article required. |
 | `DISCARD` | Discard a pending digest awaiting reply |
@@ -161,9 +156,9 @@ All bot commands are handled by `whatsapp_agent.handle_reply()`:
 
 ## Stories Channel Pipeline (Short Tales)
 
-### Step 1 — Story Idea Generation (`/stories/run`, 7am, 11am, 2pm, 6pm IST)
+### Step 1 — Story Idea Generation (`stories-run.yml`, 7am, 11am, 2pm, 6pm IST)
 
-Triggered by Cloud Scheduler → `story_researcher.run()`:
+Triggered by GitHub Actions schedule → `scripts/run_stories.py` → `story_researcher.run()`:
 
 1. **Check pipeline state** — skip if already `processing`.
 2. **Genre rotation**: deterministic scheduler-slot rotation across 12 genres (inspiring, comedy,
@@ -173,15 +168,15 @@ Triggered by Cloud Scheduler → `story_researcher.run()`:
    Recent 30-day titles are passed to the LLM to avoid repeating topics.
 4. **Dedup** against Firestore `suggested_headlines` (30-day window, `channel_id="stories"`).
 5. **Save batch** + set pipeline state to `processing`.
-6. **Enqueue Cloud Task** to `/generate/stories-task` with `force_run=True`.
+6. **Dispatch `generate-video.yml`** with `force_run=True`.
 7. **Notify** the Short Tales Telegram channel.
 
-### Step 2 — Story Video Generation (`/generate/stories-task`)
+### Step 2 — Story Video Generation (`generate-video.yml` workflow dispatch)
 
-Cloud Tasks calls this endpoint. Calls `generator_agent.run()` with `script_type="story"`,
-`channel_id="stories"`. `force_run=True` is always set for auto-generated stories.
+`story_researcher.run()` dispatches `generate-video.yml` with `script_type="story"`,
+`channel_id="stories"`, `force_run=True`.
 
-### Step 3 — Stories Bot Commands (via `/webhook/telegram/stories`)
+### Step 3 — Stories Bot Commands (via `/webhook/telegram/stories` on Vercel)
 
 `stories_agent.handle_reply()` delegates to `whatsapp_agent.handle_reply(channel_id="stories")`.
 All the same commands apply (STATS, CREATE, REDO, RESEND, STOP, PRIVATE, DELETE, FORCE_CREATE).
@@ -192,17 +187,16 @@ Stories CREATE does NOT require a source article — stories are LLM-generated f
 
 ## Video Generation Pipeline (`generator_agent.run()`)
 
-This is the core pipeline shared by both channels. Every video goes through these stages:
+This is the core pipeline shared by both channels. Invoked from `scripts/run_generate_video.py`
+inside the `generate-video.yml` GitHub Actions workflow. Every video goes through these stages:
 
 ### Guards (checked first, before any work)
 
 1. **Idempotency guard**: If `job_id` already exists in Firestore with status
-   `completed`, `delivered_manual`, or `cancelled` → return immediately (handles Cloud Tasks
-   duplicate deliveries).
+   `completed`, `delivered_manual`, or `cancelled` → return immediately.
 2. **Video lock**: Distributed lock in Firestore `locks/video_generation`. `force_run=True` bypasses via
    `acquire_video_lock(force=True)`. Without force, if lock is held → `rejected_busy`.
 3. **Pipeline state check**: If pipeline is `processing` for a different batch → `stale_rejected`.
-   Returning 200 prevents Cloud Tasks retry.
 4. **Cancellation check**: `_is_cancel_requested()` is polled before each scene and before
    video assembly. Sets status to `cancelled` and returns.
 
@@ -224,8 +218,8 @@ that was uploaded, not the raw LLM idea.
 For each scene:
 1. **TTS Audio**: `generate_audio()` → Cloud TTS Neural2 voice → local `.mp3`.
 2. **Image**: `generate_image()` → Vertex AI Imagen 3 → local `.png` (9:16 portrait).
-3. **Checkpoint**: scene progress saved to Firestore `scene_progress`. If a Cloud Tasks retry
-   delivers the same task, completed scenes are skipped (resume from where it left off).
+3. **Checkpoint**: scene progress saved to Firestore `scene_progress`. If the workflow is
+   re-run for the same job, completed scenes are skipped (resume from where it left off).
 
 **Imagen retry logic (two layers)**:
 
@@ -247,6 +241,10 @@ For each scene:
 - If fewer than `MIN_CLIPS = max(1, MAX_SCENES - 1) = 2` clips succeed: notify Telegram, set
   status `failed` with `error_type="insufficient_video_clips"`, return. Prevents partial
   (e.g. 15-second) videos from being uploaded.
+
+**Imagen config (as of April 2026):**
+- `safety_filter_level="block_few"` and `person_generation="allow_adult"` are set explicitly to
+  reduce false-positive safety rejections.
 
 ### Video Assembly
 
@@ -270,6 +268,95 @@ For each scene:
      from the retry queue.
 3. **Pipeline state finalized**: `set_pipeline_and_batch_state(batch_id, "completed")` releases
    the pipeline for the next scheduler run.
+
+---
+
+## GitHub Actions Workflows
+
+All scheduled tasks and video generation run as GitHub Actions workflows. Secrets are stored
+in the repository's GitHub Secrets (Settings → Secrets and variables → Actions).
+
+| Workflow | File | Schedule (IST) | Script | Purpose |
+|---|---|---|---|---|
+| CI - Tests | `ci.yml` | On push/PR | `pytest -q` | Runs all tests |
+| Research Run | `research-run.yml` | `12am, 8am, 4pm` | `run_research.py` | News pipeline trigger |
+| Stories Run | `stories-run.yml` | `7am, 11am, 2pm, 6pm` | `run_stories.py` | Stories pipeline trigger |
+| Generate Video | `generate-video.yml` | workflow_dispatch only | `run_generate_video.py` | Full video generation |
+| Daily Digest | `daily-digest.yml` | `8am` | `run_daily_digest.py` | News channel daily report |
+| Stories Daily Digest | `stories-daily-digest.yml` | `8:30am` | `run_stories_digest.py` | Short Tales daily report |
+| Update Analytics | `update-analytics.yml` | `10pm` | `run_update_analytics.py` | Fortnightly domain schedule update |
+| Refresh YouTube Auth | `refresh-youtube-auth.yml` | Every 6h | `run_refresh_auth.py` | Proactive OAuth token refresh |
+
+**Video generation dispatch**: `github_dispatch.dispatch_video_generation(payload)` calls the
+GitHub Actions API to trigger `generate-video.yml` with a JSON payload. Uses
+`GITHUB_DISPATCH_TOKEN` env var (or falls back to `GITHUB_TOKEN` inside GitHub Actions runners).
+
+**`generate-video.yml` concurrency**: `concurrency: group: video-generation` — only one video
+generation runs at a time. New dispatches queue (not cancelled) while one is running.
+
+**Required GitHub Secrets:**
+
+| Secret | Purpose |
+|---|---|
+| `GCP_SERVICE_ACCOUNT_JSON` | Full JSON of the GCP service account key |
+| `GNEWS_API_KEY` | GNews.io API key |
+| `GOOGLE_SEARCH_API_KEY` | Google Custom Search API key |
+| `GOOGLE_SEARCH_ENGINE_ID` | Programmable Search Engine ID |
+| `TELEGRAM_BOT_TOKEN` | News bot (Kurrent Affairs) Telegram token |
+| `TELEGRAM_CHAT_ID` | News bot chat ID |
+| `STORIES_BOT_TOKEN` | Stories bot (Short Tales) Telegram token |
+| `STORIES_CHAT_ID` | Stories bot chat ID |
+| `YOUTUBE_CLIENT_ID` | News channel YouTube OAuth 2.0 client ID |
+| `YOUTUBE_CLIENT_SECRET` | News channel YouTube OAuth 2.0 client secret |
+| `YOUTUBE_REDIRECT_URI` | Must match exactly what's registered in GCP OAuth client |
+| `STORIES_YOUTUBE_CLIENT_ID` | Short Tales channel YouTube OAuth 2.0 client ID |
+| `STORIES_YOUTUBE_CLIENT_SECRET` | Short Tales channel YouTube OAuth 2.0 client secret |
+| `STORIES_YOUTUBE_REDIRECT_URI` | Must match exactly what's registered in GCP OAuth client |
+| `BUCKET_NAME` | GCS bucket name (`yt-gen-app-bucket`) |
+| `GITHUB_REPO` | Repository slug (`owner/repo`) — used by dispatcher |
+| `GITHUB_DISPATCH_TOKEN` | PAT or token with `actions: write` scope — used by Vercel to dispatch workflows |
+
+---
+
+## Vercel Deployment
+
+Vercel hosts the webhook receivers and admin dashboard. Serverless functions live in `api/`.
+
+**Routing** (defined in `vercel.json`):
+
+| Source | Destination | Purpose |
+|---|---|---|
+| `/webhook/telegram` | `/api/webhook/telegram` | News bot messages |
+| `/webhook/telegram/stories` | `/api/webhook/stories` | Stories bot messages |
+| `/admin/metrics/*` | `/api/admin/metrics/*` | Admin dashboard API |
+| `/admin` | `/admin.html` | Static admin dashboard |
+
+**Credentials in Vercel**: Vercel functions read `GCP_SERVICE_ACCOUNT_JSON` env var and write it
+to `/tmp/gcp_key.json` via `api/_shared.setup_credentials()`. Set this in Vercel project settings.
+
+**`GITHUB_DISPATCH_TOKEN`** must also be set in Vercel env vars so webhook handlers can dispatch
+video generation workflows when CREATE commands arrive.
+
+**After any Vercel redeploy, verify both webhooks:**
+```bash
+curl -s "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getWebhookInfo" | python3 -m json.tool
+curl -s "https://api.telegram.org/bot<STORIES_BOT_TOKEN>/getWebhookInfo" | python3 -m json.tool
+# last_error_message must be absent or stale. pending_update_count should be ~0.
+```
+
+---
+
+## Telegram Webhooks
+
+Two separate webhook URLs, one per bot:
+
+| Channel | Webhook URL | Bot Token Env Var | Chat ID Env Var |
+|---|---|---|---|
+| News (Kurrent Affairs) | `.../webhook/telegram` | `TELEGRAM_BOT_TOKEN` | `TELEGRAM_CHAT_ID` |
+| Stories (Short Tales) | `.../webhook/telegram/stories` | `STORIES_BOT_TOKEN` | `STORIES_CHAT_ID` |
+
+Authentication is by matching `chat.id` against the configured chat ID env var — no HMAC secret.
+Webhooks are served by Vercel serverless functions.
 
 ---
 
@@ -303,9 +390,11 @@ For each scene:
 ## Imagen Service (`app/services/image_service.py`)
 
 - **Model**: `imagen-3.0-generate-002` (Imagen 3, highest quality, Jan 2025).
-- **Always 9:16** for the Cloud Tasks pipeline (Shorts format). Web API uses the requested ratio.
+- **Always 9:16** for the pipeline (Shorts format).
 - **Style**: flat design, animated explainer, consistent color palette.
 - **Negative prompt**: blocks real faces, celebrity likenesses, copyright characters, brand logos.
+- **Safety settings**: `safety_filter_level="block_few"`, `person_generation="allow_adult"` —
+  set explicitly to reduce false-positive content rejections.
 - **Safety filter constant**: `SAFETY_FILTER_ERROR_PREFIX = "imagen_safety_filter:"` — used to
   detect and short-circuit retries for content-policy rejections.
 
@@ -335,7 +424,7 @@ For each scene:
 | `final_caption` | `social_media_agent.post()` before upload | REDO, RESEND |
 | `gcs_video_url` | `generator_agent` after GCS upload | REDO, RESEND |
 | `youtube_url` | `social_media_agent.post()` on success | REDO, PRIVATE, DELETE, analytics |
-| `scene_progress` | `generator_agent` per scene | Cloud Tasks retry resume |
+| `scene_progress` | `generator_agent` per scene | Workflow re-run resume |
 
 ---
 
@@ -343,118 +432,14 @@ For each scene:
 
 Three layers prevent duplicate videos:
 
-1. **Cloud Tasks task name** (`generate-<batch_id>-<code>`): deterministic — Cloud Tasks returns
-   `AlreadyExists` if enqueued twice. Handled gracefully in `_enqueue_generate()`.
+1. **GitHub Actions concurrency group** (`video-generation`): only one `generate-video.yml` run
+   at a time. New dispatches queue behind the active run.
 2. **Job status idempotency guard** (top of `generator_agent.run()`): if job already in terminal
-   state (`completed`, `delivered_manual`, `cancelled`) → skip immediately. Handles the case
-   where Cloud Tasks delivers the same task twice after a long-running first attempt.
+   state (`completed`, `delivered_manual`, `cancelled`) → skip immediately.
 3. **CREATE topic idempotency** (`idempotency_keys` collection): SHA-1 of the normalized topic
    string, TTL 20 minutes. Prevents duplicate CREATE commands for the same topic.
 4. **Webhook update dedup** (`idempotency_keys` collection, scope `tg_update_news` /
-   `tg_update_stories`): Firestore-backed, 5-minute TTL. Survives cold starts — allows
-   `min-instances=0`.
-
----
-
-## Cloud Scheduler Jobs
-
-| Job ID | Schedule (IST) | Endpoint | Notes |
-|---|---|---|---|
-| `autoframe-lead-researcher` | `0 0,8,16 * * *` (12am, 8am, 4pm) | `/research/run` | News pipeline trigger |
-| `autoframe-daily-digest` | `0 8 * * *` (8am) | `/research/daily-digest` | News channel daily report |
-| `autoframe-update-analytics` | `0 22 * * *` (10pm) | `/research/update-analytics` | **Paid — $0.10/month** |
-| `autoframe-stories-run` | `0 7,11,14,18 * * *` (7am, 11am, 2pm, 6pm) | `/stories/run` | Stories pipeline trigger |
-| `autoframe-stories-digest` | `30 8 * * *` (8:30am) | `/stories/daily-digest` | Short Tales daily report |
-
-**All scheduler endpoints require the `X-Scheduler-Secret` header.**
-
-**News cadence quota check:** GNews free tier is 100 calls/day. Current schedule is 3 cycles/day ×
-1 domain = 3 calls/day (single-domain scheduling). Even with fallback domains, worst case ~8 calls/day.
-Well within quota.
-
----
-
-## CRITICAL: Cloud Run Deployment Rules
-
-### 1. ALWAYS deploy with `--allow-unauthenticated`
-
-```bash
-gcloud run deploy autoframe \
-  --source . \
-  --project=youtube-video-generator-492211 \
-  --region=us-central1 \
-  --allow-unauthenticated \
-  --min-instances=0 \
-  --max-instances=1
-```
-
-**Why:** Both Telegram webhooks are called directly by Telegram's servers. Telegram has no way
-to present GCP auth credentials. Using `--no-allow-unauthenticated` blocks all Telegram traffic
-→ webhook returns 403 Forbidden → all bot commands silently stop working.
-
-### 2. Never change these Cloud Run flags without understanding the impact
-
-| Flag | Current value | Why it must stay this way |
-|---|---|---|
-| `--min-instances=0` | 0 | Telegram update dedup is Firestore-backed (`idempotency_keys`, 5-min TTL) — survives cold starts. Eliminating the always-on instance saves ~₹4,400/week. |
-| `--max-instances=1` | 1 | Video generation holds a distributed lock — a second instance would be wasted (rejected by the lock). Caps Cloud Run compute cost. |
-| `--cpu-throttling=false` | off | Video encoding (moviepy) and image generation are CPU-heavy. CPU throttling causes `ffmpeg` to time out mid-render. |
-| `--startup-cpu-boost` | on | Reduces cold-start latency. |
-| `--memory=4Gi` | 4 GiB | moviepy/PIL load full video frames into memory. Less than 4 GiB causes OOM kills mid-generation. |
-| `--cpu=4` | 4 vCPU | Matches the memory/CPU ratio for video processing. |
-| `--timeout=3600` | 3600 s | Video generation + YouTube upload can take 10–15 minutes. Default 300s timeout kills running jobs. |
-
-### 3. Standard deploy command (copy-paste safe)
-
-```bash
-cd "/Users/chetan/Desktop/DSE_Projects/youtube-video-generation-tool"
-gcloud run deploy autoframe \
-  --source . \
-  --project=youtube-video-generator-492211 \
-  --region=us-central1 \
-  --allow-unauthenticated \
-  --min-instances=0 \
-  --max-instances=1
-```
-
----
-
-## Telegram Webhooks
-
-Two separate webhook URLs, one per bot:
-
-| Channel | Webhook URL | Bot Token Env Var | Chat ID Env Var |
-|---|---|---|---|
-| News (Kurrent Affairs) | `.../webhook/telegram` | `TELEGRAM_BOT_TOKEN` | `TELEGRAM_CHAT_ID` |
-| Stories (Short Tales) | `.../webhook/telegram/stories` | `STORIES_BOT_TOKEN` | `STORIES_CHAT_ID` |
-
-Authentication is by matching `chat.id` against the configured chat ID env var — no HMAC secret.
-The Cloud Run service must be publicly accessible (see deployment rules above).
-
-**After any deploy, verify both webhooks:**
-```bash
-curl -s "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getWebhookInfo" | python3 -m json.tool
-curl -s "https://api.telegram.org/bot<STORIES_BOT_TOKEN>/getWebhookInfo" | python3 -m json.tool
-# last_error_message must be absent or stale. pending_update_count should be ~0.
-```
-
----
-
-## Pipeline State & Concurrency
-
-Two mechanisms enforce one video at a time **per channel**:
-
-1. **Firestore `pipeline_state`** — keyed by `channel_id` (`"news"` / `"stories"`). Tracks
-   active batch and state: `processing` / `completed` / `failed` / `skipped`.
-2. **Firestore `locks/video_generation`** — single global distributed lock (shared across both channels).
-   Acquired in `generator_agent.run()`, released in the `finally` block.
-
-**If the pipeline gets stuck in `processing`:**
-- Set `pipeline_state` doc's `state` field to `"failed"` in Firestore console, OR
-- Delete the `locks/video_generation` document to release the lock.
-
-**Never manually delete** `pipeline_state`, `news_batches`, or `jobs` documents while a video
-is being generated — it orphans the Cloud Tasks task and causes infinite retries.
+   `tg_update_stories`): Firestore-backed, 5-minute TTL. Prevents duplicate Telegram updates.
 
 ---
 
@@ -467,11 +452,11 @@ Two separate OAuth credential sets, one per channel:
 | News | `credentials/youtube` | `YOUTUBE_CLIENT_ID` | `YOUTUBE_REDIRECT_URI` | `/auth/youtube` |
 | Stories | `credentials/youtube_stories` | `STORIES_YOUTUBE_CLIENT_ID` | `STORIES_YOUTUBE_REDIRECT_URI` | `/auth/youtube/stories` |
 
-Tokens auto-refresh via `google-auth` on each API call. If "insufficient authentication scopes"
-appears in STATS: re-authenticate by opening the auth URL in a browser.
+Tokens auto-refresh via `google-auth` on each API call. The `refresh-youtube-auth.yml` GitHub
+Actions workflow also runs every 6 hours to proactively refresh tokens before they expire.
 
-**If the Cloud Run URL ever changes**, update both OAuth redirect URIs in GCP Console →
-APIs & Services → Credentials, or OAuth flows will fail with `redirect_uri_mismatch`.
+If "insufficient authentication scopes" appears in STATS: run the FastAPI app locally and
+open the auth URL in a browser to re-authenticate.
 
 ---
 
@@ -479,8 +464,8 @@ APIs & Services → Credentials, or OAuth flows will fail with `redirect_uri_mis
 
 ### GNews API
 - **Free tier:** 100 requests/day
-- **App usage:** 1 domain/run × 3 runs/day = **3 calls/day (3%)** — single-domain scheduling
-  (previously 5 domains/run = 30 calls/day). Fallback domains add up to ~5 extra calls/day worst case.
+- **App usage:** 1 domain/run × 3 runs/day = **3 calls/day (3%)** — single-domain scheduling.
+  Fallback domains add up to ~5 extra calls/day worst case.
 - **Circuit-breaker:** fires at 80 calls/day — returns `[]` without making HTTP call
 - Quota tracked in Firestore `quota_events` (`kind == "gnews_call"`)
 - **Never remove the circuit-breaker** in `gnews_service.py`
@@ -508,69 +493,10 @@ APIs & Services → Credentials, or OAuth flows will fail with `redirect_uri_mis
 - **Fallback:** YouTube upload failure → video delivered to Telegram (`delivered_manual`).
   These jobs are excluded from the auto-retry queue.
 
-### Cloud Run Compute
-- **Free tier:** 360,000 vCPU-seconds/month + 180,000 GiB-seconds/month
-- **At 12 videos/day (360/month):** exceeds free tier — ~$3.44/month overage
-
----
-
-## Environment Variables
-
-All env vars are set directly on the Cloud Run service (no `.env` file in production).
-
-```bash
-gcloud run services describe autoframe \
-  --project=youtube-video-generator-492211 \
-  --region=us-central1 \
-  --format="yaml(spec.template.spec.containers[0].env)"
-```
-
-| Variable | Purpose |
-|---|---|
-| `GNEWS_API_KEY` | GNews.io API key |
-| `GOOGLE_SEARCH_API_KEY` | Google Custom Search API key (CREATE enrichment; 100 free/day) |
-| `GOOGLE_SEARCH_ENGINE_ID` | Programmable Search Engine ID — must have "Search the entire web" enabled |
-| `TELEGRAM_BOT_TOKEN` | News bot (Kurrent Affairs) Telegram token |
-| `TELEGRAM_CHAT_ID` | News bot chat ID |
-| `STORIES_BOT_TOKEN` | Stories bot (Short Tales) Telegram token |
-| `STORIES_CHAT_ID` | Stories bot chat ID |
-| `YOUTUBE_CLIENT_ID` | News channel YouTube OAuth 2.0 client ID |
-| `YOUTUBE_CLIENT_SECRET` | News channel YouTube OAuth 2.0 client secret |
-| `YOUTUBE_REDIRECT_URI` | Must match exactly what's registered in GCP OAuth client |
-| `STORIES_YOUTUBE_CLIENT_ID` | Short Tales channel YouTube OAuth 2.0 client ID |
-| `STORIES_YOUTUBE_CLIENT_SECRET` | Short Tales channel YouTube OAuth 2.0 client secret |
-| `STORIES_YOUTUBE_REDIRECT_URI` | Must match exactly what's registered in GCP OAuth client |
-| `SCHEDULER_SECRET` | Shared secret for all scheduler endpoint authentication |
-| `CLOUD_RUN_URL` | Base URL of this service (used when enqueueing Cloud Tasks) |
-| `TASKS_QUEUE` | Cloud Tasks queue name (`autoframe-generate`) |
-| `ADMIN_DASHBOARD_SECRET` | Auth key for `/admin` dashboard |
-| `TMP_RETENTION_DAYS` | Days to keep local temp files (default: 7) |
-| `CREATE_TOPIC_IDEMPOTENCY_TTL_SECONDS` | CREATE dedup window (default: 1200 = 20min) |
-
-To add a new env var:
-```bash
-gcloud run services update autoframe \
-  --project=youtube-video-generator-492211 \
-  --region=us-central1 \
-  --set-env-vars="NEW_VAR=value"
-```
-Env vars set via `update` persist across `--source .` deploys.
-
----
-
-## Cloud Tasks
-
-- **Queue:** `autoframe-generate` in `us-central1`
-- **Task URL routing:**
-  - News: `CLOUD_RUN_URL/generate/task`
-  - Stories: `CLOUD_RUN_URL/generate/stories-task`
-- **Task naming:** Deterministic — `generate-<batch_id>-<code>`. Prevents duplicate tasks.
-  Cloud Tasks returns `AlreadyExists` for duplicates (handled gracefully).
-- **Dispatch deadline:** 1800 seconds (30 min) per task. Prevents Cloud Tasks from re-delivering
-  while the original task is still running (generation typically takes 8-15 min).
-- **OIDC auth:** Tasks dispatched with default compute SA OIDC token. Cloud Run must be public.
-- **Retry policy:** Set at queue level. Generator always returns HTTP 200 (even on failure) to
-  prevent Cloud Tasks from auto-retrying and creating duplicate videos.
+### GitHub Actions
+- **Free tier (public repo):** unlimited minutes
+- **Private repo:** 2,000 minutes/month free; video generation workflow uses ~15 min/run.
+  At 12 videos/day: ~5,400 min/month — watch for overages on private repos.
 
 ---
 
@@ -583,9 +509,6 @@ Env vars set via `update` persist across `--source .` deploys.
   REDO/RESEND work even if YouTube upload failed.
 - GCS URL stored in Firestore `jobs` document as `gcs_video_url`.
 - **After 7 days**, the GCS file is deleted. REDO on an old job falls back to full regeneration.
-
-**Serving locally generated videos:**
-- `GET /media/<filename>` — serves from local `Output/` if present, else 302 redirect to GCS.
 
 ---
 
@@ -607,9 +530,26 @@ Env vars set via `update` persist across `--source .` deploys.
 
 ---
 
+## Pipeline State & Concurrency
+
+Two mechanisms enforce one video at a time **per channel**:
+
+1. **Firestore `pipeline_state`** — keyed by `channel_id` (`"news"` / `"stories"`). Tracks
+   active batch and state: `processing` / `completed` / `failed` / `skipped`.
+2. **Firestore `locks/video_generation`** — single global distributed lock (shared across both channels).
+   Acquired in `generator_agent.run()`, released in the `finally` block.
+3. **GitHub Actions concurrency group** — `generate-video.yml` uses `concurrency: group: video-generation`
+   so only one generation runs at a time; queued dispatches wait.
+
+**If the pipeline gets stuck in `processing`:**
+- Set `pipeline_state` doc's `state` field to `"failed"` in Firestore console, OR
+- Delete the `locks/video_generation` document to release the lock.
+
+---
+
 ## Post-Deploy Verification Checklist
 
-Run these after every deploy:
+Run these after any Vercel or GitHub Actions change:
 
 1. **Both webhook health checks:**
    ```bash
@@ -618,22 +558,15 @@ Run these after every deploy:
    # Expect: no last_error_message (or stale), pending_update_count ~0
    ```
 
-2. **Service reachable:**
-   ```bash
-   curl -o /dev/null -w "%{http_code}" -X POST \
-     https://autoframe-353645494126.us-central1.run.app/webhook/telegram \
-     -H "Content-Type: application/json" \
-     -d '{"update_id":0,"message":{"chat":{"id":0},"text":"test"}}'
-   # Expect: 200
-   ```
+2. **Send STATS from both Telegram bots** — confirms Vercel webhook routing is correct.
 
-3. **Send STATS from both Telegram bots** — confirms routing is correct for each channel.
+3. **Check GitHub Actions** for recent workflow failures at
+   `https://github.com/<owner>/youtube-video-generation-tool/actions`.
 
-4. **Check Cloud Run logs** for startup errors:
+4. **Manually trigger a workflow** via `workflow_dispatch` to verify end-to-end:
    ```bash
-   gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=autoframe" \
-     --project=youtube-video-generator-492211 \
-     --limit=50 --format="table(timestamp,textPayload)"
+   gh workflow run research-run.yml
+   gh workflow run stories-run.yml
    ```
 
 ---
@@ -642,14 +575,16 @@ Run these after every deploy:
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Same video uploaded 2–3 times | Cloud Tasks re-delivered after long run OR `force_run=True` bypassed guards | Idempotency guard at top of `generator_agent.run()` prevents this; check `dispatch_deadline=1800s` is set |
+| Same video uploaded 2–3 times | `generate-video.yml` dispatched twice for same job | Idempotency guard at top of `generator_agent.run()` catches this; check `concurrency: group` in workflow |
 | Hindi story has English title | LLM used narration lang instruction for title too | `_TITLE_CAPTION_LANG_INSTRUCTIONS` provides explicit title language rule |
 | 15-second stub video uploaded | 1/3 scenes succeeded but pipeline didn't abort | `MIN_CLIPS = 2` guard prevents upload below threshold |
 | Videos keep failing with quota errors | Imagen QPM exhausted | Inner 30/60/120s retry + outer 120s delay. Check quota in Firestore `quota_events`. |
-| Pipeline stuck in `processing` | Cloud Run OOM/timeout mid-generation | Set `pipeline_state.state = "failed"` in Firestore, or delete `locks/video_generation` doc |
+| Pipeline stuck in `processing` | GitHub Actions runner OOM or timeout mid-generation | Set `pipeline_state.state = "failed"` in Firestore, or delete `locks/video_generation` doc |
 | REDO uploads with wrong title | Job stored raw topic, not reviewed title | `reviewed_title` persisted to Firestore immediately after script review |
-| Webhook returns 403 | Service not public | Run: `gcloud run services add-iam-policy-binding autoframe --member="allUsers" --role="roles/run.invoker" ...` |
+| Webhook returns 4xx | Vercel function error | Check Vercel function logs in the Vercel dashboard |
 | CREATE rejects valid topic | No source article found in last 72h | Provide article URL: `CREATE <topic> \| <url>` |
+| Video dispatch silently fails | `GITHUB_DISPATCH_TOKEN` missing or expired | Set/refresh token in GitHub Secrets and Vercel env vars |
+| YouTube token expired | Token refresh failed | Run `refresh-youtube-auth.yml` manually; if still failing, run FastAPI locally and re-auth via browser |
 
 ## graphify
 
