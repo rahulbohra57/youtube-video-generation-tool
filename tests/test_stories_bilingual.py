@@ -61,10 +61,10 @@ def test_generate_story_script_hindi_prompt_uses_devanagari():
 
 def test_generate_story_script_english_prompt_requests_english_narration():
     """English script generation prompt requests English narration."""
-    mock = _model_mock('[{"scene":1,"narration":"A farmer stood alone","visual":"cinematic scene"}]')
+    mock = _model_mock('[{"scene":1,"narration":"A farmer stood alone","visual":"storybook illustration scene"}]')
     with patch("app.services.llm_service.model", mock):
         with patch("app.services.llm_service.random") as mock_random:
-            mock_random.choice.return_value = "Cinematic photorealistic"
+            mock_random.choice.return_value = "Vibrant storybook illustration, bold outlines"
             from app.services.llm_service import generate_story_script
             generate_story_script("The Last Promise", "inspiring", language="en")
     prompt = mock.generate_content.call_args[0][0]
@@ -72,12 +72,12 @@ def test_generate_story_script_english_prompt_requests_english_narration():
     assert "English" in prompt
 
 
-def test_generate_story_script_english_uses_realistic_visual_pool():
-    """English stories pick from the realistic visual style pool, not the painted pool."""
-    mock = _model_mock('[{"scene":1,"narration":"A farmer stood alone","visual":"cinematic scene"}]')
+def test_generate_story_script_english_uses_sketch_visual_pool():
+    """English stories pick from the sketch/illustration visual style pool, not the painted Hindi pool."""
+    mock = _model_mock('[{"scene":1,"narration":"A farmer stood alone","visual":"storybook illustration scene"}]')
     with patch("app.services.llm_service.model", mock):
         with patch("app.services.llm_service.random") as mock_random:
-            mock_random.choice.return_value = "Cinematic photorealistic, dramatic natural lighting"
+            mock_random.choice.return_value = "Vibrant storybook illustration, bold outlines"
             from app.services.llm_service import generate_story_script, _STORY_VISUAL_STYLE_POOL_EN
             generate_story_script("The Last Promise", "inspiring", language="en")
         pool_arg = mock_random.choice.call_args[0][0]

@@ -242,9 +242,12 @@ For each scene:
   status `failed` with `error_type="insufficient_video_clips"`, return. Prevents partial
   (e.g. 15-second) videos from being uploaded.
 
-**Imagen config (as of April 2026):**
+**Imagen config (as of May 2026):**
 - `safety_filter_level="block_few"` and `person_generation="allow_adult"` are set explicitly to
   reduce false-positive safety rejections.
+- **Negative prompt** blocks only brand/trademark logos and text in images — people, faces,
+  and public figures are intentionally allowed (news channel needs real faces; stories use
+  sketch/illustration style characters).
 
 ### Video Assembly
 
@@ -392,11 +395,21 @@ Webhooks are served by Vercel serverless functions.
 - **Model**: `imagen-3.0-generate-002` (Imagen 3, highest quality, Jan 2025).
 - **Always 9:16** for the pipeline (Shorts format).
 - **Style**: flat design, animated explainer, consistent color palette.
-- **Negative prompt**: blocks real faces, celebrity likenesses, copyright characters, brand logos.
+- **Negative prompt**: blocks only brand/trademark logos and text in images
+  (`"trademark logo, brand logo, embedded text, readable words, captions, watermark, text overlay, subtitles"`).
+  People and faces are NOT blocked — news channel shows real photorealistic people; stories show
+  sketch/illustration-style characters.
 - **Safety settings**: `safety_filter_level="block_few"`, `person_generation="allow_adult"` —
   set explicitly to reduce false-positive content rejections.
 - **Safety filter constant**: `SAFETY_FILTER_ERROR_PREFIX = "imagen_safety_filter:"` — used to
   detect and short-circuit retries for content-policy rejections.
+- **Channel visual styles**:
+  - News: photorealistic/cinematic (`_VISUAL_STYLE_POOL`) — real people by name encouraged in prompts.
+  - Stories (HI): painted/illustrated (`_STORY_VISUAL_STYLE_POOL_HI`) — Madhubani, watercolor, graphic novel.
+  - Stories (EN): sketch/illustration (`_STORY_VISUAL_STYLE_POOL_EN`) — storybook, pencil sketch, charcoal wash.
+- **Story safety-filter fallback**: 12 genre-specific pre-approved prompts in `_STORY_GENRE_SAFE_PROMPTS`
+  (HI) and `_STORY_GENRE_SAFE_PROMPTS_EN` (EN). Both include sketch-style people. Used once per scene
+  before counting a scene as failed.
 
 ---
 
