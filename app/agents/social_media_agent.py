@@ -62,6 +62,10 @@ def post(video_path: str, caption: str, title: str, job_id: str = "", public_id:
             logger.warning(f"YouTube quota exceeded for job {job_id}")
             send_message(chat_id, "⚠️ YouTube daily quota exceeded — sending video for manual posting.", channel_id=channel_id)
             label = f"{source}_quota" if source else "quota"
+        elif "youtube_already_exists" in err:
+            logger.warning(f"YouTube duplicate upload detected for job {job_id} (video may already be live)")
+            send_message(chat_id, "⚠️ YouTube rejected upload as a duplicate (video may already be live). Sending here for manual check.", channel_id=channel_id)
+            label = f"{source}_duplicate" if source else "duplicate"
         elif "oauth token expired or revoked" in err.lower() or "reconnect via" in err.lower():
             logger.warning("YouTube OAuth requires reconnect for channel %s: %s", channel_id, err)
             news_url = youtube_service._auth_url("news")

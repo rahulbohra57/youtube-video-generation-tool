@@ -237,6 +237,8 @@ def upload_video(video_path: str, title: str, description: str, genre: str = "",
             kw in content_str for kw in ("quotaexceeded", "dailylimitexceeded", "userrequestedtoofast", "forbidden")
         ):
             raise RuntimeError("youtube_quota_exceeded") from e
+        if e.resp.status == 409 and "alreadyexists" in content_str:
+            raise RuntimeError("youtube_already_exists") from e
         raise
 
     video_id = response["id"]

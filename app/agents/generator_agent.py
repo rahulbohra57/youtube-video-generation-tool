@@ -46,36 +46,36 @@ BACKOFF_BASE_SECONDS = 2  # for non-quota errors only
 # Used when the LLM-generated prompt is rejected by Imagen's safety filter.
 # Each prompt uses the same watercolor style and is guaranteed content-policy safe.
 _STORY_GENRE_SAFE_PROMPTS = {
-    "inspiring": "Soft watercolor illustration, warm earthy palette — a child planting a seedling in golden morning light, hopeful atmosphere, no text, no words",
-    "heartfelt": "Soft watercolor illustration, warm earthy palette — two silhouettes holding hands beside a glowing window, gentle candlelight, no text, no words",
-    "comedy": "Soft watercolor illustration, bright cheerful palette — a small animal tripping over a flower pot in a sunny garden, playful, no text, no words",
-    "crime": "Soft watercolor illustration, warm earthy palette — a winding road leading toward a distant glowing village at dusk, symbolic journey, no text, no words",
+    "inspiring": "Soft watercolor illustration, warm earthy palette — a young person planting a seedling in golden morning light, hopeful expression, no text, no words",
+    "heartfelt": "Soft watercolor illustration, warm earthy palette — two people sharing tea at a candlelit window, gentle smiles, no text, no words",
+    "comedy": "Soft watercolor illustration, bright cheerful palette — a person tripping over a garden hose while a puppy watches, playful and funny, no text, no words",
+    "crime": "Soft watercolor illustration, warm earthy palette — a determined figure walking a winding road toward a glowing village at dusk, no text, no words",
     "action": "Soft watercolor illustration, vibrant palette — a figure leaping across stepping stones in a sunlit river, dynamic energy, no text, no words",
-    "sci-fi": "Soft watercolor illustration, cool blue-purple palette — a glowing orb floating above an open hand in a misty forest, futuristic yet gentle, no text, no words",
-    "mythology": "Soft watercolor illustration, golden earthy palette — an ancient tree with glowing roots in a sacred forest clearing, no text, no words",
-    "thriller": "Soft watercolor illustration, warm amber palette — a lit lantern glowing on a forest path, sense of curiosity and wonder, no text, no words",
-    "mystery": "Soft watercolor illustration, warm earthy palette — a child holding a glowing lantern with a curious expression, garden at dusk, no text, no words",
-    "adventure": "Soft watercolor illustration, vibrant greens and blues — a traveller looking at a map on a sunlit hilltop at sunrise, no text, no words",
-    "slice-of-life": "Soft watercolor illustration, warm earthy palette — a family sharing a meal at a wooden table in a cosy kitchen, warm light, no text, no words",
-    "historical": "Soft watercolor illustration, muted sepia palette — an ancient palace courtyard with blossoming trees, serene and regal, no text, no words",
+    "sci-fi": "Soft watercolor illustration, cool blue-purple palette — a scientist holding a glowing orb in a misty forest, wonder on their face, no text, no words",
+    "mythology": "Soft watercolor illustration, golden earthy palette — a sage meditating beneath an ancient tree with glowing roots, sacred forest clearing, no text, no words",
+    "thriller": "Soft watercolor illustration, warm amber palette — a curious person holding a lantern on a forest path, sense of wonder, no text, no words",
+    "mystery": "Soft watercolor illustration, warm earthy palette — a child with a curious expression holding a lantern over an old wooden chest, garden at dusk, no text, no words",
+    "adventure": "Soft watercolor illustration, vibrant greens and blues — a traveller studying a map on a sunlit hilltop, distant mountains behind them, no text, no words",
+    "slice-of-life": "Soft watercolor illustration, warm earthy palette — a family sharing a meal at a wooden table in a cosy kitchen, warm morning light, no text, no words",
+    "historical": "Soft watercolor illustration, muted sepia palette — a scholar in traditional robes in an ancient palace courtyard with blossoming trees, no text, no words",
 }
 
 
 # English-story safe fallback prompts — realistic/photorealistic style.
 # Used when an English story scene is rejected by Imagen's safety filter.
 _STORY_GENRE_SAFE_PROMPTS_EN = {
-    "inspiring": "Cinematic photorealistic scene — a young person standing on a sunlit hilltop at golden sunrise, arms wide open, warm light, no text, no words",
-    "heartfelt": "Documentary-style photography — two elderly hands clasped together on a wooden table, warm afternoon light streaming through a window, no text, no words",
-    "comedy": "Candid natural light photography — a small dog wearing oversized sunglasses sitting at a cafe table, cheerful sunny atmosphere, no text, no words",
-    "crime": "Cinematic photorealistic — a detective's desk with scattered papers and a glowing desk lamp, warm moody atmosphere, no text, no words",
-    "action": "Dramatic natural lighting photography — a person mid-sprint across a sun-drenched open field, motion blur on grass, dynamic energy, no text, no words",
-    "sci-fi": "High-resolution realistic render — a glowing holographic sphere floating above an open palm in a bright sunlit laboratory, futuristic and clean, no text, no words",
-    "mythology": "Cinematic photorealistic — an ancient stone temple surrounded by lush green trees in morning mist, golden light filtering through leaves, serene, no text, no words",
-    "thriller": "Moody cinematic photograph — a lit lantern on a cobblestone path at dusk, warm amber glow, sense of curiosity and wonder, no text, no words",
-    "mystery": "Documentary-style photography — an old wooden chest half-open in a sunlit attic, warm dust particles floating in light, curious atmosphere, no text, no words",
-    "adventure": "Cinematic photorealistic — a hiker standing at a scenic mountain viewpoint at sunrise, vast green valley below, no text, no words",
-    "slice-of-life": "Natural light photography — a family sharing breakfast at a bright kitchen table, warm morning sunlight, genuine smiles, no text, no words",
-    "historical": "Cinematic photorealistic — ancient stone ruins draped in ivy bathed in golden afternoon light, serene and regal, no text, no words",
+    "inspiring": "Vibrant storybook illustration, bold outlines — a young person planting a seedling in golden morning light, hopeful smile, warm colors, no text, no words",
+    "heartfelt": "Soft pencil sketch illustration, warm golden tones — two friends sharing tea at a sunlit window, gentle expressions, no text, no words",
+    "comedy": "Bold graphic novel style, vivid palette — a person stumbling over a garden hose while a dog watches with amusement, playful scene, no text, no words",
+    "crime": "Charcoal sketch with watercolor wash — a determined detective at a cluttered desk under a glowing lamp, moody warm atmosphere, no text, no words",
+    "action": "Vibrant storybook illustration, bold outlines — a figure sprinting across a sunlit field, motion lines, dynamic energy, no text, no words",
+    "sci-fi": "Bold graphic novel style, cool blue palette — a scientist holding a glowing holographic sphere in a bright laboratory, wonder on their face, no text, no words",
+    "mythology": "Soft pencil sketch illustration, golden tones — a sage meditating beneath an ancient stone temple in morning mist, serene atmosphere, no text, no words",
+    "thriller": "Charcoal sketch with watercolor wash, warm amber — a curious figure holding a lantern on a cobblestone path at dusk, no text, no words",
+    "mystery": "Children's book illustration style, warm pastels — a child peering into an old wooden chest in a sunlit attic, curious expression, no text, no words",
+    "adventure": "Vibrant storybook illustration, bold outlines — a hiker at a mountain viewpoint at sunrise studying a map, vast green valley below, no text, no words",
+    "slice-of-life": "Soft pencil sketch illustration, warm tones — a family sharing breakfast at a bright kitchen table, warm morning sunlight, genuine smiles, no text, no words",
+    "historical": "Soft pencil sketch illustration, muted sepia tones — a scholar in traditional robes in an ancient palace courtyard with blossoming trees, serene and regal, no text, no words",
 }
 
 

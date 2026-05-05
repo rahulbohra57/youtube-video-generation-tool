@@ -113,8 +113,8 @@ NARRATION RULES — follow strictly:
 VISUAL PROMPT RULES:
 - Always write visual prompts in English, regardless of narration language.
 - Every visual prompt MUST begin with this exact style prefix to keep all scenes visually consistent: "{video_style} — ". Apply it to every scene without exception.
-- Do NOT depict or name any specific real individual (politician, celebrity, activist) unless they are a current sitting Prime Minister or President of a country. Use representative imagery instead (e.g. "a government official at a podium", "scientists in a lab").
-- Do NOT request company logos, brand marks, app icons, or any readable text/labels in the image — Imagen cannot render text accurately. Use abstract or thematic imagery instead (e.g. instead of "Google logo", use "a colourful abstract search interface on a glowing screen").
+- Real people (politicians, celebrities, journalists, public figures) ARE allowed and encouraged — describe them by name and role for Imagen to render a realistic portrait (e.g. "photorealistic portrait of a scientist presenting findings in a lab").
+- Do NOT request company logos, brand marks, app icons, or any readable text in the image — Imagen cannot render text or logos accurately. Use abstract or thematic imagery instead (e.g. instead of "Google logo", use "a colourful abstract search interface on a glowing screen").
 - STRICT: Avoid text-bearing compositions like newspaper front pages, posters, billboards, screenshots, UI panels, signs, or subtitles.
 - Be highly specific: lighting, composition, mood, style, camera angle.
 - Avoid copyrighted fictional characters/franchises (e.g., superheroes, movie/cartoon characters, game mascots), trademarked logos, or branded products.
@@ -251,8 +251,8 @@ NARRATION RULES — follow strictly:
 VISUAL PROMPT RULES:
 - Always write visual prompts in English, regardless of narration language.
 - Every visual prompt MUST begin with this exact style prefix to keep all scenes visually consistent: "{video_style} — ". Apply it to every scene without exception.
-- Do NOT depict or name any specific real individual (politician, celebrity, activist) unless they are a current sitting Prime Minister or President of a country. Use representative imagery instead (e.g. "a government official at a podium", "scientists in a lab").
-- Do NOT request company logos, brand marks, app icons, or any readable text/labels in the image — Imagen cannot render text accurately. Use abstract or thematic imagery instead (e.g. instead of "Google logo", use "a colourful abstract search interface on a glowing screen").
+- Real people (politicians, celebrities, journalists, public figures) ARE allowed and encouraged — describe them by name and role for Imagen to render a realistic portrait (e.g. "photorealistic portrait of a scientist presenting findings in a lab").
+- Do NOT request company logos, brand marks, app icons, or any readable text in the image — Imagen cannot render text or logos accurately. Use abstract or thematic imagery instead (e.g. instead of "Google logo", use "a colourful abstract search interface on a glowing screen").
 - STRICT: Avoid text-bearing compositions like newspaper front pages, posters, billboards, screenshots, UI panels, signs, or subtitles.
 - Be highly specific: lighting, composition, mood, style, camera angle.
 - Avoid copyrighted fictional characters/franchises (e.g., superheroes, movie/cartoon characters, game mascots), trademarked logos, or branded products.
@@ -516,11 +516,11 @@ _STORY_VISUAL_STYLE_POOL_HI = [
 ]
 
 _STORY_VISUAL_STYLE_POOL_EN = [
-    "Cinematic photorealistic, dramatic natural lighting, shallow depth of field, vivid detail",
-    "Documentary-style photography, candid composition, warm natural light, authentic atmosphere",
-    "High-resolution realistic render, vivid detail, cinematic color grading, emotionally evocative",
-    "Moody cinematic scene, rich warm tones, dramatic yet inviting atmosphere, photorealistic",
-    "Photorealistic portrait lighting, golden hour glow, emotionally resonant, crisp detail",
+    "Vibrant storybook illustration, bold outlines, rich saturated colors, expressive characters, dramatic composition",
+    "Charcoal sketch with soft watercolor wash, warm earthy tones, hand-drawn feel, expressive figures",
+    "Bold graphic novel style, high contrast, dynamic angles, strong character silhouettes, vivid palette",
+    "Soft pencil sketch illustration, warm golden tones, gentle shading, emotionally expressive characters",
+    "Children's book illustration style, loose ink lines, warm pastel palette, whimsical characters",
 ]
 
 _CTA_NEWS = [
@@ -733,7 +733,8 @@ NARRATION rules:
 VISUAL PROMPT rules:
 - In English
 - Start with this style prefix: "{video_style} — "
-- No real people, religious symbols, copyright characters, brand logos
+- People and characters ARE allowed and encouraged — depict them in the illustration/sketch style matching the style prefix. Show facial expressions and body language that carry the emotion of the scene.
+- No religious symbols, copyright characters, brand logos
 - Prefer natural settings: countryside, forests, rivers, small towns
 - No text, no words, no signs in the image
 - CRITICAL — SAFETY: ALL visuals must be bright, warm, and child-friendly. Even for mystery/thriller/crime genres, convey curiosity and wonder — NEVER darkness, fear, danger, or violence. No sinister shadows, no weapons, no blood, no frightening creatures, no ominous imagery. Imagen will reject dark or frightening content.
@@ -775,7 +776,8 @@ NARRATION नियम:
 VISUAL PROMPT नियम:
 - अंग्रेज़ी में लिखो
 - इस style prefix से शुरू करो: "{video_style} — "
-- कोई असली व्यक्ति, धार्मिक प्रतीक, copyright characters नहीं
+- पात्र और लोग दिखाना अनुमत और प्रोत्साहित है — उन्हें style prefix के illustration/sketch style में दिखाओ। चेहरे के भाव और body language से scene की emotion स्पष्ट होनी चाहिए।
+- कोई धार्मिक प्रतीक, copyright characters, brand logos नहीं
 - प्रकृति, गाँव, जंगल, नदी जैसी settings को प्राथमिकता दो
 - No text, no words, no signs in the image
 - CRITICAL — SAFETY: ALL visuals must be bright, warm, and child-friendly. Even for mystery/thriller/crime genres, convey curiosity and wonder — NEVER darkness, fear, danger, or violence. No sinister shadows, no weapons, no blood, no frightening creatures, no ominous imagery. Use symbolic and metaphorical visuals (e.g. a glowing lantern for mystery, a winding path for adventure). Imagen will reject dark or frightening content.

@@ -180,8 +180,8 @@ def test_generate_stories_task_route_passes_language_to_generator():
 
 # ── English safety-filter fallback ──────────────────────────────────────────
 
-def test_english_story_safety_fallback_uses_realistic_prompt():
-    """When an English story scene is safety-filtered, the realistic fallback prompt is used (not watercolor)."""
+def test_english_story_safety_fallback_uses_sketch_prompt():
+    """When an English story scene is safety-filtered, the sketch/illustration fallback prompt is used."""
     from app.agents.generator_agent import _STORY_GENRE_SAFE_PROMPTS_EN
     expected_genres = {
         "inspiring", "heartfelt", "comedy", "crime", "action",
@@ -189,9 +189,7 @@ def test_english_story_safety_fallback_uses_realistic_prompt():
         "adventure", "slice-of-life", "historical",
     }
     assert set(_STORY_GENRE_SAFE_PROMPTS_EN.keys()) == expected_genres
+    sketch_terms = {"illustration", "sketch", "graphic novel", "storybook", "watercolor", "pencil", "charcoal"}
     for genre, prompt in _STORY_GENRE_SAFE_PROMPTS_EN.items():
-        assert "watercolor" not in prompt.lower(), f"Genre '{genre}' fallback still uses watercolor style"
-    realistic_terms = {"cinematic", "photorealistic", "documentary", "realistic", "photograph"}
-    for genre, prompt in _STORY_GENRE_SAFE_PROMPTS_EN.items():
-        has_realistic = any(term in prompt.lower() for term in realistic_terms)
-        assert has_realistic, f"Genre '{genre}' fallback missing realistic descriptor: {prompt}"
+        has_sketch = any(term in prompt.lower() for term in sketch_terms)
+        assert has_sketch, f"Genre '{genre}' fallback missing sketch/illustration descriptor: {prompt}"

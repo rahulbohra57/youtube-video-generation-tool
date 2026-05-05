@@ -91,9 +91,8 @@ def generate_image(prompt: str, idx: int, aspect_ratio: str = "16:9") -> str:
                 number_of_images=1,
                 aspect_ratio=aspect_ratio,
                 negative_prompt=(
-                    "real person face, celebrity portrait, politician likeness, "
-                    "specific named individual, realistic human portrait, photorealistic face, "
-                    "copyrighted character, trademark logo, brand logo, movie character, cartoon mascot"
+                    "trademark logo, brand logo, embedded text, readable words, "
+                    "captions, watermark, text overlay, subtitles"
                 ),
                 safety_filter_level="block_few",
                 person_generation="allow_adult",
