@@ -15,14 +15,34 @@ Read this before making any infrastructure or code change.
 # Activate virtualenv
 source venv/bin/activate
 
-# Run the FastAPI server locally (optional — only needed for OAuth flows)
+# Run the FastAPI server locally (only needed for YouTube OAuth re-auth flows)
 uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+```
+
+The venv's Python symlinks may be stale if the project folder was moved. Use system Python if venv fails:
+```bash
+/opt/anaconda3/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080
+```
+
+**Running with `.env` credentials** (required for local auth flows):
+```bash
+export $(grep -v '^#' .env | xargs)
+export YOUTUBE_REDIRECT_URI="http://localhost:8080/auth/youtube/callback"
+export STORIES_YOUTUBE_REDIRECT_URI="http://localhost:8080/auth/youtube/stories/callback"
+export GITHUB_DISPATCH_TOKEN=$(gh auth token)
+export GITHUB_REPO="rahulbohra57/youtube-video-generation-tool"
+/opt/anaconda3/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080
 ```
 
 External SDKs (Vertex AI, Firestore, GCS, TTS) require GCP credentials to be set up locally:
 ```bash
 gcloud auth application-default login
+gcloud config set project youtube-video-generator-492211
 ```
+
+> **Note**: `GenerativeModel` (Gemini) is lazily initialized in `llm_service.py` via `_get_model()`.
+> The FastAPI server can start and serve OAuth routes without Vertex AI credentials — credentials
+> are only needed when LLM functions are actually called.
 
 ### Tests
 
@@ -65,8 +85,12 @@ The app manages two independent YouTube Shorts channels:
 
 | Channel | Language | YouTube Name | Telegram Bot | Scheduler |
 |---|---|---|---|---|
-| **News** (`channel_id="news"`) | English | Kurrent Affairs | `TELEGRAM_BOT_TOKEN` | GitHub Actions cron (`12am, 8am, 4pm IST`) |
-| **Stories** (`channel_id="stories"`) | Hindi | Short Tales | `STORIES_BOT_TOKEN` | GitHub Actions cron (`7am, 11am, 2pm, 6pm IST`) |
+| **News** (`channel_id="news"`) | English | Kurrent Affairs | `@AutoframeBot` (`TELEGRAM_BOT_TOKEN`) | GitHub Actions cron (`12am, 8am, 4pm IST`) |
+| **Stories** (`channel_id="stories"`) | Hindi | Short Tales | `@short_tales_bot` (`STORIES_BOT_TOKEN`) | GitHub Actions cron (`7am, 11am, 2pm, 6pm IST`) |
+
+Both bots send to the same user (Rahul, chat ID `8226211103`) but messages appear in separate bot
+conversations because they use different bot tokens. Routing is by `channel_id` — `telegram_service`
+reads `STORIES_BOT_TOKEN` at call time (not import time) to pick the correct bot.
 
 **Deployment split:**
 
@@ -305,19 +329,22 @@ generation runs at a time. New dispatches queue (not cancelled) while one is run
 | `GNEWS_API_KEY` | GNews.io API key |
 | `GOOGLE_SEARCH_API_KEY` | Google Custom Search API key |
 | `GOOGLE_SEARCH_ENGINE_ID` | Programmable Search Engine ID |
-| `TELEGRAM_BOT_TOKEN` | News bot (Kurrent Affairs) Telegram token |
-| `TELEGRAM_CHAT_ID` | News bot chat ID |
-| `STORIES_BOT_TOKEN` | Stories bot (Short Tales) Telegram token |
-| `STORIES_CHAT_ID` | Stories bot chat ID |
-| `YOUTUBE_CLIENT_ID` | News channel YouTube OAuth 2.0 client ID |
-| `YOUTUBE_CLIENT_SECRET` | News channel YouTube OAuth 2.0 client secret |
-| `YOUTUBE_REDIRECT_URI` | Must match exactly what's registered in GCP OAuth client |
-| `STORIES_YOUTUBE_CLIENT_ID` | Short Tales channel YouTube OAuth 2.0 client ID |
-| `STORIES_YOUTUBE_CLIENT_SECRET` | Short Tales channel YouTube OAuth 2.0 client secret |
-| `STORIES_YOUTUBE_REDIRECT_URI` | Must match exactly what's registered in GCP OAuth client |
+| `TELEGRAM_BOT_TOKEN` | News bot (`@AutoframeBot`) Telegram token |
+| `TELEGRAM_CHAT_ID` | News bot chat ID (`8226211103`) |
+| `STORIES_BOT_TOKEN` | Stories bot (`@short_tales_bot`) Telegram token |
+| `STORIES_CHAT_ID` | Stories bot chat ID (`8226211103`) |
+| `YOUTUBE_CLIENT_ID` | News + Stories YouTube OAuth 2.0 client ID (both channels share same OAuth client) |
+| `YOUTUBE_CLIENT_SECRET` | YouTube OAuth 2.0 client secret |
+| `YOUTUBE_REDIRECT_URI` | Registered redirect URI for news channel OAuth callback |
+| `STORIES_YOUTUBE_CLIENT_ID` | Same as `YOUTUBE_CLIENT_ID` — same OAuth app, different channel |
+| `STORIES_YOUTUBE_CLIENT_SECRET` | Same as `YOUTUBE_CLIENT_SECRET` |
+| `STORIES_YOUTUBE_REDIRECT_URI` | Registered redirect URI for stories channel OAuth callback |
 | `BUCKET_NAME` | GCS bucket name (`yt-gen-app-bucket`) |
-| `GITHUB_REPO` | Repository slug (`owner/repo`) — used by dispatcher |
-| `GITHUB_DISPATCH_TOKEN` | PAT or token with `actions: write` scope — used by Vercel to dispatch workflows |
+| `GITHUB_DISPATCH_TOKEN` | PAT or token with `actions: write` + `workflow` scope — used by Vercel to dispatch workflows |
+
+> **`GITHUB_REPO` cannot be a GitHub secret** — GitHub rejects secrets starting with `GITHUB_`.
+> The repo slug `rahulbohra57/youtube-video-generation-tool` is set as the `GITHUB_REPO` env var
+> in Vercel project settings, and passed explicitly when running pipelines locally.
 
 ---
 
@@ -366,6 +393,9 @@ Webhooks are served by Vercel serverless functions.
 ## LLM and Script Generation (`app/services/llm_service.py`)
 
 - **Model**: Gemini 2.5 Flash (`gemini-2.5-flash`) via Vertex AI.
+- **Lazy initialization**: `GenerativeModel` is NOT created at import time. `_get_model()` creates
+  it on first call. This allows the FastAPI server to start and serve OAuth routes without Vertex
+  AI credentials being present. Tests patch `_get_model` (not the old `model` attribute).
 - **Script format**: JSON array of scene objects: `{scene, narration, visual}`.
   - 9:16 (Shorts): max 5 scenes, 20-24 words per narration, target 45-55s total.
   - Visual prompts are always in English regardless of content language.
@@ -458,7 +488,7 @@ Three layers prevent duplicate videos:
 
 ## YouTube OAuth Tokens
 
-Two separate OAuth credential sets, one per channel:
+Two separate OAuth credential sets, one per channel (both use the same OAuth client ID/secret):
 
 | Channel | Firestore doc | Client ID env var | Redirect URI env var | Auth URL |
 |---|---|---|---|---|
@@ -468,8 +498,19 @@ Two separate OAuth credential sets, one per channel:
 Tokens auto-refresh via `google-auth` on each API call. The `refresh-youtube-auth.yml` GitHub
 Actions workflow also runs every 6 hours to proactively refresh tokens before they expire.
 
-If "insufficient authentication scopes" appears in STATS: run the FastAPI app locally and
-open the auth URL in a browser to re-authenticate.
+**Re-authenticating when tokens expire (local flow):**
+
+1. Add these redirect URIs to the GCP OAuth client (`omcqlhbpnv6u2l14598ib2uq3m8bqldj`):
+   - `http://localhost:8080/auth/youtube/callback`
+   - `http://localhost:8080/auth/youtube/stories/callback`
+2. Start FastAPI locally with overridden redirect URIs (see Development Commands above).
+3. Open `http://localhost:8080/auth/youtube` → sign in as **Kurrent Affairs** YouTube account.
+4. Open `http://localhost:8080/auth/youtube/stories` → sign in as **Short Tales** YouTube account.
+5. Tokens are saved to Firestore; GitHub Actions picks them up automatically.
+
+> Both channels use the same GCP OAuth client (`omcqlhbpnv6u2l14598ib2uq3m8bqldj`). The OAuth
+> client represents the app, not the YouTube channel — multiple Google accounts can authorize the
+> same app independently.
 
 ---
 
@@ -597,7 +638,11 @@ Run these after any Vercel or GitHub Actions change:
 | Webhook returns 4xx | Vercel function error | Check Vercel function logs in the Vercel dashboard |
 | CREATE rejects valid topic | No source article found in last 72h | Provide article URL: `CREATE <topic> \| <url>` |
 | Video dispatch silently fails | `GITHUB_DISPATCH_TOKEN` missing or expired | Set/refresh token in GitHub Secrets and Vercel env vars |
-| YouTube token expired | Token refresh failed | Run `refresh-youtube-auth.yml` manually; if still failing, run FastAPI locally and re-auth via browser |
+| YouTube token expired | Token refresh failed | Run `refresh-youtube-auth.yml` manually; if still failing, run FastAPI locally and re-auth via browser (see YouTube OAuth Tokens section) |
+| Stories messages go to wrong Telegram channel | `STORIES_BOT_TOKEN` missing/wrong or `STORIES_CHAT_ID` not set | `get_chat_id()` and `_bot_token_for()` both read env vars at call time — verify secrets are set in GitHub Actions and Vercel |
+| Stories daily cap skips pipeline | A stories job already ran today (IST midnight reset) | Use FORCE_CREATE via Telegram bot, or run locally patching `_story_already_generated_today = lambda: False` |
+| FastAPI fails to start locally | `GenerativeModel` init requires Vertex AI / GCP creds | Fixed — model is lazy-initialized. Server starts without GCP creds; only fails when LLM functions are called |
+| GitHub dispatch fails with 404 | Wrong `GITHUB_REPO` value | Repo is `rahulbohra57/youtube-video-generation-tool`; set `GITHUB_REPO` in Vercel env (not as a GitHub secret — name is reserved) |
 
 ## graphify
 

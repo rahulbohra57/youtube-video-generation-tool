@@ -9,9 +9,15 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-vertexai.init()
+_model = None
 
-model = GenerativeModel("gemini-2.5-flash")
+
+def _get_model() -> GenerativeModel:
+    global _model
+    if _model is None:
+        vertexai.init()
+        _model = GenerativeModel("gemini-2.5-flash")
+    return _model
 
 # Must match the subfolder names in assets/music/ exactly
 _MUSIC_GENRES = ["Cheerful", "Happy", "News Bulletin", "Party", "Sad-Emotional", "Suspense"]
@@ -146,7 +152,7 @@ Additional format constraints:
 - Maximum {max_scenes} scenes total
 """
 
-    response = model.generate_content(prompt)
+    response = _get_model().generate_content(prompt)
     return _response_text(response)
 
 
@@ -423,7 +429,7 @@ Input scenes:
 {_scene_list_to_json_prompt(scenes)}
 """
     try:
-        response = model.generate_content(prompt)
+        response = _get_model().generate_content(prompt)
         from app.utils.helpers import extract_json
         checked = extract_json(_response_text(response))
         if isinstance(checked, list) and len(checked) >= len(scenes):
@@ -657,7 +663,7 @@ Return only a valid JSON object, no markdown:
 
     for attempt in range(2):
         try:
-            response = model.generate_content(prompt)
+            response = _get_model().generate_content(prompt)
             result = _extract_json_object(_response_text(response))
             if result.get("title") and result.get("mood") and result.get("premise"):
                 if not _is_premise_adequate(result["premise"]):
@@ -701,6 +707,12 @@ Write exactly 4 scenes. Total duration: 55-65 seconds (~15 seconds per scene).
 Each scene must have:
 - "narration": In English, 25-35 words, COMPLETE sentences (never a fragment or mid-sentence break)
 - "visual": In English (for Imagen), a detailed image generation prompt
+- Optional animation hints (for video renderer):
+  - "motion_type": one of ["ken_burns", "parallax", "pop_in"]
+  - "camera_path": one of ["left_to_right", "right_to_left", "center_hold"]
+  - "focus_subject": short phrase naming the visual focus
+  - "transition": one of ["dissolve", "push", "flash_cut", "whip"]
+  - "effect_cue": short cue like "subtle glow", "dust particles", or "none"
 
 CRITICAL: Each scene's narration must be SELF-CONTAINED. A viewer who sees only that scene must understand what is happening. Never write narration that is a continuation of the previous scene's sentence.
 
@@ -741,10 +753,10 @@ VISUAL PROMPT rules:
 
 Return only a valid JSON array, no markdown:
 [
-  {{"scene": 1, "narration": "...", "visual": "..."}},
-  {{"scene": 2, "narration": "...", "visual": "..."}},
-  {{"scene": 3, "narration": "...", "visual": "..."}},
-  {{"scene": 4, "narration": "...", "visual": "..."}}
+  {{"scene": 1, "narration": "...", "visual": "...", "motion_type": "ken_burns", "camera_path": "left_to_right", "focus_subject": "main character", "transition": "dissolve", "effect_cue": "subtle glow"}},
+  {{"scene": 2, "narration": "...", "visual": "...", "motion_type": "parallax", "camera_path": "right_to_left", "focus_subject": "rising conflict", "transition": "push", "effect_cue": "dust particles"}},
+  {{"scene": 3, "narration": "...", "visual": "...", "motion_type": "pop_in", "camera_path": "center_hold", "focus_subject": "decisive action", "transition": "whip", "effect_cue": "light burst"}},
+  {{"scene": 4, "narration": "...", "visual": "...", "motion_type": "ken_burns", "camera_path": "left_to_right", "focus_subject": "resolution", "transition": "flash_cut", "effect_cue": "none"}}
 ]"""
     else:
         premise_block = f"\nकहानी का सार: {premise}" if premise else ""
@@ -759,6 +771,12 @@ Return only a valid JSON array, no markdown:
 हर scene में:
 - "narration": हिंदी में (देवनागरी लिपि), 15-18 शब्द, बोलने में स्वाभाविक
 - "visual": अंग्रेज़ी में (Imagen के लिए), बहुत विस्तृत image generation prompt
+- Optional animation hints (renderer के लिए):
+  - "motion_type": ["ken_burns", "parallax", "pop_in"] में से एक
+  - "camera_path": ["left_to_right", "right_to_left", "center_hold"] में से एक
+  - "focus_subject": किस पर focus रहना चाहिए (short phrase)
+  - "transition": ["dissolve", "push", "flash_cut", "whip"] में से एक
+  - "effect_cue": short style cue जैसे "subtle glow" या "none"
 
 Scene structure:
 - Scene 1 (Hook ~12s): पहले वाक्य में ही एक shocking situation, emotional paradox, या unexpected moment दो — दर्शक पहले 3 सेकंड में रुक जाए। "एक बार की बात है", "आज मैं", "नमस्ते दोस्तों" जैसा कोई भी generic opening बिल्कुल नहीं।
@@ -784,13 +802,13 @@ VISUAL PROMPT नियम:
 
 सिर्फ valid JSON array return करो, कोई markdown नहीं:
 [
-  {{"scene": 1, "narration": "...", "visual": "..."}},
-  {{"scene": 2, "narration": "...", "visual": "..."}},
-  {{"scene": 3, "narration": "...", "visual": "..."}},
-  {{"scene": 4, "narration": "...", "visual": "..."}}
+  {{"scene": 1, "narration": "...", "visual": "...", "motion_type": "ken_burns", "camera_path": "left_to_right", "focus_subject": "मुख्य पात्र", "transition": "dissolve", "effect_cue": "subtle glow"}},
+  {{"scene": 2, "narration": "...", "visual": "...", "motion_type": "parallax", "camera_path": "right_to_left", "focus_subject": "संघर्ष", "transition": "push", "effect_cue": "dust particles"}},
+  {{"scene": 3, "narration": "...", "visual": "...", "motion_type": "pop_in", "camera_path": "center_hold", "focus_subject": "निर्णायक कदम", "transition": "whip", "effect_cue": "light burst"}},
+  {{"scene": 4, "narration": "...", "visual": "...", "motion_type": "ken_burns", "camera_path": "left_to_right", "focus_subject": "परिणाम", "transition": "flash_cut", "effect_cue": "none"}}
 ]"""
 
-    response = model.generate_content(prompt)
+    response = _get_model().generate_content(prompt)
     return _response_text(response)
 
 
@@ -845,7 +863,7 @@ Return ONLY a valid JSON array, no markdown, no explanation:
 
 Articles:
 {articles_text}"""
-    response = model.generate_content(prompt)
+    response = _get_model().generate_content(prompt)
     from app.utils.helpers import extract_json
     return extract_json(_response_text(response))
 
@@ -863,7 +881,7 @@ Formatting rules:
 Caption:
 {caption}"""
     try:
-        response = model.generate_content(prompt)
+        response = _get_model().generate_content(prompt)
         return format_caption_for_youtube(_response_text(response).strip())
     except Exception:
         logger.warning("enhance_caption: Gemini call failed, using original caption")
@@ -926,7 +944,7 @@ Rules:
 - Return ONLY the caption lines followed by the hashtags
 """
 
-    response = model.generate_content(prompt)
+    response = _get_model().generate_content(prompt)
     return _response_text(response).strip()
 
 
@@ -962,7 +980,7 @@ Input scenes:
 {_scene_list_to_json_prompt(scenes)}
 """
     try:
-        response = model.generate_content(prompt)
+        response = _get_model().generate_content(prompt)
         from app.utils.helpers import extract_json
         reviewed = extract_json(_response_text(response))
         if isinstance(reviewed, list) and len(reviewed) >= len(scenes):
@@ -1008,7 +1026,7 @@ Script scenes:
 {_scene_list_to_json_prompt(scenes)}
 """
     try:
-        response = model.generate_content(prompt)
+        response = _get_model().generate_content(prompt)
         payload = _extract_json_object(_response_text(response))
         title = strip_markdown_formatting((payload.get("title") or "").strip())
         caption_body = strip_markdown_formatting((payload.get("caption") or "").strip())

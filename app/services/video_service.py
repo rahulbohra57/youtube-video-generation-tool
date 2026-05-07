@@ -1,11 +1,28 @@
 # app/services/video_service.py
 
-from moviepy import ImageClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip, CompositeAudioClip
-from moviepy.audio.fx import AudioFadeIn, AudioFadeOut, AudioLoop, MultiplyVolume
+try:
+    from moviepy import ImageClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip, CompositeAudioClip
+except Exception:
+    from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip, CompositeAudioClip
+try:
+    from moviepy.audio.fx import AudioFadeIn, AudioFadeOut, AudioLoop, MultiplyVolume
+    _AUDIO_FX_MODE = "v2"
+except Exception:
+    from moviepy.audio.fx import all as afx
+    _AUDIO_FX_MODE = "legacy"
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 import os
 import random
+
+from app.config import (
+    STORIES_ANIMATION_ENABLED,
+    STORIES_ANIMATION_PROFILE,
+    STORIES_MAX_SCENES_ANIMATED,
+    STORIES_BROLL_ENABLED,
+    STORIES_BROLL_MIN_VIRALITY,
+)
+from app.services.animation_service import create_animated_scene_clip, resolve_motion_hint
 
 MUSIC_DIR  = "assets/music"
 BG_VOLUME  = 0.15   # Keep ambience subtle so VO stays dominant.
@@ -19,11 +36,17 @@ AUDIO_FADE_OUT = 0.35
 # DejaVu is installed via Dockerfile (fonts-dejavu-core) and is the production font.
 # macOS fonts are listed as secondary so local dev still gets good rendering.
 _FONT_EN  = ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 0)  # Linux / Cloud Run
-_FONT_HI  = ("/usr/share/fonts/truetype/lohit-devanagari/Lohit-Devanagari.ttf", 0)  # Devanagari (installed via fonts-indic)
-_FONT_FALLBACKS = [
-    ("/System/Library/Fonts/HelveticaNeue.ttc", 1),  # macOS dev
-    ("/System/Library/Fonts/Kohinoor.ttc",      3),  # macOS Hindi dev
-    ("/Library/Fonts/Arial Unicode.ttf",        0),  # macOS Unicode
+_FONT_HI  = ("/usr/share/fonts/truetype/lohit-devanagari/Lohit-Devanagari.ttf", 0)  # Linux / Cloud Run (fonts-indic)
+_FONT_HI_FALLBACKS = [
+    ("/System/Library/Fonts/Supplemental/Devanagari Sangam MN.ttc", 0),
+    ("/System/Library/Fonts/Supplemental/DevanagariMT.ttc", 0),
+    ("/System/Library/Fonts/Supplemental/ITFDevanagari.ttc", 0),
+    ("/System/Library/Fonts/Kohinoor.ttc", 3),
+    ("/Library/Fonts/Arial Unicode.ttf", 0),
+]
+_FONT_EN_FALLBACKS = [
+    ("/System/Library/Fonts/HelveticaNeue.ttc", 1),
+    ("/Library/Fonts/Arial Unicode.ttf", 0),
 ]
 
 
@@ -33,8 +56,11 @@ def _load_font(size: int, language: str = "en") -> ImageFont.FreeTypeFont:
     key = (size, language)
     if key in _font_cache:
         return _font_cache[key]
-    primary = _FONT_HI if language == "hi" else _FONT_EN
-    for path, index in [primary] + _FONT_FALLBACKS:
+    if language == "hi":
+        candidates = [_FONT_HI] + _FONT_HI_FALLBACKS + _FONT_EN_FALLBACKS
+    else:
+        candidates = [_FONT_EN] + _FONT_EN_FALLBACKS + _FONT_HI_FALLBACKS
+    for path, index in candidates:
         try:
             font = ImageFont.truetype(path, size, index=index)
             _font_cache[key] = font
@@ -164,6 +190,7 @@ def _make_word_caption_clips(
     width: int,
     height: int,
     language: str = "en",
+    animated_entry: bool = False,
 ) -> list:
     """
     Split narration into sentence chunks (at . ! ?), render each as a timed ImageClip.
@@ -247,12 +274,20 @@ def _make_word_caption_clips(
             )
 
         arr = np.array(canvas)
-        caption_clip = (
-            ImageClip(arr[:, :, :3])
-            .with_mask(ImageClip(arr[:, :, 3] / 255.0).with_is_mask(True))
-            .with_start(current_time)
-            .with_duration(chunk_duration)
-        )
+        rgb_clip = ImageClip(arr[:, :, :3])
+        alpha_clip = _clip_is_mask(ImageClip(arr[:, :, 3] / 255.0), True)
+        caption_clip = _clip_duration(_clip_start(_clip_mask(rgb_clip, alpha_clip), current_time), chunk_duration)
+        if animated_entry:
+            try:
+                caption_clip = _clip_position(
+                    caption_clip,
+                    lambda t, start=current_time: (
+                        0,
+                        int(-12 * max(0.0, 1.0 - min(1.0, (t - start) / 0.22))),
+                    ),
+                )
+            except Exception:
+                pass
         clips.append(caption_clip)
         current_time += chunk_duration
 
@@ -262,6 +297,79 @@ def _make_word_caption_clips(
 # ─── Music picker ─────────────────────────────────────────────────────────────
 
 _music_cache: dict[str, list[str]] = {}
+
+
+def _clip_duration(clip, duration: float):
+    return clip.with_duration(duration) if hasattr(clip, "with_duration") else clip.set_duration(duration)
+
+
+def _clip_start(clip, start: float):
+    return clip.with_start(start) if hasattr(clip, "with_start") else clip.set_start(start)
+
+
+def _clip_audio(clip, audio):
+    return clip.with_audio(audio) if hasattr(clip, "with_audio") else clip.set_audio(audio)
+
+
+def _clip_mask(clip, mask):
+    return clip.with_mask(mask) if hasattr(clip, "with_mask") else clip.set_mask(mask)
+
+
+def _clip_is_mask(clip, is_mask: bool):
+    return clip.with_is_mask(is_mask) if hasattr(clip, "with_is_mask") else clip.set_ismask(is_mask)
+
+
+def _clip_position(clip, pos):
+    if hasattr(clip, "with_position"):
+        return clip.with_position(pos)
+    return clip.set_position(pos) if hasattr(clip, "set_position") else clip.set_pos(pos)
+
+
+def _crop_center(clip, x1: int, y1: int, x2: int, y2: int):
+    if hasattr(clip, "cropped"):
+        return clip.cropped(x1=x1, y1=y1, x2=x2, y2=y2)
+    return clip.crop(x1=x1, y1=y1, x2=x2, y2=y2)
+
+
+def _audio_fade_in(clip, duration: float):
+    if _AUDIO_FX_MODE == "v2":
+        return clip.with_effects([AudioFadeIn(duration)])
+    return clip.fx(afx.audio_fadein, duration)
+
+
+def _audio_fade_out(clip, duration: float):
+    if _AUDIO_FX_MODE == "v2":
+        return clip.with_effects([AudioFadeOut(duration)])
+    return clip.fx(afx.audio_fadeout, duration)
+
+
+def _audio_loop(clip, duration: float):
+    if _AUDIO_FX_MODE == "v2":
+        return clip.with_effects([AudioLoop(duration=duration)])
+    return clip.fx(afx.audio_loop, duration=duration)
+
+
+def _volume(clip, factor: float):
+    if hasattr(clip, "with_volume_scaled"):
+        return clip.with_volume_scaled(factor)
+    if _AUDIO_FX_MODE == "v2":
+        return clip.with_effects([MultiplyVolume(factor)])
+    return clip.fx(afx.volumex, factor)
+
+
+def _subclip(clip, start: float, end: float):
+    return clip.subclipped(start, end) if hasattr(clip, "subclipped") else clip.subclip(start, end)
+
+
+def _fit_cover(clip, target_w: int, target_h: int):
+    """Scale and center-crop clip so it fully covers target frame (no letter/pillarboxing)."""
+    if clip.w <= 0 or clip.h <= 0 or target_w <= 0 or target_h <= 0:
+        return clip
+    scale = max(target_w / clip.w, target_h / clip.h)
+    resized = _clip_resize(clip, scale) if "_clip_resize" in globals() else (clip.resized(scale) if hasattr(clip, "resized") else clip.resize(scale))
+    x1 = int(max(0, (resized.w - target_w) // 2))
+    y1 = int(max(0, (resized.h - target_h) // 2))
+    return _crop_center(resized, x1=x1, y1=y1, x2=x1 + target_w, y2=y1 + target_h)
 
 def _tracks_in(directory: str) -> list[str]:
     if directory not in _music_cache:
@@ -289,26 +397,101 @@ def _pick_music(genre: str = "general") -> str | None:
 
 # ─── Main entry point ─────────────────────────────────────────────────────────
 
-def create_video(clips, output_path, music_genre: str = "general", language: str = "en"):
+def _normalize_clip_item(item):
+    if isinstance(item, dict):
+        return {
+            "image_path": item.get("image_path", ""),
+            "audio_path": item.get("audio_path", ""),
+            "narration": item.get("narration", ""),
+            "motion_type": item.get("motion_type", ""),
+            "camera_path": item.get("camera_path", ""),
+            "focus_subject": item.get("focus_subject", ""),
+            "transition": item.get("transition", ""),
+            "effect_cue": item.get("effect_cue", ""),
+        }
+    image_path, audio_path, narration = item
+    return {
+        "image_path": image_path,
+        "audio_path": audio_path,
+        "narration": narration,
+        "motion_type": "",
+        "camera_path": "",
+        "focus_subject": "",
+        "transition": "",
+        "effect_cue": "",
+    }
+
+
+def create_video(
+    clips,
+    output_path,
+    music_genre: str = "general",
+    language: str = "en",
+    channel_id: str = "news",
+    story_genre: str = "",
+    virality_score: float = 0.0,
+):
     """
     clips: list of (image_path, audio_path, narration_text) tuples
     """
     video_clips = []
 
-    for image_path, audio_path, narration in clips:
-        audio = AudioFileClip(audio_path)
-        audio = audio.with_effects([AudioFadeIn(AUDIO_FADE_IN)])
-        audio = audio.with_effects([AudioFadeOut(AUDIO_FADE_OUT)])
+    normalized = [_normalize_clip_item(c) for c in clips]
+    target_w = 1080 if channel_id == "stories" else 0
+    target_h = 1920 if channel_id == "stories" else 0
 
-        base = (
-            ImageClip(image_path)
-            .with_duration(audio.duration)
-            .with_audio(audio)
+    # Phase-2 scaffold: when enabled and virality is high enough, this gate can
+    # route selected scenes to an AI video/B-roll provider. V1 keeps 2.5D motion.
+    use_broll_path = (
+        channel_id == "stories"
+        and STORIES_BROLL_ENABLED
+        and float(virality_score or 0.0) >= STORIES_BROLL_MIN_VIRALITY
+    )
+    if use_broll_path:
+        print("ℹ️ B-roll gate active; no provider configured yet, using 2.5D animation fallback.")
+
+    for idx, item in enumerate(normalized):
+        image_path = item["image_path"]
+        audio_path = item["audio_path"]
+        narration = item["narration"]
+        audio = AudioFileClip(audio_path)
+        audio = _audio_fade_in(audio, AUDIO_FADE_IN)
+        audio = _audio_fade_out(audio, AUDIO_FADE_OUT)
+
+        use_animation = (
+            channel_id == "stories"
+            and STORIES_ANIMATION_ENABLED
+            and idx < max(0, STORIES_MAX_SCENES_ANIMATED)
         )
+        if use_animation:
+            try:
+                hint = resolve_motion_hint(item, idx, genre=story_genre, profile=STORIES_ANIMATION_PROFILE)
+                base = create_animated_scene_clip(
+                    image_path=image_path,
+                    duration=audio.duration,
+                    motion_hint=hint,
+                    profile=STORIES_ANIMATION_PROFILE,
+                )
+                base = _clip_audio(base, audio)
+            except Exception as anim_err:
+                print(f"⚠️ Animation failed for scene {idx}, falling back to static: {anim_err}")
+                base = _clip_audio(_clip_duration(ImageClip(image_path), audio.duration), audio)
+        else:
+            base = _clip_audio(_clip_duration(ImageClip(image_path), audio.duration), audio)
+
+        # Enforce full-frame output so every scene fills Shorts frame edge-to-edge.
+        if target_w <= 0 or target_h <= 0:
+            target_w, target_h = int(base.w), int(base.h)
+        base = _fit_cover(base, target_w, target_h)
 
         try:
             caption_clips = _make_word_caption_clips(
-                narration, audio.duration, base.w, base.h, language=language
+                narration,
+                audio.duration,
+                base.w,
+                base.h,
+                language=language,
+                animated_entry=use_animation,
             )
             clip = CompositeVideoClip([base] + caption_clips) if caption_clips else base
         except Exception as e:
@@ -318,8 +501,8 @@ def create_video(clips, output_path, music_genre: str = "general", language: str
         video_clips.append(clip)
 
     final_video = concatenate_videoclips(video_clips, method="compose")
-    vo_audio = final_video.audio.with_effects([AudioFadeOut(0.5)]).with_volume_scaled(VO_GAIN)
-    final_video = final_video.with_audio(vo_audio)
+    vo_audio = _volume(_audio_fade_out(final_video.audio, 0.5), VO_GAIN)
+    final_video = _clip_audio(final_video, vo_audio)
 
     music_path = _pick_music(music_genre)
     if music_path:
@@ -330,13 +513,13 @@ def create_video(clips, output_path, music_genre: str = "general", language: str
             # Skip silent intros by starting from a later point when possible.
             start_offset = min(12.0, max(0.0, (bg.duration - duration) * 0.25))
             if bg.duration < duration:
-                bg = bg.with_effects([AudioLoop(duration=duration)])
+                bg = _audio_loop(bg, duration=duration)
             else:
-                bg = bg.subclipped(start_offset, start_offset + duration)
+                bg = _subclip(bg, start_offset, start_offset + duration)
 
-            bg       = bg.with_effects([AudioFadeOut(1.0)]).with_volume_scaled(BG_VOLUME)
+            bg       = _volume(_audio_fade_out(bg, 1.0), BG_VOLUME)
             mixed    = CompositeAudioClip([vo_audio, bg])
-            final_video = final_video.with_audio(mixed)
+            final_video = _clip_audio(final_video, mixed)
             print(f"🎵 Background music [{music_genre}]: {os.path.basename(music_path)}")
         except Exception as e:
             print(f"⚠️ Background music skipped: {e}")

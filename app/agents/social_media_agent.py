@@ -74,6 +74,8 @@ def post(video_path: str, caption: str, title: str, job_id: str = "", public_id:
                 chat_id,
                 f"🔴 *YouTube OAuth token expired for `{channel_id}` channel!*\n\n"
                 f"Re-authenticate to resume auto-posting:\n"
+                f"1\\. Run locally: `uvicorn app.main:app --host 0.0.0.0 --port 8080`\n"
+                f"2\\. Open in browser:\n"
                 f"• Kurrent Affairs: {news_url}\n"
                 f"• Short Tales: {stories_url}\n\n"
                 f"_Video has been sent here for manual upload._",

@@ -121,9 +121,9 @@ def test_fetch_top_headlines_raises_on_http_error(mock_get):
 # Task 4: llm_service additions
 # ---------------------------------------------------------------------------
 
-@patch("app.services.llm_service.model")
+@patch("app.services.llm_service._get_model")
 def test_rate_and_select_news_returns_five_items(mock_model):
-    mock_model.generate_content.return_value = MagicMock(text="""
+    mock_model.return_value.generate_content.return_value = MagicMock(text="""
 [
   {"code": "TECH01", "headline": "AI does stuff", "context": "Context here.", "rating": 4.8},
   {"code": "TECH02", "headline": "Quantum leap", "context": "Another context.", "rating": 4.5},
@@ -141,9 +141,9 @@ def test_rate_and_select_news_returns_five_items(mock_model):
     assert results[0]["rating"] == 4.8
 
 
-@patch("app.services.llm_service.model")
+@patch("app.services.llm_service._get_model")
 def test_enhance_caption_returns_non_empty_string(mock_model):
-    mock_model.generate_content.return_value = MagicMock(
+    mock_model.return_value.generate_content.return_value = MagicMock(
         text="Wow, this will blow your mind!\nHere is the body.\nLike and subscribe!\n#tech #ai"
     )
 
@@ -231,6 +231,7 @@ def test_generate_image_empty_response_raises_safety_filter(mock_model):
 # ---------------------------------------------------------------------------
 
 @patch("app.services.telegram_service.httpx.post")
+@patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "test-token"})
 def test_send_message_calls_telegram_with_correct_params(mock_post):
     mock_post.return_value = MagicMock(raise_for_status=MagicMock())
 
@@ -245,6 +246,7 @@ def test_send_message_calls_telegram_with_correct_params(mock_post):
 
 
 @patch("app.services.telegram_service.httpx.post")
+@patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "test-token"})
 def test_send_message_falls_back_to_plain_text(mock_post):
     markdown_resp = MagicMock()
     markdown_resp.raise_for_status.side_effect = Exception("can't parse entities")
@@ -920,7 +922,7 @@ def test_get_credentials_raises_reauth_on_invalid_grant(mock_creds_cls, mock_fs)
     mock_creds_cls.return_value = mock_creds
 
     from app.services import youtube_service
-    with pytest.raises(RuntimeError, match="Reconnect via https://"):
+    with pytest.raises(RuntimeError, match="Reconnect via http"):
         youtube_service.get_credentials()
 
 
@@ -957,7 +959,7 @@ def test_upload_video_raises_reauth_message_on_refresh_error(mock_get_creds, _mo
     mock_build.return_value.videos().insert.return_value = mock_request
 
     from app.services import youtube_service
-    with pytest.raises(RuntimeError, match="Reconnect via https://"):
+    with pytest.raises(RuntimeError, match="Reconnect via http"):
         youtube_service.upload_video("/tmp/test.mp4", "t", "d")
 
 

@@ -31,6 +31,9 @@ def _bot_token_for(chat_id: str, channel_id: str = "") -> str:
 def send_message(chat_id: str, text: str, channel_id: str = "") -> bool:
     """Send Telegram message with markdown first, then plain-text fallback."""
     token = _bot_token_for(chat_id, channel_id=channel_id)
+    if not token:
+        logger.warning("Telegram token missing for channel_id=%s chat_id=%s", channel_id, chat_id)
+        return False
     url = f"https://api.telegram.org/bot{token}/sendMessage"
 
     try:
@@ -86,6 +89,9 @@ def send_video_for_manual_post(
         return send_message(chat_id, caption_text + f"\n\n🔗 Video: {video_path_or_url}", channel_id=channel_id)
 
     api_url = f"https://api.telegram.org/bot{_bot_token_for(chat_id, channel_id=channel_id)}/sendVideo"
+    if "/bot/sendVideo" in api_url:
+        logger.warning("Telegram token missing for video upload channel_id=%s chat_id=%s", channel_id, chat_id)
+        return False
     try:
         with open(video_path_or_url, "rb") as f:
             resp = httpx.post(

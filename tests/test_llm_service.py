@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 def _make_model_mock(return_text: str):
     mock = MagicMock()
-    mock.generate_content.return_value.text = return_text
+    mock.return_value.generate_content.return_value.text = return_text
     return mock
 
 
@@ -12,10 +12,10 @@ def _make_model_mock(return_text: str):
 def test_generate_script_default_is_16x9():
     """With no aspect_ratio arg, prompt targets 16:9 (landscape) format hints."""
     mock = _make_model_mock('[{"scene":1,"narration":"hi","visual":"img"}]')
-    with patch("app.services.llm_service.model", mock):
+    with patch("app.services.llm_service._get_model", mock):
         from app.services.llm_service import generate_script
         generate_script("black holes", language="en")
-    prompt_used = mock.generate_content.call_args[0][0]
+    prompt_used = mock.return_value.generate_content.call_args[0][0]
     assert "MAXIMUM 5 scenes" in prompt_used
     assert "hook the viewer" not in prompt_used   # 9:16-only hint absent
 
@@ -23,10 +23,10 @@ def test_generate_script_default_is_16x9():
 def test_generate_script_shorts_mode():
     """With aspect_ratio='9:16', prompt includes Shorts-specific structure hints."""
     mock = _make_model_mock('[{"scene":1,"narration":"hi","visual":"img"}]')
-    with patch("app.services.llm_service.model", mock):
+    with patch("app.services.llm_service._get_model", mock):
         from app.services.llm_service import generate_script
         generate_script("black holes", language="en", aspect_ratio="9:16")
-    prompt_used = mock.generate_content.call_args[0][0]
+    prompt_used = mock.return_value.generate_content.call_args[0][0]
     assert "MAXIMUM 5 scenes" in prompt_used
     assert "hook the viewer" in prompt_used        # Shorts hook instruction present
     assert "9–11 seconds" in prompt_used
@@ -35,10 +35,10 @@ def test_generate_script_shorts_mode():
 def test_generate_script_invalid_ratio_falls_back():
     """An unknown aspect_ratio value is treated as 16:9."""
     mock = _make_model_mock('[{"scene":1,"narration":"hi","visual":"img"}]')
-    with patch("app.services.llm_service.model", mock):
+    with patch("app.services.llm_service._get_model", mock):
         from app.services.llm_service import generate_script
         generate_script("black holes", language="en", aspect_ratio="4:3")
-    prompt_used = mock.generate_content.call_args[0][0]
+    prompt_used = mock.return_value.generate_content.call_args[0][0]
     assert "MAXIMUM 5 scenes" in prompt_used
     assert "hook the viewer" not in prompt_used   # falls back to 16:9 hints
 
@@ -84,7 +84,7 @@ def test_generate_image_uses_9x16_ratio():
 def test_generate_shorts_caption_returns_string():
     """Function returns the model's response text directly."""
     mock = _make_model_mock("Black holes bend spacetime! 🌌\n#space #blackholes #science")
-    with patch("app.services.llm_service.model", mock):
+    with patch("app.services.llm_service._get_model", mock):
         from app.services.llm_service import generate_shorts_caption
         result = generate_shorts_caption("black holes")
     assert isinstance(result, str)
@@ -94,20 +94,20 @@ def test_generate_shorts_caption_returns_string():
 def test_generate_shorts_caption_prompt_contains_topic():
     """The topic appears in the prompt sent to the model."""
     mock = _make_model_mock("Some caption #tag")
-    with patch("app.services.llm_service.model", mock):
+    with patch("app.services.llm_service._get_model", mock):
         from app.services.llm_service import generate_shorts_caption
         generate_shorts_caption("quantum computing")
-    prompt_used = mock.generate_content.call_args[0][0]
+    prompt_used = mock.return_value.generate_content.call_args[0][0]
     assert "quantum computing" in prompt_used
 
 
 def test_generate_shorts_caption_hindi_uses_hindi_instruction():
     """When language='hi', the Hindi lang instruction appears in the prompt."""
     mock = _make_model_mock("कुछ कैप्शन #टैग")
-    with patch("app.services.llm_service.model", mock):
+    with patch("app.services.llm_service._get_model", mock):
         from app.services.llm_service import generate_shorts_caption
         generate_shorts_caption("black holes", language="hi")
-    prompt_used = mock.generate_content.call_args[0][0]
+    prompt_used = mock.return_value.generate_content.call_args[0][0]
     assert "Hindi" in prompt_used or "Devanagari" in prompt_used
 
 

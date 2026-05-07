@@ -10,6 +10,15 @@ TMP_RETENTION_DAYS = int(os.getenv("TMP_RETENTION_DAYS", "7"))
 ADMIN_DASHBOARD_SECRET = os.getenv("ADMIN_DASHBOARD_SECRET", "")
 CREATE_TOPIC_IDEMPOTENCY_TTL_SECONDS = int(os.getenv("CREATE_TOPIC_IDEMPOTENCY_TTL_SECONDS", "1200"))
 
+# Stories animation settings (V1 2.5D motion)
+STORIES_ANIMATION_ENABLED = os.getenv("STORIES_ANIMATION_ENABLED", "true").strip().lower() in ("1", "true", "yes", "on")
+STORIES_ANIMATION_PROFILE = os.getenv("STORIES_ANIMATION_PROFILE", "standard").strip().lower()
+if STORIES_ANIMATION_PROFILE not in ("lite", "standard"):
+    STORIES_ANIMATION_PROFILE = "standard"
+STORIES_MAX_SCENES_ANIMATED = int(os.getenv("STORIES_MAX_SCENES_ANIMATED", "3"))
+STORIES_BROLL_ENABLED = os.getenv("STORIES_BROLL_ENABLED", "false").strip().lower() in ("1", "true", "yes", "on")
+STORIES_BROLL_MIN_VIRALITY = float(os.getenv("STORIES_BROLL_MIN_VIRALITY", "4.5"))
+
 # Video settings
 VIDEO_FPS = 24
 SCENE_DURATION = 5  # seconds per scene
@@ -43,14 +52,17 @@ STORIES_YOUTUBE_REDIRECT_URI = os.getenv("STORIES_YOUTUBE_REDIRECT_URI", "")
 
 
 def get_chat_id(channel_id: str) -> str:
-    """Return the Telegram chat ID for the given channel."""
-    return STORIES_CHAT_ID if channel_id == "stories" else TELEGRAM_CHAT_ID
+    """Return the Telegram chat ID for the given channel. Read env vars at call time."""
+    if channel_id == "stories":
+        return os.getenv("STORIES_CHAT_ID", "") or STORIES_CHAT_ID
+    return os.getenv("TELEGRAM_CHAT_ID", "") or TELEGRAM_CHAT_ID
 
 # Cloud Scheduler auth
 SCHEDULER_SECRET = os.getenv("SCHEDULER_SECRET", "")
 
-# Base URL of the deployed app (used for OAuth redirect URIs in re-auth links)
-APP_BASE_URL = os.getenv("APP_BASE_URL", os.getenv("CLOUD_RUN_URL", "https://autoframe-353645494126.us-central1.run.app"))
+# Base URL of the deployed app (used for OAuth re-auth links in Telegram notifications).
+# Auth flows run locally via FastAPI — set APP_BASE_URL if hosting elsewhere.
+APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8080")
 
 # GitHub Actions dispatch
 GITHUB_DISPATCH_TOKEN = os.getenv("GITHUB_DISPATCH_TOKEN", "")

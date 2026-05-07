@@ -362,7 +362,16 @@ def run(
                 and os.path.exists(checkpoint_audio)
                 and os.path.exists(checkpoint_image)
             ):
-                video_clips.append((checkpoint_image, checkpoint_audio, narration))
+                video_clips.append({
+                    "image_path": checkpoint_image,
+                    "audio_path": checkpoint_audio,
+                    "narration": narration,
+                    "motion_type": scene.get("motion_type", ""),
+                    "camera_path": scene.get("camera_path", ""),
+                    "focus_subject": scene.get("focus_subject", ""),
+                    "transition": scene.get("transition", ""),
+                    "effect_cue": scene.get("effect_cue", ""),
+                })
                 continue
 
             firestore_service.mark_scene_checkpoint(effective_job_id, i, "started")
@@ -392,7 +401,16 @@ def run(
                     retries_audio=audio_retries,
                     retries_image=image_retries,
                 )
-                video_clips.append((image_path, audio_path, narration))
+                video_clips.append({
+                    "image_path": image_path,
+                    "audio_path": audio_path,
+                    "narration": narration,
+                    "motion_type": scene.get("motion_type", ""),
+                    "camera_path": scene.get("camera_path", ""),
+                    "focus_subject": scene.get("focus_subject", ""),
+                    "transition": scene.get("transition", ""),
+                    "effect_cue": scene.get("effect_cue", ""),
+                })
             except Exception as e:
                 # For story scenes blocked by safety filter, try a pre-approved
                 # genre-safe fallback prompt once before counting the scene as failed.
@@ -428,7 +446,16 @@ def run(
                             retries_audio=0,
                             retries_image=image_retries,
                         )
-                        video_clips.append((image_path, audio_path, narration))
+                        video_clips.append({
+                            "image_path": image_path,
+                            "audio_path": audio_path,
+                            "narration": narration,
+                            "motion_type": scene.get("motion_type", ""),
+                            "camera_path": scene.get("camera_path", ""),
+                            "focus_subject": scene.get("focus_subject", ""),
+                            "transition": scene.get("transition", ""),
+                            "effect_cue": scene.get("effect_cue", ""),
+                        })
                         continue  # scene recovered via fallback — skip failure handling
                     except Exception as fallback_exc:
                         e = fallback_exc  # fall through to normal failure handling below
@@ -535,14 +562,32 @@ def run(
             cta_narration = get_cta_narration(channel_id=channel_id, language=language)
             cta_audio_path = os.path.join(TEMP_DIR, f"audio_{code}_cta.mp3")
             generate_audio(cta_narration, cta_audio_path, language=language, voice_name=selected_voice, channel_id=channel_id)
-            video_clips.append((video_clips[-1][0], cta_audio_path, cta_narration))
+            last_image_path = video_clips[-1]["image_path"] if isinstance(video_clips[-1], dict) else video_clips[-1][0]
+            video_clips.append({
+                "image_path": last_image_path,
+                "audio_path": cta_audio_path,
+                "narration": cta_narration,
+                "motion_type": "ken_burns",
+                "camera_path": "center_hold",
+                "focus_subject": "cta",
+                "transition": "dissolve",
+                "effect_cue": "subtle glow",
+            })
         except Exception as _cta_err:
             logger.warning("CTA audio generation failed, skipping CTA: %s", _cta_err)
 
         send_message(_chat_id, "✅ Frames Generated! Now compiling the video...", channel_id=channel_id)
 
         output_path = os.path.join(OUTPUT_DIR, f"final_{code}_{timestamp}.mp4")
-        create_video(video_clips, output_path, music_genre=music_genre, language=language)
+        create_video(
+            video_clips,
+            output_path,
+            music_genre=music_genre,
+            language=language,
+            channel_id=channel_id,
+            story_genre=genre,
+            virality_score=virality_score,
+        )
 
         # Upload to GCS so the video survives instance restarts
         try:

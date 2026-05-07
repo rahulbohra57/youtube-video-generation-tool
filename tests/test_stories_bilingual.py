@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 def _model_mock(text: str) -> MagicMock:
     m = MagicMock()
-    m.generate_content.return_value.text = text
+    m.return_value.generate_content.return_value.text = text
     return m
 
 
@@ -13,10 +13,10 @@ def _model_mock(text: str) -> MagicMock:
 def test_generate_story_idea_hindi_prompt_contains_devanagari():
     """Hindi idea generation uses the Devanagari prompt."""
     mock = _model_mock('{"title": "मेहनत", "mood": "inspiring", "premise": "एक गरीब किसान का बेटा जब सबने उसे नकार दिया तब उसने असाधारण कदम उठाया।"}')
-    with patch("app.services.llm_service.model", mock):
+    with patch("app.services.llm_service._get_model", mock):
         from app.services.llm_service import generate_story_idea
         result = generate_story_idea(preferred_mood="inspiring", language="hi")
-    prompt = mock.generate_content.call_args[0][0]
+    prompt = mock.return_value.generate_content.call_args[0][0]
     assert "Hindi" in prompt or "हिंदी" in prompt
     assert result["title"] == "मेहनत"
 
@@ -24,10 +24,10 @@ def test_generate_story_idea_hindi_prompt_contains_devanagari():
 def test_generate_story_idea_english_prompt_is_in_english():
     """English idea generation uses an English prompt (no Devanagari)."""
     mock = _model_mock('{"title": "The Last Promise", "mood": "inspiring", "premise": "A retired teacher discovers her student became a doctor because of one encouraging word she said thirty years ago."}')
-    with patch("app.services.llm_service.model", mock):
+    with patch("app.services.llm_service._get_model", mock):
         from app.services.llm_service import generate_story_idea
         result = generate_story_idea(preferred_mood="inspiring", language="en")
-    prompt = mock.generate_content.call_args[0][0]
+    prompt = mock.return_value.generate_content.call_args[0][0]
     assert "देवनागरी" not in prompt
     assert "हिंदी" not in prompt
     assert "English" in prompt
@@ -37,10 +37,10 @@ def test_generate_story_idea_english_prompt_is_in_english():
 def test_generate_story_idea_defaults_to_hindi():
     """Omitting language defaults to Hindi (backward compat)."""
     mock = _model_mock('{"title": "मेहनत", "mood": "inspiring", "premise": "एक गरीब किसान का बेटा जब सबने उसे नकार दिया तब उसने असाधारण कदम उठाया।"}')
-    with patch("app.services.llm_service.model", mock):
+    with patch("app.services.llm_service._get_model", mock):
         from app.services.llm_service import generate_story_idea
         generate_story_idea(preferred_mood="inspiring")
-    prompt = mock.generate_content.call_args[0][0]
+    prompt = mock.return_value.generate_content.call_args[0][0]
     assert "हिंदी" in prompt or "Hindi" in prompt
 
 
@@ -49,12 +49,12 @@ def test_generate_story_idea_defaults_to_hindi():
 def test_generate_story_script_hindi_prompt_uses_devanagari():
     """Hindi script generation prompt is in Hindi with Devanagari narration rule."""
     mock = _model_mock('[{"scene":1,"narration":"एक दिन","visual":"watercolor scene"}]')
-    with patch("app.services.llm_service.model", mock):
+    with patch("app.services.llm_service._get_model", mock):
         with patch("app.services.llm_service.random") as mock_random:
             mock_random.choice.return_value = "Vibrant storybook illustration"
             from app.services.llm_service import generate_story_script
             generate_story_script("मेहनत", "inspiring", language="hi")
-    prompt = mock.generate_content.call_args[0][0]
+    prompt = mock.return_value.generate_content.call_args[0][0]
     assert "देवनागरी" in prompt
     assert "हिंदी" in prompt
 
@@ -62,12 +62,12 @@ def test_generate_story_script_hindi_prompt_uses_devanagari():
 def test_generate_story_script_english_prompt_requests_english_narration():
     """English script generation prompt requests English narration."""
     mock = _model_mock('[{"scene":1,"narration":"A farmer stood alone","visual":"storybook illustration scene"}]')
-    with patch("app.services.llm_service.model", mock):
+    with patch("app.services.llm_service._get_model", mock):
         with patch("app.services.llm_service.random") as mock_random:
             mock_random.choice.return_value = "Vibrant storybook illustration, bold outlines"
             from app.services.llm_service import generate_story_script
             generate_story_script("The Last Promise", "inspiring", language="en")
-    prompt = mock.generate_content.call_args[0][0]
+    prompt = mock.return_value.generate_content.call_args[0][0]
     assert "देवनागरी" not in prompt
     assert "English" in prompt
 
@@ -75,7 +75,7 @@ def test_generate_story_script_english_prompt_requests_english_narration():
 def test_generate_story_script_english_uses_sketch_visual_pool():
     """English stories pick from the sketch/illustration visual style pool, not the painted Hindi pool."""
     mock = _model_mock('[{"scene":1,"narration":"A farmer stood alone","visual":"storybook illustration scene"}]')
-    with patch("app.services.llm_service.model", mock):
+    with patch("app.services.llm_service._get_model", mock):
         with patch("app.services.llm_service.random") as mock_random:
             mock_random.choice.return_value = "Vibrant storybook illustration, bold outlines"
             from app.services.llm_service import generate_story_script, _STORY_VISUAL_STYLE_POOL_EN
@@ -87,7 +87,7 @@ def test_generate_story_script_english_uses_sketch_visual_pool():
 def test_generate_story_script_hindi_uses_painted_visual_pool():
     """Hindi stories pick from the painted/illustrated visual style pool."""
     mock = _model_mock('[{"scene":1,"narration":"एक दिन","visual":"watercolor"}]')
-    with patch("app.services.llm_service.model", mock):
+    with patch("app.services.llm_service._get_model", mock):
         with patch("app.services.llm_service.random") as mock_random:
             mock_random.choice.return_value = "Vibrant storybook illustration"
             from app.services.llm_service import generate_story_script, _STORY_VISUAL_STYLE_POOL_HI
