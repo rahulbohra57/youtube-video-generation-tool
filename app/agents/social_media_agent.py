@@ -68,17 +68,13 @@ def post(video_path: str, caption: str, title: str, job_id: str = "", public_id:
             label = f"{source}_duplicate" if source else "duplicate"
         elif "oauth token expired or revoked" in err.lower() or "reconnect via" in err.lower():
             logger.warning("YouTube OAuth requires reconnect for channel %s: %s", channel_id, err)
-            news_url = youtube_service._auth_url("news")
-            stories_url = youtube_service._auth_url("stories")
+            reauth_url = youtube_service._auth_url(channel_id)
             send_message(
                 chat_id,
-                f"🔴 *YouTube OAuth token expired for `{channel_id}` channel!*\n\n"
-                f"Re-authenticate to resume auto-posting:\n"
-                f"1\\. Run locally: `uvicorn app.main:app --host 0.0.0.0 --port 8080`\n"
-                f"2\\. Open in browser:\n"
-                f"• Kurrent Affairs: {news_url}\n"
-                f"• Short Tales: {stories_url}\n\n"
-                f"_Video has been sent here for manual upload._",
+                f"🔴 *YouTube OAuth token expired for `{channel_id}` channel\\!*\n\n"
+                f"Tap the link below to re\\-authenticate \\(takes 10 seconds\\):\n"
+                f"{reauth_url}\n\n"
+                f"_Video has been sent here for manual upload\\._",
                 channel_id=channel_id,
             )
             label = f"{source}_oauth_reauth" if source else "oauth_reauth"

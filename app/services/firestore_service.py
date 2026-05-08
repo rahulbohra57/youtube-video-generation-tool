@@ -179,6 +179,32 @@ def save_youtube_tokens(tokens: dict, channel_id: str = "news"):
     _get_db().collection("oauth_tokens").document(f"youtube_{channel_id}").set(tokens)
 
 
+def mark_auth_failure(channel_id: str) -> None:
+    from datetime import datetime, timezone
+    _get_db().collection("config").document(f"auth_failure_{channel_id}").set({
+        "failed_at": datetime.now(timezone.utc).isoformat()
+    })
+
+
+def is_auth_recently_failed(channel_id: str, hours: int = 23) -> bool:
+    from datetime import datetime, timezone, timedelta
+    doc = _get_db().collection("config").document(f"auth_failure_{channel_id}").get()
+    if not doc.exists:
+        return False
+    failed_at_str = (doc.to_dict() or {}).get("failed_at")
+    if not failed_at_str:
+        return False
+    try:
+        failed_at = datetime.fromisoformat(failed_at_str.replace("Z", "+00:00")).astimezone(timezone.utc)
+        return datetime.now(timezone.utc) - failed_at < timedelta(hours=hours)
+    except Exception:
+        return False
+
+
+def clear_auth_failure(channel_id: str) -> None:
+    _get_db().collection("config").document(f"auth_failure_{channel_id}").delete()
+
+
 def get_youtube_tokens(channel_id: str = "news") -> dict | None:
     doc = _get_db().collection("oauth_tokens").document(f"youtube_{channel_id}").get()
     if doc.exists:

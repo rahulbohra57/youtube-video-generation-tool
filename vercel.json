@@ -12,6 +12,22 @@
     {
       "source": "/webhook/telegram/stories",
       "destination": "/api/webhook/stories"
+    },
+    {
+      "source": "/auth/youtube/callback",
+      "destination": "/api/auth/youtube_callback"
+    },
+    {
+      "source": "/auth/youtube/stories/callback",
+      "destination": "/api/auth/stories_callback"
+    },
+    {
+      "source": "/auth/youtube/stories",
+      "destination": "/api/auth/stories"
+    },
+    {
+      "source": "/auth/youtube",
+      "destination": "/api/auth/youtube"
     }
   ]
 }

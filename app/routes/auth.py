@@ -82,6 +82,7 @@ def youtube_callback(code: str, state: str = "", error: str = ""):
         "client_id":     YOUTUBE_CLIENT_ID,
         "client_secret": YOUTUBE_CLIENT_SECRET,
     })
+    firestore_service.clear_auth_failure("news")
 
     return HTMLResponse("""
         <html><body style="font-family:sans-serif;text-align:center;padding:60px">
@@ -146,6 +147,7 @@ def youtube_stories_callback(code: str, state: str = "", error: str = ""):
         "client_id":     STORIES_YOUTUBE_CLIENT_ID,
         "client_secret": STORIES_YOUTUBE_CLIENT_SECRET,
     }, channel_id="stories")
+    firestore_service.clear_auth_failure("stories")
 
     return HTMLResponse("""
         <html><body style="font-family:sans-serif;text-align:center;padding:60px">

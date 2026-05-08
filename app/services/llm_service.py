@@ -172,7 +172,13 @@ class SearchGroundingUnavailable(RuntimeError):
 
 def _init_search_model(model_name: str):
     from vertexai.generative_models import Tool, grounding as vgrounding
-    search_tool = Tool.from_google_search_retrieval(vgrounding.GoogleSearchRetrieval())
+    from google.cloud.aiplatform_v1beta1.types import tool as _gapic_tool
+    # Gemini 2.5+ rejects google_search_retrieval; use google_search when the SDK supports it.
+    if hasattr(_gapic_tool.Tool, "GoogleSearch"):
+        raw_tool = _gapic_tool.Tool(google_search=_gapic_tool.Tool.GoogleSearch())
+        search_tool = Tool._from_gapic(raw_tool=raw_tool)
+    else:
+        search_tool = Tool.from_google_search_retrieval(vgrounding.GoogleSearchRetrieval())
     return GenerativeModel(model_name, tools=[search_tool])
 
 
@@ -191,6 +197,11 @@ def _is_model_not_found_error(exc: Exception) -> bool:
         or "not found" in msg
         or "publishers/google/models/" in msg
     )
+
+
+def _is_search_retrieval_unsupported(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return "google_search_retrieval is not supported" in msg or "use google_search field" in msg
 
 
 def generate_script_with_search(topic: str, language: str = "en", aspect_ratio: str = "16:9", context: str = "") -> str:
@@ -289,6 +300,7 @@ Additional format constraints:
 
     last_exc: Exception | None = None
     not_found_count = 0
+    retrieval_unsupported_count = 0
     for idx, model_name in enumerate(_SEARCH_MODEL_CANDIDATES):
         search_model = _get_search_model(candidate_index=idx)
         logger.info("generate_script_with_search using model: %s", model_name)
@@ -306,6 +318,28 @@ Additional format constraints:
                 )
                 global _search_model
                 _search_model = None
+                continue
+            if _is_search_retrieval_unsupported(exc):
+                # Server rejected google_search_retrieval — SDK too old to auto-select google_search.
+                # Rebuild model with the new field and retry this candidate.
+                retrieval_unsupported_count += 1
+                logger.warning(
+                    "google_search_retrieval rejected by server for model '%s'; rebuilding tool with google_search field.",
+                    model_name,
+                )
+                _search_model = None
+                try:
+                    from google.cloud.aiplatform_v1beta1.types import tool as _gapic_tool
+                    from vertexai.generative_models import Tool
+                    raw_tool = _gapic_tool.Tool(google_search=_gapic_tool.Tool.GoogleSearch())
+                    search_tool = Tool._from_gapic(raw_tool=raw_tool)
+                    from vertexai.generative_models import GenerativeModel as _GM
+                    rebuilt = _GM(model_name, tools=[search_tool])
+                    response = rebuilt.generate_content(prompt)
+                    return _response_text(response)
+                except Exception as rebuild_exc:
+                    last_exc = rebuild_exc
+                    logger.warning("Rebuilt search model also failed for '%s': %s", model_name, rebuild_exc)
                 continue
             logger.warning("generate_script_with_search failed on model '%s': %s", model_name, exc)
             break
