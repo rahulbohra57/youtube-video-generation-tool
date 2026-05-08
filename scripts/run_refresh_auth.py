@@ -26,12 +26,11 @@ if failed_channels:
         channel_label = "Short Tales" if ch == "stories" else "Kurrent Affairs"
         reauth_url = youtube_service._auth_url(ch)
         alert = (
-            f"🔴 *YouTube OAuth token refresh failed\\!*\n\n"
-            f"*{channel_label}* \\(`{ch}`\\) needs re\\-authentication\\.\n\n"
-            f"Tap to reconnect \\(takes 10 seconds\\):\n"
-            f"{reauth_url}\n\n"
-            f"_Auto\\-posting will resume after you authenticate\\. "
-            f"This alert will not repeat until you do\\._"
+            f"🔴 *YouTube token expired — {channel_label} needs re-auth*\n\n"
+            f"Tap to reconnect (takes 10 seconds, no server needed):\n"
+            f"[Re-authenticate {channel_label} →]({reauth_url})\n\n"
+            f"_Auto-posting resumes automatically after you authenticate._\n"
+            f"_This alert will not repeat until you do._"
         )
         try:
             telegram_service.send_message(get_chat_id(ch), alert, channel_id=ch)
