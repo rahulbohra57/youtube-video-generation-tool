@@ -22,6 +22,8 @@ _EXTERNAL_MOCKS = {
     "moviepy.audio": MagicMock(),
     "moviepy.audio.fx": MagicMock(),
     "moviepy.audio.fx.all": MagicMock(),
+    "pytrends": MagicMock(),
+    "pytrends.request": MagicMock(),
 }
 
 for _mod_name, _mock in _EXTERNAL_MOCKS.items():
