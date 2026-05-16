@@ -330,12 +330,20 @@ Additional format constraints:
                 try:
                     from google.cloud.aiplatform_v1beta1.types import tool as _gapic_tool
                     from vertexai.generative_models import Tool
+                    if not hasattr(_gapic_tool.Tool, "GoogleSearch"):
+                        # SDK too old to support google_search field — cannot satisfy server requirement.
+                        _search_grounding_disabled = True
+                        raise SearchGroundingUnavailable(
+                            "SDK does not support google_search field and server rejected google_search_retrieval."
+                        )
                     raw_tool = _gapic_tool.Tool(google_search=_gapic_tool.Tool.GoogleSearch())
                     search_tool = Tool._from_gapic(raw_tool=raw_tool)
                     from vertexai.generative_models import GenerativeModel as _GM
                     rebuilt = _GM(model_name, tools=[search_tool])
                     response = rebuilt.generate_content(prompt)
                     return _response_text(response)
+                except SearchGroundingUnavailable:
+                    raise
                 except Exception as rebuild_exc:
                     last_exc = rebuild_exc
                     logger.warning("Rebuilt search model also failed for '%s': %s", model_name, rebuild_exc)

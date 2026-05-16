@@ -1,6 +1,7 @@
 fastapi
 uvicorn[standard]
 vertexai
+google-cloud-aiplatform>=1.71.0
 google-cloud-storage
 google-cloud-texttospeech
 moviepy
