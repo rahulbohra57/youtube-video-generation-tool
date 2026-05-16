@@ -78,7 +78,7 @@ def generate_script(topic: str, language: str = "en", aspect_ratio: str = "16:9"
     if aspect_ratio == "9:16":
         format_hint = (
             "- MAXIMUM 5 scenes (target 45–55 seconds total when spoken at a natural pace — NEVER exceed 58 seconds)\n"
-            "- Scene 1: open with the single most compelling fact or question — hook the viewer immediately\n"
+            "- Scene 1: first sentence must be 12 words or fewer — a specific number, a named person doing something surprising, or a direct question. No scene-setting, no context-building. The viewer decides to stay or swipe in the first 2 seconds.\n"
             "- Scenes 2–4: each must reveal a specific, concrete insight, fact, number, or implication — no filler\n"
             "- Final scene: strong closing insight or call-to-reflection — not a generic sign-off\n"
             "- Each narration: 20–24 words (approx 9–11 seconds when spoken aloud)"
@@ -223,7 +223,7 @@ def generate_script_with_search(topic: str, language: str = "en", aspect_ratio: 
     if aspect_ratio == "9:16":
         format_hint = (
             "- MAXIMUM 5 scenes (target 45–55 seconds total when spoken at a natural pace — NEVER exceed 58 seconds)\n"
-            "- Scene 1: open with the single most compelling fact or question — hook the viewer immediately\n"
+            "- Scene 1: first sentence must be 12 words or fewer — a specific number, a named person doing something surprising, or a direct question. No scene-setting, no context-building. The viewer decides to stay or swipe in the first 2 seconds.\n"
             "- Scenes 2–4: each must reveal a specific, concrete insight, fact, number, or implication — no filler\n"
             "- Final scene: strong closing insight or call-to-reflection — not a generic sign-off\n"
             "- Each narration: 20–24 words (approx 9–11 seconds when spoken aloud)"

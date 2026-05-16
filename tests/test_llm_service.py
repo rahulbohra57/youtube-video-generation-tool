@@ -17,7 +17,7 @@ def test_generate_script_default_is_16x9():
         generate_script("black holes", language="en")
     prompt_used = mock.return_value.generate_content.call_args[0][0]
     assert "MAXIMUM 5 scenes" in prompt_used
-    assert "hook the viewer" not in prompt_used   # 9:16-only hint absent
+    assert "12 words or fewer" not in prompt_used   # 9:16-only hint absent
 
 
 def test_generate_script_shorts_mode():
@@ -28,7 +28,7 @@ def test_generate_script_shorts_mode():
         generate_script("black holes", language="en", aspect_ratio="9:16")
     prompt_used = mock.return_value.generate_content.call_args[0][0]
     assert "MAXIMUM 5 scenes" in prompt_used
-    assert "hook the viewer" in prompt_used        # Shorts hook instruction present
+    assert "12 words or fewer" in prompt_used      # Shorts hook instruction present
     assert "9–11 seconds" in prompt_used
 
 
@@ -40,7 +40,7 @@ def test_generate_script_invalid_ratio_falls_back():
         generate_script("black holes", language="en", aspect_ratio="4:3")
     prompt_used = mock.return_value.generate_content.call_args[0][0]
     assert "MAXIMUM 5 scenes" in prompt_used
-    assert "hook the viewer" not in prompt_used   # falls back to 16:9 hints
+    assert "12 words or fewer" not in prompt_used  # falls back to 16:9 hints
 
 
 # ── image_service tests ──────────────────────────────────────────────────────
