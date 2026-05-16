@@ -5,6 +5,7 @@ import random
 from datetime import datetime, timezone, timedelta
 from app.services import gnews_service, firestore_service
 from app.services.llm_service import rate_and_select_news
+from app.services.trends_service import get_trend_scores
 from app.services.telegram_service import send_message
 from app.config import TELEGRAM_CHAT_ID
 
@@ -450,15 +451,18 @@ def run() -> str | None:
             item.setdefault("published_at", orig.get("published_at", ""))
             item.setdefault("url", orig.get("url", ""))
             item.setdefault("source", orig.get("source", ""))
+        headlines = [item.get("headline", "") for item in rated]
+        trend_scores = get_trend_scores(headlines)
         enriched = []
         for item in rated:
             score = float(item.get("rating", 0))
             if score < 3.8:
                 continue
+            trend_score = trend_scores.get(item.get("headline", ""), 0.2)
             rigorous = (
-                (score * 0.60)
-                + (_recency_score(item) * 2.0)
-                + _trend_bonus(item.get("headline", ""))
+                (score * 0.55)
+                + (_recency_score(item) * 1.8)
+                + (trend_score * 0.8)
             )
             enriched.append({
                 **item,

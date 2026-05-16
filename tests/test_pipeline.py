@@ -322,8 +322,9 @@ def test_choose_voice_for_video_returns_requested_gender():
 @patch("app.agents.lead_researcher.rate_and_select_news")
 @patch("app.agents.lead_researcher.gnews_service")
 @patch("app.agents.lead_researcher._within_suggestion_window", return_value=True)
+@patch("app.agents.lead_researcher.get_trend_scores", return_value={f"Top Pick {i}": 0.5 for i in range(1, 6)})
 def test_lead_researcher_run_creates_batch_and_enqueues_video(
-    mock_window, mock_gnews, mock_rate, mock_fs, mock_send_message, mock_enqueue
+    mock_trends, mock_window, mock_gnews, mock_rate, mock_fs, mock_send_message, mock_enqueue
 ):
     mock_fs.get_pipeline_state.return_value = {}
     mock_fs.get_domain_schedule.return_value = {
