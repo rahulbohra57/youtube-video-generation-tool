@@ -1041,7 +1041,12 @@ def review_title_and_caption_with_senior_reviewer(
     prompt = f"""
 You are a senior script reviewer.
 Create:
-1) A catchy but non-clickbait YouTube Shorts title — include the subject's name or key identifier if present in the script.
+1) A YouTube Shorts title that maximises click-through rate. Use one of these proven patterns — pick whichever fits the script facts best:
+   - Number/stat: "X Countries Just Banned This AI Tool"
+   - Curiosity gap: "The Real Reason NASA Delayed This Launch"
+   - Specificity: "OpenAI's $6.6B Deal — What It Actually Means"
+   - Stakes: "This Ruling Could Change How You Use the Internet"
+   Constraints: max 70 characters; use only facts present in the script; no fabrication; no generic openers like "Breaking:", "This Is", or "Here's Why".
 2) A reader-friendly caption aligned with the voiceover script (same core points), preserving all specific names, numbers, and facts.
 3) 10-15 relevant hashtags derived from the script content and topic — mix broad popular tags with niche-specific ones.{genre_hint}
 
