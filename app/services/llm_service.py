@@ -159,8 +159,6 @@ Additional format constraints:
 _search_model = None  # lazily initialised on first call
 _SEARCH_MODEL_CANDIDATES = (
     "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-001",
 )
 _search_grounding_disabled = False
 
@@ -340,6 +338,8 @@ Additional format constraints:
                 except Exception as rebuild_exc:
                     last_exc = rebuild_exc
                     logger.warning("Rebuilt search model also failed for '%s': %s", model_name, rebuild_exc)
+                    if _is_model_not_found_error(rebuild_exc):
+                        not_found_count += 1
                 continue
             logger.warning("generate_script_with_search failed on model '%s': %s", model_name, exc)
             break
@@ -884,7 +884,7 @@ def rate_and_select_news(
 TODAY'S DATE: {today_str}. Only select stories that are genuinely recent as of today. Penalise articles about events that have fully concluded weeks ago with no new angle.
 
 Rate each article on a combined 1–5 scale using these criteria:
-- Virality & public interest (will people share this?)
+- Virality & public interest: score HIGHER for headlines with a specific number, named person, or named organisation (concrete beats vague); a clear "why this affects you" angle; genuine novelty not just recency. Score LOWER for vague headlines with no named entity (e.g. "Scientists discover new thing") and pure recaps with no new development.
 - Educational value (does it teach something specific and useful?)
 - Freshness (is this breaking or very recent news as of {today_str}?)
 - Story depth (is there a concrete fact, number, or consequence — not just a vague headline?)
