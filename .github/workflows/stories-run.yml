@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   stories:
+    if: false  # Stories channel paused — re-enable by removing this line
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
