@@ -632,14 +632,22 @@ def update_job_analytics(job_id: str, analytics: dict):
     })
 
 
-def get_top_performers(n: int = 3) -> list[dict]:
-    """Return top n completed jobs by view count that have analytics data."""
+def get_top_performers(n: int = 3, days: int | None = None) -> list[dict]:
+    """Return top n completed jobs by view count that have analytics data.
+
+    If days is provided, only jobs updated within the last `days` days are considered.
+    """
     try:
         all_jobs = list_recent_jobs(limit=200)
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)) if days else None
         performers = []
         for data in all_jobs:
             if data.get("status") != "completed":
                 continue
+            if cutoff:
+                updated = _parse_iso(data.get("updated_at"))
+                if not updated or updated < cutoff:
+                    continue
             analytics = data.get("analytics") or {}
             views = int(analytics.get("view_count", 0))
             if views > 0:

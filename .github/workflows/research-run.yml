@@ -2,7 +2,7 @@ name: Research Run
 
 on:
   schedule:
-    - cron: "30 15,18,21 * * *"  # 9:00pm, 12:00am, 3:00am IST → posts ~12:45pm, 3:45pm, 6:45pm EDT
+    - cron: "30 2,8,14,20 * * *"  # 2:00am, 8:00am, 2:00pm, 8:00pm IST
   workflow_dispatch:
 
 permissions:

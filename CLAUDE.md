@@ -85,7 +85,7 @@ The app manages two independent YouTube Shorts channels:
 
 | Channel | Language | YouTube Name | Telegram Bot | Scheduler |
 |---|---|---|---|---|
-| **News** (`channel_id="news"`) | English | Kurrent Affairs | `@AutoframeBot` (`TELEGRAM_BOT_TOKEN`) | GitHub Actions cron (`12am, 8am, 4pm IST`) |
+| **News** (`channel_id="news"`) | English | Kurrent Affairs | `@AutoframeBot` (`TELEGRAM_BOT_TOKEN`) | GitHub Actions cron (`2am, 8am, 2pm, 8pm IST`) |
 | **Stories** (`channel_id="stories"`) | Hindi | Short Tales | `@short_tales_bot` (`STORIES_BOT_TOKEN`) | GitHub Actions cron (`7am, 11am, 2pm, 6pm IST`) |
 
 Both bots send to the same user (Rahul, chat ID `8226211103`) but messages appear in separate bot
@@ -115,14 +115,14 @@ reads `STORIES_BOT_TOKEN` at call time (not import time) to pick the correct bot
 
 ## News Channel Pipeline (Kurrent Affairs)
 
-### Step 1 — Research (GitHub Actions `research-run.yml`, cron: `12am, 8am, 4pm IST`)
+### Step 1 — Research (GitHub Actions `research-run.yml`, cron: `2am, 8am, 2pm, 8pm IST`)
 
 Triggered by GitHub Actions schedule → `scripts/run_research.py` → `lead_researcher.run()`:
 
 1. **Slot-domain resolution**: Each scheduler slot has a pre-assigned domain (fetches one domain
    per run, not all five):
-   - **Fixed slots**: `0h → Trending`, `8h → Artificial Intelligence`, `12h → Trending`
-   - **Rotating slots** (`4h`, `16h`, `20h`): cycle through `schedule['rotating_domains']`
+   - **Fixed slots**: `8h → Artificial Intelligence`
+   - **Rotating slots** (`2h`, `14h`, `20h`): cycle through `schedule['rotating_domains']`
      (default: Technology, Current Affairs, Science). Rotation uses `day_of_year % 3` so every
      domain gets equal exposure across all time slots over a 3-day cycle.
    - Domain schedule stored in Firestore `config/domain_schedule`; updated fortnightly.
@@ -306,7 +306,7 @@ in the repository's GitHub Secrets (Settings → Secrets and variables → Actio
 | Workflow | File | Schedule (IST) | Script | Purpose |
 |---|---|---|---|---|
 | CI - Tests | `ci.yml` | On push/PR | `pytest -q` | Runs all tests |
-| Research Run | `research-run.yml` | `12am, 8am, 4pm` | `run_research.py` | News pipeline trigger |
+| Research Run | `research-run.yml` | `2am, 8am, 2pm, 8pm` | `run_research.py` | News pipeline trigger |
 | Stories Run | `stories-run.yml` | `7am, 11am, 2pm, 6pm` | `run_stories.py` | Stories pipeline trigger |
 | Generate Video | `generate-video.yml` | workflow_dispatch only | `run_generate_video.py` | Full video generation |
 | Daily Digest | `daily-digest.yml` | `8am` | `run_daily_digest.py` | News channel daily report |

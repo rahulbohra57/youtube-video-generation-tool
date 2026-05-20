@@ -98,11 +98,9 @@ def _ist_day_of_year() -> int:
 
 
 _FIXED_SLOTS: dict[int, str] = {
-    0: "Trending",
     8: "Artificial Intelligence",
-    12: "Trending",
 }
-_ROTATING_SLOT_POSITIONS: dict[int, int] = {4: 0, 16: 1, 20: 2}
+_ROTATING_SLOT_POSITIONS: dict[int, int] = {2: 0, 14: 1, 20: 2}
 
 
 def _get_slot_domain(schedule: dict) -> str:
@@ -276,7 +274,7 @@ def send_daily_digest():
     prev_day_of_year = _date.fromisoformat(prev_day_key).timetuple().tm_yday
     domains_today = firestore_service.get_domains_posted_today(day_key=prev_day_key)
     domain_lines = []
-    for hour in [0, 4, 8, 12, 16, 20]:
+    for hour in [2, 8, 14, 20]:
         if hour in _FIXED_SLOTS:
             domain = _FIXED_SLOTS[hour]
         else:
@@ -285,11 +283,11 @@ def send_daily_digest():
         mark = "✅" if domain.lower() in domains_today else "⬜"
         domain_lines.append(f"  {mark} {hour:02d}h → {domain}")
 
-    top = firestore_service.get_top_performers(n=1)
+    top = firestore_service.get_top_performers(n=1, days=7)
     top_line = ""
     if top:
         t = top[0]
-        top_line = f"\n\n🏆 Top video: _{t['topic']}_ ({t['view_count']:,} views)"
+        top_line = f"\n\n🏆 Weekly Top Video: _{t['topic']}_ ({t['view_count']:,} views)"
 
     # Failed jobs awaiting manual re-send
     failed_jobs = firestore_service.get_failed_auto_jobs(max_age_hours=24)
