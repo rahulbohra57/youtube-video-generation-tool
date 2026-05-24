@@ -14,10 +14,6 @@ from app.agents import generator_agent
 raw = os.environ["GENERATE_PAYLOAD"]
 p = json.loads(raw)
 
-if p.get("channel_id", "news") == "stories":
-    print("Stories channel is paused. Skipping video generation.")
-    sys.exit(0)
-
 generator_agent.run(
     p["headline"],
     p["code"],
