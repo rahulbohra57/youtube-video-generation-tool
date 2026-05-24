@@ -69,6 +69,42 @@ _VISUAL_STYLE_POOL = [
     "Epic wide establishing shot, overcast moody sky, high dynamic range, photorealistic",
 ]
 
+_FACT_VISUAL_STYLE_POOL_CINEMATIC = [
+    "Cinematic 4K, dramatic side lighting, deep shadows, photorealistic",
+    "Wide-angle cinematic shot, warm golden-hour lighting, photorealistic",
+    "Overhead aerial perspective, cool blue tones, ultra-sharp 4K detail, photorealistic",
+    "Documentary-style, natural soft lighting, gritty texture, ultra-realistic",
+    "Futuristic neon-lit environment, deep blue and purple hues, cinematic 4K, photorealistic",
+    "Epic wide establishing shot, overcast moody sky, high dynamic range, photorealistic",
+    "Close-up macro cinematic, shallow depth of field, soft bokeh background, photorealistic",
+    "Dramatic low-angle shot, vibrant saturated colours, high contrast, cinematic 4K, photorealistic",
+]
+
+_FACT_VISUAL_STYLE_POOL_ILLUSTRATED = [
+    "Bold infographic illustration style, clean lines, vibrant accent colours, flat design",
+    "Bold illustrated style, strong geometric shapes, vivid palette, high contrast",
+    "Modern flat design illustration, bold typography-free layout, clean colour blocks",
+    "Isometric illustrated scene, bright primary colours, clean flat design",
+    "Minimalist editorial illustration, bold ink outlines, limited colour palette",
+    "Dynamic graphic novel style, expressive characters, vivid saturated palette",
+    "Bright poster-style illustration, flat colour fills, strong silhouettes",
+]
+
+_CINEMATIC_CATEGORIES = {
+    "science & space",
+    "history & civilizations",
+    "human body & biology",
+    "technology & ai",
+    "health & fitness",
+    "mysteries & unexplained",
+}
+
+
+def _fact_visual_style(category: str) -> str:
+    if category.lower() in _CINEMATIC_CATEGORIES:
+        return random.choice(_FACT_VISUAL_STYLE_POOL_CINEMATIC)
+    return random.choice(_FACT_VISUAL_STYLE_POOL_ILLUSTRATED)
+
 
 def generate_script(topic: str, language: str = "en", aspect_ratio: str = "16:9", context: str = ""):
     from datetime import date
@@ -203,7 +239,7 @@ def _is_search_retrieval_unsupported(exc: Exception) -> bool:
     return "google_search_retrieval is not supported" in msg or "use google_search field" in msg
 
 
-def generate_script_with_search(topic: str, language: str = "en", aspect_ratio: str = "16:9", context: str = "") -> str:
+def generate_script_with_search(topic: str, language: str = "en", aspect_ratio: str = "16:9", context: str = "", visual_style_override: str = "", script_mode: str = "news") -> str:
     """Like generate_script() but with Gemini Google Search grounding enabled.
 
     Gemini will search the web for the topic before writing the script, ensuring
@@ -238,12 +274,38 @@ def generate_script_with_search(topic: str, language: str = "en", aspect_ratio: 
         max_scenes = "5"
 
     context_block = f"\nNEWS CONTEXT — primary source of truth. The script MUST cover ALL angles and facts below. Do not omit any element:\n{context.strip()}\n" if context and context.strip() else ""
-    video_style = random.choice(_VISUAL_STYLE_POOL)
+    video_style = visual_style_override if visual_style_override else random.choice(_VISUAL_STYLE_POOL)
+
+    if script_mode == "facts":
+        system_instruction = (
+            "You are a scriptwriter for 'Tell Me Why', a YouTube Shorts channel about surprising, "
+            "mind-blowing facts. Use Google Search to verify the fact and find supporting details. "
+            "Structure every script as: Scene 1 — Hook (lead with the most surprising or counterintuitive "
+            "angle; the shocking number or claim); Scene 2 — Elaboration (the science, history, or mechanism "
+            "behind it — the 'why'); Scene 3 — Payoff (a related mind-blowing extension or real-world "
+            "implication the viewer will want to share). "
+            "Narration: conversational English, 20-24 words per scene, no jargon. "
+            "Visual prompts: always English, safe for Imagen."
+        )
+        date_instruction = f"TODAY'S DATE is {today_str}. Verify facts via Google Search — prefer the most current, peer-reviewed information available."
+    else:
+        system_instruction = (
+            "You are an expert scriptwriter for educational YouTube videos. Use your Google Search "
+            "tool to look up the latest information about this headline, then write a factually "
+            "accurate video script. The script must faithfully represent ALL angles in the headline "
+            "and news context. Do NOT substitute outdated training-data knowledge when current "
+            "search results are available."
+        )
+        date_instruction = (
+            f"CRITICAL: TODAY'S DATE is {today_str}. The NEWS CONTEXT below (if present) describes a RECENT event that occurred close to this date. "
+            "When searching, look for the most recent version of this story — do NOT write about older events with similar topic names. "
+            "If the context says \"As of [date]\", that is the event date to focus on."
+        )
 
     prompt = f"""
-You are an expert scriptwriter for educational YouTube videos. Use your Google Search tool to look up the latest information about this headline, then write a factually accurate video script. The script must faithfully represent ALL angles in the headline and news context. Do NOT substitute outdated training-data knowledge when current search results are available.
+{system_instruction}
 
-CRITICAL: TODAY'S DATE is {today_str}. The NEWS CONTEXT below (if present) describes a RECENT event that occurred close to this date. When searching, look for the most recent version of this story — do NOT write about older events with similar topic names. If the context says "As of [date]", that is the event date to focus on.
+{date_instruction}
 
 Topic: {topic}{context_block}
 
@@ -626,10 +688,27 @@ _CTA_STORIES_HI = [
     "अगली कहानी का ट्विस्ट आपको चौंका देगा — Subscribe करें।",
 ]
 
+_CTA_FACTS_EN = [
+    "Follow for daily mind-blowing facts.",
+    "Subscribe — your daily dose of 'Did you know?'",
+    "More unbelievable facts every day — Subscribe now.",
+    "Like if this surprised you. Subscribe for more.",
+    "Turn on notifications — tomorrow's fact will shock you.",
+    "Subscribe and discover something incredible every day.",
+    "Facts that change how you see the world — Subscribe.",
+    "One surprising fact a day — hit Subscribe.",
+    "Your brain just learned something new — Subscribe for more.",
+    "Share this with someone who needs to know — and Subscribe.",
+]
+
+
 def get_cta_narration(channel_id: str = "news", language: str = "en") -> str:
     """Return a randomly chosen CTA narration string. No visual — caller reuses last frame."""
     if channel_id == "stories":
-        pool = _CTA_STORIES_HI if language == "hi" else _CTA_STORIES_EN
+        if language == "hi":
+            pool = _CTA_STORIES_HI
+        else:
+            pool = _CTA_FACTS_EN
     else:
         pool = _CTA_NEWS
     return random.choice(pool)
@@ -727,6 +806,51 @@ Return only a valid JSON object, no markdown:
         "title": "एक छोटी सी मेहनत, बड़ा बदलाव",
         "mood": preferred or _random.choice(_STORY_MOODS),
         "premise": "एक गरीब किसान का बेटा जब सबने उसे नकार दिया, तब उसने एक असाधारण कदम उठाया जिसने पूरे गाँव की तकदीर बदल दी।",
+    }
+
+
+def generate_fact_topic(category: str, recently_used_titles: list[str] | None = None) -> dict:
+    """Generate a specific, punchy fact topic for the given category.
+
+    Returns {"title": str, "premise": str}.
+    title — a hook question or punchy claim (6-12 words).
+    premise — 1-2 sentence factual context the script generator can expand on.
+    """
+    avoid_block = ""
+    if recently_used_titles:
+        lines = "\n".join(f"  - {t}" for t in recently_used_titles[:20])
+        avoid_block = f"\nDo NOT reuse these recently covered topics:\n{lines}\n"
+
+    prompt = f"""You are a researcher for a YouTube Shorts channel called "Tell Me Why" that posts surprising, factual, and educational content.
+
+Generate a specific, punchy fact topic for the category: {category.title()}{avoid_block}
+
+Rules:
+- title: 6-12 words, must be a hook question OR a shocking fact statement. Examples:
+  - "Why do humans feel heartbreak as physical pain?"
+  - "Your body replaces itself completely every 7 years — sort of"
+  - "Ancient Romans used crushed mouse brains as toothpaste"
+  - "The human eye can detect a single photon of light"
+- premise: 1-2 sentences of factual context that the script writer can expand. Must include the core mechanism, number, or surprising detail. Minimum 15 words.
+- Topic must be genuinely surprising or counterintuitive — avoid obvious or well-worn facts.
+- Topic must be verifiable via Google Search.
+
+Return only a valid JSON object, no markdown:
+{{"title": "...", "premise": "..."}}"""
+
+    for attempt in range(2):
+        try:
+            response = _get_model().generate_content(prompt)
+            result = _extract_json_object(_response_text(response))
+            if result.get("title") and result.get("premise"):
+                if len((result["premise"] or "").strip().split()) >= 15:
+                    return result
+                logger.warning("Fact topic premise quality gate failed (attempt %d): %s", attempt + 1, result.get("premise"))
+        except Exception:
+            pass
+    return {
+        "title": f"The most surprising fact about {category}",
+        "premise": f"Scientists and researchers have uncovered a fact about {category} that challenges common assumptions and reveals something deeply counterintuitive about how the world works.",
     }
 
 
