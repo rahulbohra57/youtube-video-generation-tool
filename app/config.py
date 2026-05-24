@@ -11,7 +11,7 @@ ADMIN_DASHBOARD_SECRET = os.getenv("ADMIN_DASHBOARD_SECRET", "")
 CREATE_TOPIC_IDEMPOTENCY_TTL_SECONDS = int(os.getenv("CREATE_TOPIC_IDEMPOTENCY_TTL_SECONDS", "1200"))
 
 # Stories animation settings (V1 2.5D motion)
-STORIES_ANIMATION_ENABLED = os.getenv("STORIES_ANIMATION_ENABLED", "true").strip().lower() in ("1", "true", "yes", "on")
+STORIES_ANIMATION_ENABLED = os.getenv("STORIES_ANIMATION_ENABLED", "false").strip().lower() in ("1", "true", "yes", "on")
 STORIES_ANIMATION_PROFILE = os.getenv("STORIES_ANIMATION_PROFILE", "standard").strip().lower()
 if STORIES_ANIMATION_PROFILE not in ("lite", "standard"):
     STORIES_ANIMATION_PROFILE = "standard"
