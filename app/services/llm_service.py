@@ -818,7 +818,7 @@ def generate_fact_topic(category: str, recently_used_titles: list[str] | None = 
     """
     avoid_block = ""
     if recently_used_titles:
-        lines = "\n".join(f"  - {t}" for t in recently_used_titles[:20])
+        lines = "\n".join(f"  - {t}" for t in recently_used_titles[:60])
         avoid_block = f"\nDo NOT reuse these recently covered topics:\n{lines}\n"
 
     prompt = f"""You are a researcher for a YouTube Shorts channel called "Tell Me Why" that posts surprising, factual, and educational content.

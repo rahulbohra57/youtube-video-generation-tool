@@ -553,7 +553,7 @@ def test_story_researcher_recent_titles_are_stories_only(mock_fs):
     story_researcher._recently_used_titles(limit=5)
 
     mock_fs.get_recently_suggested_headlines.assert_called_once_with(
-        days=30, limit=5, channel_id="stories"
+        days=365, limit=5, channel_id="stories"
     )
 
 

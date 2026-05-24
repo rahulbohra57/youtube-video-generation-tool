@@ -18,7 +18,7 @@ from app.config import STORIES_CHAT_ID
 
 logger = logging.getLogger(__name__)
 
-_FACT_DEDUP_DAYS = 30
+_FACT_DEDUP_DAYS = 365
 
 _FACT_CATEGORIES = [
     "science & space",
@@ -49,7 +49,7 @@ def _mark_topic_used(title: str, category: str = ""):
     firestore_service.mark_headline_suggested(title, genre=category, channel_id="stories")
 
 
-def _recently_used_titles(limit: int = 20) -> list[str]:
+def _recently_used_titles(limit: int = 60) -> list[str]:
     try:
         return firestore_service.get_recently_suggested_headlines(
             days=_FACT_DEDUP_DAYS, limit=limit, channel_id="stories"
