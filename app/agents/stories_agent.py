@@ -1,6 +1,6 @@
 # app/agents/stories_agent.py
 #
-# Thin wrapper for the Short Tales stories channel.
+# Thin wrapper for the Tell Me Why facts channel.
 # All bot commands (STATS, CREATE, STOP, REDO, etc.) delegate to whatsapp_agent
 # with channel_id="stories" so they operate on the correct YouTube channel,
 # Firestore pipeline state, and Telegram chat.
@@ -17,13 +17,13 @@ def handle_reply(chat_id: str, body: str):
 
 
 def send_post_result(title: str, url: str, public_id: str = "", live_date: str = "", live_time: str = "", mood: str = ""):
-    """Notify the stories Telegram channel when a Short Tales video goes live."""
+    """Notify the Tell Me Why Telegram channel when a fact video goes live."""
     id_line = f"\nId: `{public_id}`" if public_id else ""
-    mood_line = f"\nMood: {mood.title()}" if mood else ""
+    mood_line = f"\nCategory: {mood.title()}" if mood else ""
     date_line = live_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
     time_line = live_time or datetime.now(timezone.utc).strftime("%H:%M UTC")
     message = (
-        "✅ Your story is live on Short Tales\n"
+        "✅ Your fact video is live on Tell Me Why\n"
         f"Live Link: {url}\n"
         f"Date: {date_line}\n"
         f"Time: {time_line}"
