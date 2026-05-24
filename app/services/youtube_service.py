@@ -58,15 +58,16 @@ _UPLOAD_DEFAULTS: dict[str, str] = {
     ),
     "stories": (
         "----\n\n"
-        "Welcome to Tell Me Why — here you will find short, simple, and heart-touching stories that make your day better.\n\n"
-        "This 1-minute story gives a small yet deep life lesson. Such stories bring you new thoughts, positivity, and a better perspective.\n\n"
-        "🌿 Watch till the end and feel the lesson.\n"
-        "💭 Take a moment to think about the story.\n"
-        "😊 Carry positivity with you.\n\n"
-        "If you enjoy inspiring and heart-touching stories like these, subscribe to the channel and watch a new story every day.\n\n"
-        "🔔 Join for daily new stories:\n"
-        "https://www.youtube.com/@TellMeWhy\n\n"
-        "#shorts #HindiStories #MoralStories #LifeLessons #TellMeWhy"
+        "Welcome to Tell Me Why — your daily dose of curiosity.\n\n"
+        "Ever wondered why things work the way they do? We answer the questions you never thought to ask — from science and psychology to everyday mysteries and mind-bending facts.\n\n"
+        "Every short gives you one fascinating answer in under a minute.\n\n"
+        "🔍 Discover something new every day.\n"
+        "🧠 Feed your curiosity.\n"
+        "💡 Share the knowledge.\n\n"
+        "If you love learning something surprising every day, subscribe and never stop asking why.\n\n"
+        "🔔 Join the curious minds:\n"
+        "https://www.youtube.com/@TellMeWhy-in\n\n"
+        "#shorts #TellMeWhy #CuriosityFacts #DidYouKnow #LearnOnYouTube #WhyFacts #MindBlown"
     ),
 }
 
