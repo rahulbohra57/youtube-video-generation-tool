@@ -1,7 +1,8 @@
 # app/agents/story_researcher.py
 #
-# Fully-automated Hindi moral story pipeline — no human digest approval step.
-# Cloud Scheduler → /stories/run → this module → Cloud Task → /generate/stories-task
+# Tell Me Why facts channel — posts 4 English-language facts videos per day.
+# GitHub Actions cron (2am, 8am, 2pm, 8pm IST) → scripts/run_stories.py → this module
+# → dispatch generate-video.yml (script_type="facts", language="en")
 
 import re
 import random
@@ -11,83 +12,54 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from app.services import firestore_service
-from app.services.llm_service import generate_story_idea
+from app.services.llm_service import generate_fact_topic
 from app.services.telegram_service import send_message
 from app.config import STORIES_CHAT_ID
 
 logger = logging.getLogger(__name__)
 
-_STORY_DEDUP_DAYS = 30
-_STORY_GENRES = [
-    "inspiring",
-    "comedy",
-    "heartfelt",
-    "crime",
-    "action",
-    "sci-fi",
-    "mythology",
-    "thriller",
-    "mystery",
-    "adventure",
-    "slice-of-life",
-    "historical",
+_FACT_DEDUP_DAYS = 30
+
+_FACT_CATEGORIES = [
+    "science & space",
+    "history & civilizations",
+    "human body & biology",
+    "technology & ai",
+    "health & fitness",
+    "psychology & dark psychology",
+    "relationships & dating",
+    "self-improvement & habits",
+    "business & finance",
+    "culture & society",
+    "philosophy & life",
+    "mysteries & unexplained",
 ]
 
-
-def _story_key(title: str) -> str:
-    norm = " ".join((title or "").strip().lower().split())
-    return "stories_" + hashlib.sha1(norm.encode("utf-8")).hexdigest()
+# Slot hours matching stories-run.yml cron: 2am, 8am, 2pm, 8pm IST
+_SLOT_HOURS = [2, 8, 14, 20]
 
 
-def _is_story_already_used(title: str) -> bool:
+def _is_topic_already_used(title: str) -> bool:
     return firestore_service.is_headline_already_suggested(
-        title, ttl_days=_STORY_DEDUP_DAYS, channel_id="stories"
+        title, ttl_days=_FACT_DEDUP_DAYS, channel_id="stories"
     )
 
 
-def _mark_story_used(title: str, mood: str = ""):
-    firestore_service.mark_headline_suggested(title, genre=mood, channel_id="stories")
-
-
-def _story_already_generated_today() -> bool:
-    """Return True if a story was already enqueued or completed since IST midnight today."""
-    now_ist = datetime.now(ZoneInfo("Asia/Kolkata"))
-    today_midnight_ist = now_ist.replace(hour=0, minute=0, second=0, microsecond=0)
-    cutoff_utc = today_midnight_ist.astimezone(timezone.utc).timestamp()
-    rows = firestore_service.list_recent_jobs(limit=50)
-    for r in rows:
-        if r.get("channel_id") != "stories":
-            continue
-        if r.get("status") in ("cancelled", "failed"):
-            continue
-        created = r.get("created_at", "")
-        try:
-            ts = datetime.fromisoformat(created.replace("Z", "+00:00")).timestamp()
-        except Exception:
-            continue
-        if ts >= cutoff_utc:
-            return True
-    return False
+def _mark_topic_used(title: str, category: str = ""):
+    firestore_service.mark_headline_suggested(title, genre=category, channel_id="stories")
 
 
 def _recently_used_titles(limit: int = 20) -> list[str]:
-    """Return recent story titles from suggested_headlines to pass to the LLM to avoid repeats."""
     try:
         return firestore_service.get_recently_suggested_headlines(
-            days=_STORY_DEDUP_DAYS, limit=limit, channel_id="stories"
+            days=_FACT_DEDUP_DAYS, limit=limit, channel_id="stories"
         )
     except Exception:
         return []
 
 
-def _select_story_genre() -> str:
-    """Select genre using performance-weighted randomization with deterministic fallback.
-
-    When 14-day view data exists for this channel, genres that performed better get
-    proportionally higher selection probability. Genres with no data receive the median
-    score so new genres still get a fair share of slots. Falls back to deterministic
-    slot rotation when no performance data is available (e.g. early in channel life).
-    """
+def _select_category() -> str:
+    """Select fact category using performance-weighted randomization with deterministic fallback."""
     from app.services.firestore_service import get_genre_performance_fortnightly
 
     try:
@@ -96,115 +68,103 @@ def _select_story_genre() -> str:
         perf = {}
 
     if perf:
-        scores = [perf.get(g, 0.0) for g in _STORY_GENRES]
+        scores = [perf.get(g, 0.0) for g in _FACT_CATEGORIES]
         known = sorted(s for s in scores if s > 0)
         baseline = known[len(known) // 2] if known else 100.0
         weights = [s if s > 0 else baseline for s in scores]
-        return random.choices(_STORY_GENRES, weights=weights, k=1)[0]
+        return random.choices(_FACT_CATEGORIES, weights=weights, k=1)[0]
 
-    # Fallback: deterministic IST schedule-slot rotation
+    # Deterministic IST schedule-slot rotation
     now_ist = datetime.now(ZoneInfo("Asia/Kolkata"))
-    slot_hours = [7, 11, 14, 18]
     slot_index = None
-    for idx, hour in enumerate(slot_hours):
+    for idx, hour in enumerate(_SLOT_HOURS):
         if now_ist.hour > hour or (now_ist.hour == hour and now_ist.minute >= 0):
             slot_index = idx
     if slot_index is None:
+        slot_index = len(_SLOT_HOURS) - 1
         day_ordinal = now_ist.date().toordinal() - 1
-        slot_index = len(slot_hours) - 1
     else:
         day_ordinal = now_ist.date().toordinal()
-    schedule_slot = (day_ordinal * len(slot_hours)) + slot_index
-    return _STORY_GENRES[schedule_slot % len(_STORY_GENRES)]
+    schedule_slot = (day_ordinal * len(_SLOT_HOURS)) + slot_index
+    return _FACT_CATEGORIES[schedule_slot % len(_FACT_CATEGORIES)]
 
 
 def run() -> str | None:
     """
-    Main entry point called by POST /stories/run or GitHub Actions scheduled workflow.
+    Main entry point called by scripts/run_stories.py or GitHub Actions scheduled workflow.
     1. Check pipeline state — skip if already processing.
-    2. Generate a fresh Hindi story idea via LLM.
+    2. Generate a fresh English fact topic via LLM.
     3. Deduplicate against recent 30-day window.
     4. Dispatch GitHub Actions workflow to generate the full video.
-    5. Notify the stories Telegram channel.
+    5. Notify the Tell Me Why Telegram channel.
     Returns the public_id string if enqueued, None otherwise.
     """
 
     state = firestore_service.get_pipeline_state(channel_id="stories")
     if state.get("state") == "processing":
-        logger.info("Stories pipeline busy — skipping this run")
+        logger.info("Tell Me Why pipeline busy — skipping this run")
         send_message(
             STORIES_CHAT_ID,
-            f"⏭️ Stories scheduler slot skipped — pipeline is busy processing batch "
+            f"⏭️ Tell Me Why scheduler slot skipped — pipeline is busy processing batch "
             f"`{state.get('active_batch_id', '?')}`.",
             channel_id="stories",
         )
         return None
 
-    if _story_already_generated_today():
-        logger.info("Stories daily cap reached — skipping this slot")
-        return None
-
-    language = "hi"
-
-    # Generate a new story idea (title + mood + premise)
+    language = "en"
     recently_used = _recently_used_titles()
-    target_genre = _select_story_genre()
+    target_category = _select_category()
+
     try:
-        idea = generate_story_idea(
+        idea = generate_fact_topic(
+            category=target_category,
             recently_used_titles=recently_used,
-            preferred_mood=target_genre,
-            language=language,
         )
     except Exception as e:
-        logger.exception(f"Story idea generation failed: {e}")
+        logger.exception(f"Fact topic generation failed: {e}")
         if STORIES_CHAT_ID:
-            send_message(STORIES_CHAT_ID, f"⚠️ Story idea generation failed: {e}", channel_id="stories")
+            send_message(STORIES_CHAT_ID, f"⚠️ Fact topic generation failed: {e}", channel_id="stories")
         return None
 
     title = (idea.get("title") or "").strip()
-    # Enforce scheduled genre rotation to diversify experiments across scheduler slots.
-    mood = target_genre
     premise = (idea.get("premise") or "").strip()
 
     if not title:
-        logger.warning("Story idea returned empty title — skipping")
+        logger.warning("Fact topic returned empty title — skipping")
         send_message(
             STORIES_CHAT_ID,
-            f"⚠️ Story slot skipped — LLM returned an empty title for genre *{target_genre}*. Will retry next slot.",
+            f"⚠️ Fact slot skipped — LLM returned an empty title for category *{target_category}*. Will retry next slot.",
             channel_id="stories",
         )
         return None
 
-    if _is_story_already_used(title):
-        logger.info(f"Story already used recently: {title}")
+    if _is_topic_already_used(title):
+        logger.info(f"Fact topic already used recently: {title}")
         send_message(
             STORIES_CHAT_ID,
-            f"⏭️ Story slot skipped — recently used title detected: _{title}_. A new idea will be generated next slot.",
+            f"⏭️ Fact slot skipped — recently used title detected: _{title}_. A new topic will be generated next slot.",
             channel_id="stories",
         )
         return None
 
-    # Build a deterministic batch + task name
     batch_id = f"stories_{datetime.now(timezone.utc):%Y%m%d_%H%M%S}"
-    code = "STORY01"
+    code = "FACT01"
     raw_task = f"generate-{batch_id}-{code}"
     task_name = re.sub(r"[^a-zA-Z0-9_-]", "-", raw_task)
     public_id = hashlib.sha1(task_name.encode("utf-8")).hexdigest()[:8].upper()
     job_id = task_name
 
-    # Save batch + pipeline state
-    firestore_service.save_news_batch(batch_id, mood, {
+    firestore_service.save_news_batch(batch_id, target_category, {
         code: {
             "code": code,
             "headline": title,
             "context": premise,
             "rating": 5.0,
-            "genre": mood,
+            "genre": target_category,
         }
     })
     firestore_service.set_pipeline_and_batch_state(batch_id, "processing", channel_id="stories")
 
-    # Create job document immediately so STOP/REDO commands work
     firestore_service.create_or_update_job(job_id, {
         "job_id": job_id,
         "batch_id": batch_id,
@@ -213,14 +173,13 @@ def run() -> str | None:
         "source": "scheduler",
         "status": "queued",
         "public_id": public_id,
-        "genre": mood,
+        "genre": target_category,
         "details": premise,
         "channel_id": "stories",
         "language": language,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
 
-    # Dispatch GitHub Actions workflow for video generation
     from app.agents.github_dispatch import dispatch_video_generation
     try:
         dispatch_video_generation({
@@ -230,31 +189,31 @@ def run() -> str | None:
             "job_id": job_id,
             "public_id": public_id,
             "force_run": True,
-            "genre": mood,
+            "genre": target_category,
             "details": premise,
             "virality_score": 0.0,
             "channel_id": "stories",
-            "script_type": "story",
+            "script_type": "facts",
             "language": language,
         })
     except Exception as e:
-        logger.exception(f"Failed to dispatch story generation workflow: {e}")
+        logger.exception(f"Failed to dispatch fact generation workflow: {e}")
         firestore_service.set_pipeline_and_batch_state(batch_id, "failed", channel_id="stories")
         if STORIES_CHAT_ID:
-            send_message(STORIES_CHAT_ID, f"❌ Failed to queue story: {e}", channel_id="stories")
+            send_message(STORIES_CHAT_ID, f"❌ Failed to queue fact video: {e}", channel_id="stories")
         return None
 
-    _mark_story_used(title, mood=mood)
+    _mark_topic_used(title, category=target_category)
 
     if STORIES_CHAT_ID:
         send_message(
             STORIES_CHAT_ID,
-            f"📖 Generating Hindi story...\n"
-            f"Title: *{title}*\n"
-            f"Genre: {mood.title()}\n"
+            f"💡 Generating facts video...\n"
+            f"Topic: *{title}*\n"
+            f"Category: {target_category.title()}\n"
             f"Id: `{public_id}`",
             channel_id="stories",
         )
 
-    logger.info(f"Stories task enqueued: {task_name} | {title} | genre={mood}")
+    logger.info(f"Facts task enqueued: {task_name} | {title} | category={target_category}")
     return public_id
