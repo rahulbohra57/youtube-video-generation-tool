@@ -1,4 +1,4 @@
-"""Vercel serverless function — initiates YouTube OAuth for the Stories (Short Tales) channel."""
+"""Vercel serverless function — initiates YouTube OAuth for the Stories (Tell Me Why) channel."""
 import sys
 import os
 import secrets

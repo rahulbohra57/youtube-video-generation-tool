@@ -58,15 +58,15 @@ _UPLOAD_DEFAULTS: dict[str, str] = {
     ),
     "stories": (
         "----\n\n"
-        "Welcome to Short Tales — here you will find short, simple, and heart-touching stories that make your day better.\n\n"
+        "Welcome to Tell Me Why — here you will find short, simple, and heart-touching stories that make your day better.\n\n"
         "This 1-minute story gives a small yet deep life lesson. Such stories bring you new thoughts, positivity, and a better perspective.\n\n"
         "🌿 Watch till the end and feel the lesson.\n"
         "💭 Take a moment to think about the story.\n"
         "😊 Carry positivity with you.\n\n"
         "If you enjoy inspiring and heart-touching stories like these, subscribe to the channel and watch a new story every day.\n\n"
         "🔔 Join for daily new stories:\n"
-        "https://www.youtube.com/@ShortTales-57\n\n"
-        "#shorts #HindiStories #MoralStories #LifeLessons #ShortTales"
+        "https://www.youtube.com/@TellMeWhy\n\n"
+        "#shorts #HindiStories #MoralStories #LifeLessons #TellMeWhy"
     ),
 }
 

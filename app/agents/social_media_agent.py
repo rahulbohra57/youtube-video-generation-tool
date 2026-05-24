@@ -69,7 +69,7 @@ def post(video_path: str, caption: str, title: str, job_id: str = "", public_id:
         elif "oauth token expired or revoked" in err.lower() or "reconnect via" in err.lower():
             logger.warning("YouTube OAuth requires reconnect for channel %s: %s", channel_id, err)
             reauth_url = youtube_service._auth_url(channel_id)
-            channel_label = "Short Tales" if channel_id == "stories" else "Kurrent Affairs"
+            channel_label = "Tell Me Why" if channel_id == "stories" else "Kurrent Affairs"
             send_message(
                 chat_id,
                 f"🔴 *YouTube token expired — {channel_label} needs re-auth*\n\n"

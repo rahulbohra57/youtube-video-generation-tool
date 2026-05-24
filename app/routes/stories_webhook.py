@@ -1,6 +1,6 @@
 # app/routes/stories_webhook.py
 #
-# Telegram webhook for the Short Tales stories bot (separate from the news bot).
+# Telegram webhook for the Tell Me Why stories bot (separate from the news bot).
 # Registered via: POST https://api.telegram.org/bot<STORIES_BOT_TOKEN>/setWebhook
 # with url = https://autoframe-.../webhook/telegram/stories
 

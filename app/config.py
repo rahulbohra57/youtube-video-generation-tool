@@ -36,7 +36,7 @@ GOOGLE_SEARCH_ENGINE_ID = os.getenv("GOOGLE_SEARCH_ENGINE_ID", "")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
-# Telegram — Stories channel (Short Tales)
+# Telegram — Stories channel (Tell Me Why)
 STORIES_BOT_TOKEN = os.getenv("STORIES_BOT_TOKEN", "")
 STORIES_CHAT_ID = os.getenv("STORIES_CHAT_ID", "")
 
@@ -45,7 +45,7 @@ YOUTUBE_CLIENT_ID = os.getenv("YOUTUBE_CLIENT_ID", "")
 YOUTUBE_CLIENT_SECRET = os.getenv("YOUTUBE_CLIENT_SECRET", "")
 YOUTUBE_REDIRECT_URI = os.getenv("YOUTUBE_REDIRECT_URI", "")
 
-# YouTube OAuth — Stories channel (Short Tales)
+# YouTube OAuth — Stories channel (Tell Me Why)
 STORIES_YOUTUBE_CLIENT_ID = os.getenv("STORIES_YOUTUBE_CLIENT_ID", "")
 STORIES_YOUTUBE_CLIENT_SECRET = os.getenv("STORIES_YOUTUBE_CLIENT_SECRET", "")
 STORIES_YOUTUBE_REDIRECT_URI = os.getenv("STORIES_YOUTUBE_REDIRECT_URI", "")

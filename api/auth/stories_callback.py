@@ -1,4 +1,4 @@
-"""Vercel serverless function — OAuth callback for the Stories (Short Tales) channel."""
+"""Vercel serverless function — OAuth callback for the Stories (Tell Me Why) channel."""
 import sys
 import os
 import urllib.parse
@@ -79,8 +79,8 @@ class handler(BaseHTTPRequestHandler):
 
             body = _html(
                 "Auth Complete",
-                "<h1>&#x2705; Short Tales Connected</h1>"
-                "<p>YouTube authentication is complete. Stories will now post automatically.</p>"
+                "<h1>&#x2705; Tell Me Why Connected</h1>"
+                "<p>YouTube authentication is complete. Videos will now post automatically.</p>"
                 "<p>You can close this tab.</p>",
             )
             self.send_response(200)

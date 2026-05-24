@@ -1,6 +1,6 @@
 # app/routes/stories.py
 #
-# Cloud Scheduler endpoints for the Short Tales stories channel.
+# Cloud Scheduler endpoints for the Tell Me Why stories channel.
 # /stories/run        → Triggered at 7am, 11am, 2pm, 6pm IST — generates a new Hindi story
 # /stories/daily-digest → Triggered at 8:30am IST — sends stats to stories Telegram
 # /generate/stories-task → Cloud Tasks delivery endpoint for story video generation
@@ -37,7 +37,7 @@ def stories_run(request: Request):
 
 @router.post("/stories/daily-digest")
 def stories_daily_digest(request: Request):
-    """Called by Cloud Scheduler at 8:30am IST. Sends Short Tales stats to stories Telegram."""
+    """Called by Cloud Scheduler at 8:30am IST. Sends Tell Me Why stats to stories Telegram."""
     secret = request.headers.get("X-Scheduler-Secret", "")
     if secret != SCHEDULER_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -72,7 +72,7 @@ def _send_stories_daily_digest():
     tts_pct = round((tts_chars_month / 1_000_000) * 100, 1)
 
     message = (
-        f"📅 Short Tales Daily Report — {now_ist.strftime('%d %b %Y, %I:%M %p IST')}\n\n"
+        f"📅 Tell Me Why Daily Report — {now_ist.strftime('%d %b %Y, %I:%M %p IST')}\n\n"
         f"📺 Channel\n"
         f"  Subscribers: {int(yt.get('subscriber_count', 0)):,}\n"
         f"  Total Views: {int(yt.get('view_count', 0)):,}\n"

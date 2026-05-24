@@ -92,11 +92,11 @@ def youtube_callback(code: str, state: str = "", error: str = ""):
     """)
 
 
-# ─── Stories channel (Short Tales) OAuth flow ─────────────────────────────────
+# ─── Stories channel (Tell Me Why) OAuth flow ─────────────────────────────────
 
 @router.get("/auth/youtube/stories")
 def youtube_stories_auth():
-    """Redirect the browser to Google OAuth for the Short Tales channel."""
+    """Redirect the browser to Google OAuth for the Tell Me Why channel."""
     params = {
         "client_id":     STORIES_YOUTUBE_CLIENT_ID,
         "redirect_uri":  STORIES_YOUTUBE_REDIRECT_URI,
@@ -112,7 +112,7 @@ def youtube_stories_auth():
 
 @router.get("/auth/youtube/stories/callback")
 def youtube_stories_callback(code: str, state: str = "", error: str = ""):
-    """Exchange the authorisation code for Short Tales tokens and persist them."""
+    """Exchange the authorisation code for Tell Me Why tokens and persist them."""
     if error:
         raise HTTPException(status_code=400, detail=f"OAuth error: {error}")
 
@@ -151,7 +151,7 @@ def youtube_stories_callback(code: str, state: str = "", error: str = ""):
 
     return HTMLResponse("""
         <html><body style="font-family:sans-serif;text-align:center;padding:60px">
-        <h1>&#x2705; Short Tales YouTube Auth Complete</h1>
-        <p>The Short Tales channel is now connected. You can close this tab.</p>
+        <h1>&#x2705; Tell Me Why YouTube Auth Complete</h1>
+        <p>The Tell Me Why channel is now connected. You can close this tab.</p>
         </body></html>
     """)

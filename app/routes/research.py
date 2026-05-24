@@ -78,7 +78,7 @@ def refresh_youtube_auth(request: Request):
     if failed_channels:
         lines = []
         for ch in failed_channels:
-            channel_label = "Short Tales" if ch == "stories" else "Kurrent Affairs"
+            channel_label = "Tell Me Why" if ch == "stories" else "Kurrent Affairs"
             reauth_url = youtube_service._auth_url(ch)
             lines.append(
                 f"*{channel_label}* (`{ch}`) — {results[ch]}\n"

@@ -23,7 +23,7 @@ failed_channels = [ch for ch, status in results.items() if status not in ("ok", 
 
 if failed_channels:
     for ch in failed_channels:
-        channel_label = "Short Tales" if ch == "stories" else "Kurrent Affairs"
+        channel_label = "Tell Me Why" if ch == "stories" else "Kurrent Affairs"
         reauth_url = youtube_service._auth_url(ch)
         alert = (
             f"🔴 *YouTube token expired — {channel_label} needs re-auth*\n\n"
