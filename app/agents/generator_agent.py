@@ -17,6 +17,7 @@ from app.services.llm_service import (
     classify_music_genre,
     apply_quality_controls,
     get_cta_narration,
+    _fact_visual_style,
 )
 from app.services.tts_service import generate_audio, choose_voice_for_video
 from app.services.image_service import generate_image
@@ -290,6 +291,31 @@ def run(
             language = language or "hi"
             mood = genre or "inspiring"
             raw_script = generate_story_script(headline, mood=mood, premise=details or "", language=language)
+        elif script_type == "facts":
+            # Facts: search-grounded English script with category-appropriate visual style
+            language = "en"
+            fact_visual_style = _fact_visual_style(genre or "")
+            try:
+                raw_script = generate_script_with_search(
+                    headline,
+                    language="en",
+                    aspect_ratio="9:16",
+                    context=details or "",
+                    visual_style_override=fact_visual_style,
+                    script_mode="facts",
+                )
+            except SearchGroundingUnavailable:
+                logger.info("Search grounding unavailable for %s, using standard generation", public_id or effective_job_id)
+                raw_script = generate_script(headline, language="en", aspect_ratio="9:16", context=details or "")
+            except Exception as _search_exc:
+                logger.warning("Search-grounded facts script generation failed (%s), falling back to standard", _search_exc)
+                send_message(
+                    _chat_id,
+                    f"⚠️ Search-grounded script failed for `{public_id or effective_job_id}` — "
+                    f"falling back to standard generation.\nReason: {str(_search_exc)[:200]}",
+                    channel_id=channel_id,
+                )
+                raw_script = generate_script(headline, language="en", aspect_ratio="9:16", context=details or "")
         else:
             # News: search-grounded script generation in English
             language = "en"
