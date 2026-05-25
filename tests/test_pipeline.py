@@ -1174,8 +1174,8 @@ def _make_schedule(domains=None):
     }
 
 
-def test_get_slot_domain_fixed_8am():
-    with patch("app.agents.lead_researcher._ist_now_hour", return_value=8):
+def test_get_slot_domain_fixed_10am():
+    with patch("app.agents.lead_researcher._ist_now_hour", return_value=10):
         from app.agents import lead_researcher
         assert lead_researcher._get_slot_domain(_make_schedule()) == "Artificial Intelligence"
 
@@ -1188,8 +1188,8 @@ def test_get_slot_domain_rotating_2am_day0():
         assert result == "Technology"
 
 
-def test_get_slot_domain_rotating_2pm_day0():
-    with patch("app.agents.lead_researcher._ist_now_hour", return_value=14), \
+def test_get_slot_domain_rotating_6pm_day0():
+    with patch("app.agents.lead_researcher._ist_now_hour", return_value=18), \
          patch("app.agents.lead_researcher._ist_day_of_year", return_value=3):
         from app.agents import lead_researcher
         result = lead_researcher._get_slot_domain(_make_schedule(["Technology", "Current Affairs", "Science"]))
@@ -1272,9 +1272,9 @@ def test_update_domain_schedule_excludes_fixed_domains():
         assert "Artificial Intelligence" not in saved
 
 
-def test_get_slot_domain_rotating_8pm_day0():
-    with patch("app.agents.lead_researcher._ist_now_hour", return_value=20), \
-         patch("app.agents.lead_researcher._ist_day_of_year", return_value=3):
+def test_get_slot_domain_rotating_6pm_day1():
+    with patch("app.agents.lead_researcher._ist_now_hour", return_value=18), \
+         patch("app.agents.lead_researcher._ist_day_of_year", return_value=4):  # 4 % 3 == 1
         from app.agents import lead_researcher
         result = lead_researcher._get_slot_domain(_make_schedule(["Technology", "Current Affairs", "Science"]))
         assert result == "Science"

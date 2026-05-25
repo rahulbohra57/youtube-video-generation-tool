@@ -98,16 +98,16 @@ def _ist_day_of_year() -> int:
 
 
 _FIXED_SLOTS: dict[int, str] = {
-    8: "Artificial Intelligence",
+    10: "Artificial Intelligence",
 }
-_ROTATING_SLOT_POSITIONS: dict[int, int] = {2: 0, 14: 1, 20: 2}
+_ROTATING_SLOT_POSITIONS: dict[int, int] = {2: 0, 18: 1}
 
 
 def _get_slot_domain(schedule: dict) -> str:
     """Return the domain assigned to the current IST scheduler slot.
 
-    Fixed slots (0h, 8h, 12h IST) are hardcoded.
-    Rotating slots (4h, 16h, 20h IST) cycle through schedule['rotating_domains']
+    Fixed slots (10h IST) are hardcoded.
+    Rotating slots (2h, 18h IST) cycle through schedule['rotating_domains']
     using day_of_year % 3 as the rotation index so every domain gets equal
     exposure across all time slots over a 3-day cycle.
     """
@@ -274,7 +274,7 @@ def send_daily_digest():
     prev_day_of_year = _date.fromisoformat(prev_day_key).timetuple().tm_yday
     domains_today = firestore_service.get_domains_posted_today(day_key=prev_day_key)
     domain_lines = []
-    for hour in [2, 8, 14, 20]:
+    for hour in [2, 10, 18]:
         if hour in _FIXED_SLOTS:
             domain = _FIXED_SLOTS[hour]
         else:
