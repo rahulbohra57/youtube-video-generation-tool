@@ -51,4 +51,5 @@ jobs:
           STORIES_YOUTUBE_CLIENT_SECRET: ${{ secrets.STORIES_YOUTUBE_CLIENT_SECRET }}
           STORIES_YOUTUBE_REDIRECT_URI: ${{ secrets.STORIES_YOUTUBE_REDIRECT_URI }}
           BUCKET_NAME: ${{ secrets.BUCKET_NAME }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
         run: python scripts/run_generate_video.py

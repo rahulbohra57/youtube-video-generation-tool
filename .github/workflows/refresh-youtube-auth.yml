@@ -39,4 +39,5 @@ jobs:
           STORIES_YOUTUBE_CLIENT_ID: ${{ secrets.STORIES_YOUTUBE_CLIENT_ID }}
           STORIES_YOUTUBE_CLIENT_SECRET: ${{ secrets.STORIES_YOUTUBE_CLIENT_SECRET }}
           STORIES_YOUTUBE_REDIRECT_URI: ${{ secrets.STORIES_YOUTUBE_REDIRECT_URI }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
         run: python scripts/run_refresh_auth.py
