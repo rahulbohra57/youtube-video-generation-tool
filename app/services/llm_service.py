@@ -284,6 +284,9 @@ def generate_script_with_search(topic: str, language: str = "en", aspect_ratio: 
             "angle; the shocking number or claim); Scene 2 — Elaboration (the science, history, or mechanism "
             "behind it — the 'why'); Scene 3 — Payoff (a related mind-blowing extension or real-world "
             "implication the viewer will want to share). "
+            "CRITICAL: Scene 1 narration MUST begin with the exact words 'Tell me why' followed by the topic "
+            "as a hook question or surprising claim — e.g. 'Tell me why adding a bad option makes you spend more.' "
+            "This opening is the channel's signature phrase and must appear in every video. "
             "Narration: conversational English, 20-24 words per scene, no jargon. "
             "Visual prompts: always English, safe for Imagen."
         )

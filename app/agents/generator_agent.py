@@ -602,8 +602,6 @@ def run(
         except Exception as _cta_err:
             logger.warning("CTA audio generation failed, skipping CTA: %s", _cta_err)
 
-        send_message(_chat_id, "✅ Frames Generated! Now compiling the video...", channel_id=channel_id)
-
         output_path = os.path.join(OUTPUT_DIR, f"final_{code}_{timestamp}.mp4")
         create_video(
             video_clips,

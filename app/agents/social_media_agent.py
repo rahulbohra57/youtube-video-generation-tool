@@ -53,7 +53,6 @@ def post(video_path: str, caption: str, title: str, job_id: str = "", public_id:
     if job_id:
         firestore_service.create_or_update_job(job_id, {"final_caption": enhanced})
 
-    send_message(chat_id, "📤 Posting to YouTube Shorts...", channel_id=channel_id)
     try:
         url = youtube_service.upload_video(video_path, title, enhanced, genre=genre, channel_id=channel_id)
     except Exception as e:
