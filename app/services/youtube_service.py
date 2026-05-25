@@ -235,7 +235,7 @@ def upload_video(video_path: str, title: str, description: str, genre: str = "",
                 f"YouTube OAuth token expired or revoked for channel '{channel_id}'. Reconnect via {_auth_url(channel_id)}."
             ) from e
         if e.resp.status in (403, 429) and any(
-            kw in content_str for kw in ("quotaexceeded", "dailylimitexceeded", "userrequestedtoofast", "forbidden")
+            kw in content_str for kw in ("quotaexceeded", "dailylimitexceeded", "userrequestedtoofast", "ratelimitexceeded", "forbidden")
         ):
             raise RuntimeError("youtube_quota_exceeded") from e
         if e.resp.status == 409 and "alreadyexists" in content_str:
