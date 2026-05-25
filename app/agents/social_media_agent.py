@@ -68,17 +68,20 @@ def post(video_path: str, caption: str, title: str, job_id: str = "", public_id:
             label = f"{source}_duplicate" if source else "duplicate"
         elif "oauth token expired or revoked" in err.lower() or "reconnect via" in err.lower():
             logger.warning("YouTube OAuth requires reconnect for channel %s: %s", channel_id, err)
-            reauth_url = youtube_service._auth_url(channel_id)
-            channel_label = "Tell Me Why" if channel_id == "stories" else "Kurrent Affairs"
-            send_message(
-                chat_id,
-                f"🔴 *YouTube token expired — {channel_label} needs re-auth*\n\n"
-                f"Tap to reconnect (takes 10 seconds, no server needed):\n"
-                f"[Re-authenticate {channel_label} →]({reauth_url})\n\n"
-                f"_Video sent here for manual upload in the meantime._",
-                channel_id=channel_id,
-            )
             label = f"{source}_oauth_reauth" if source else "oauth_reauth"
+            # Only alert if the refresh workflow hasn't already notified recently (avoids duplicate alerts)
+            if not firestore_service.is_auth_recently_failed(channel_id):
+                reauth_url = youtube_service._auth_url(channel_id)
+                channel_label = "Tell Me Why" if channel_id == "stories" else "Kurrent Affairs"
+                send_message(
+                    chat_id,
+                    f"🔴 *YouTube token expired — {channel_label} needs re-auth*\n\n"
+                    f"Tap to reconnect (takes 10 seconds, no server needed):\n"
+                    f"[Re-authenticate {channel_label} →]({reauth_url})\n\n"
+                    f"_Video sent here for manual upload in the meantime._",
+                    channel_id=channel_id,
+                )
+                firestore_service.mark_auth_failure(channel_id)
         else:
             logger.exception(f"YouTube upload failed: {e}")
             send_message(chat_id, f"❌ YouTube upload failed: {e}", channel_id=channel_id)
