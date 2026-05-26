@@ -1,9 +1,6 @@
 {
   "functions": {
-    "api/auth/youtube.py": { "maxDuration": 30 },
-    "api/auth/youtube_callback.py": { "maxDuration": 30 },
-    "api/auth/stories.py": { "maxDuration": 30 },
-    "api/auth/stories_callback.py": { "maxDuration": 30 }
+    "api/**": { "maxDuration": 30 }
   },
   "rewrites": [
     { "source": "/admin", "destination": "/admin.html" },
