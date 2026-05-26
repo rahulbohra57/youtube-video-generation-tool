@@ -1,21 +1,18 @@
 """Vercel serverless function — OAuth callback for the News (Kurrent Affairs) channel."""
-import sys
 import os
+import json
 import urllib.parse
 import logging
 from http.server import BaseHTTPRequestHandler
 from datetime import datetime, timezone, timedelta
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
-from api._shared import setup_credentials
-setup_credentials()
-
 import httpx
-from app.services import firestore_service
 
 logger = logging.getLogger(__name__)
 
 _TOKEN_URI = "https://oauth2.googleapis.com/token"
+_PROJECT_ID = "youtube-video-generator-492211"
+_FS_BASE = f"https://firestore.googleapis.com/v1/projects/{_PROJECT_ID}/databases/(default)/documents"
 
 
 def _html(title: str, body: str) -> bytes:
@@ -24,6 +21,32 @@ def _html(title: str, body: str) -> bytes:
 <title>{title}</title>
 <style>body{{font-family:sans-serif;text-align:center;padding:60px;max-width:500px;margin:auto}}</style>
 </head><body>{body}</body></html>""".encode()
+
+
+def _get_gcp_access_token() -> str:
+    """Mint a GCP access token from the service account JSON — no SDK, no gRPC."""
+    from google.oauth2 import service_account
+    from google.auth.transport.requests import Request as GoogleRequest
+    key = json.loads(os.getenv("GCP_SERVICE_ACCOUNT_JSON", "{}"))
+    creds = service_account.Credentials.from_service_account_info(
+        key, scopes=["https://www.googleapis.com/auth/datastore"]
+    )
+    creds.refresh(GoogleRequest())
+    return creds.token
+
+
+def _save_tokens_rest(tokens: dict, doc_name: str) -> None:
+    """Write tokens to Firestore via REST API (avoids heavy gRPC SDK cold-start)."""
+    access_token = _get_gcp_access_token()
+    fields = {k: {"stringValue": str(v)} for k, v in tokens.items() if v is not None}
+    url = f"{_FS_BASE}/oauth_tokens/{doc_name}"
+    resp = httpx.patch(
+        url,
+        json={"fields": fields},
+        headers={"Authorization": f"Bearer {access_token}"},
+        timeout=8,
+    )
+    resp.raise_for_status()
 
 
 class handler(BaseHTTPRequestHandler):
@@ -57,7 +80,7 @@ class handler(BaseHTTPRequestHandler):
                     "grant_type": "authorization_code",
                 },
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
-                timeout=15,
+                timeout=8,
             )
             token = resp.json()
             if "error" in token:
@@ -67,13 +90,13 @@ class handler(BaseHTTPRequestHandler):
             expires_in = int(token.get("expires_in", 3600))
             token_expiry = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
 
-            firestore_service.save_youtube_tokens({
+            _save_tokens_rest({
                 "access_token": token["access_token"],
                 "refresh_token": refresh_token,
                 "token_expiry": token_expiry,
                 "client_id": client_id,
                 "client_secret": client_secret,
-            }, channel_id="news")
+            }, doc_name="youtube_news")
 
             body = _html(
                 "Auth Complete",
