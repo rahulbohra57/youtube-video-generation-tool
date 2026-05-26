@@ -74,7 +74,6 @@ class handler(BaseHTTPRequestHandler):
                 "client_id": client_id,
                 "client_secret": client_secret,
             }, channel_id="stories")
-            firestore_service.clear_auth_failure("stories")
 
             body = _html(
                 "Auth Complete",
