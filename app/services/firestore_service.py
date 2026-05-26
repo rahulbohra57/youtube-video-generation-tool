@@ -632,10 +632,11 @@ def update_job_analytics(job_id: str, analytics: dict):
     })
 
 
-def get_top_performers(n: int = 3, days: int | None = None) -> list[dict]:
+def get_top_performers(n: int = 3, days: int | None = None, channel_id: str = "news") -> list[dict]:
     """Return top n completed jobs by view count that have analytics data.
 
-    If days is provided, only jobs updated within the last `days` days are considered.
+    If days is provided, only jobs created within the last `days` days are considered
+    (uses created_at so analytics refreshes on old videos don't skew results).
     """
     try:
         all_jobs = list_recent_jobs(limit=200)
@@ -644,9 +645,11 @@ def get_top_performers(n: int = 3, days: int | None = None) -> list[dict]:
         for data in all_jobs:
             if data.get("status") != "completed":
                 continue
+            if data.get("channel_id", "news") != channel_id:
+                continue
             if cutoff:
-                updated = _parse_iso(data.get("updated_at"))
-                if not updated or updated < cutoff:
+                created = _parse_iso(data.get("created_at"))
+                if not created or created < cutoff:
                     continue
             analytics = data.get("analytics") or {}
             views = int(analytics.get("view_count", 0))

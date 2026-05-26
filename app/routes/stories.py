@@ -71,6 +71,12 @@ def _send_stories_daily_digest():
     tts_chars_month = firestore_service.get_tts_chars_this_month(channel_id="stories")
     tts_pct = round((tts_chars_month / 1_000_000) * 100, 1)
 
+    top = firestore_service.get_top_performers(n=1, days=7, channel_id="stories")
+    top_line = ""
+    if top:
+        t = top[0]
+        top_line = f"\n\n🏆 Weekly Top Video: _{t['topic']}_ ({t['view_count']:,} views)"
+
     message = (
         f"📅 Tell Me Why Daily Report — {now_ist.strftime('%d %b %Y, %I:%M %p IST')}\n\n"
         f"📺 Channel\n"
@@ -82,6 +88,7 @@ def _send_stories_daily_digest():
         f"  Failed: {queue.get('failed_24h', 0)}\n\n"
         f"📊 TTS Usage Today\n"
         f"  {tts_chars_today:,} today | {tts_chars_month:,} this month ({tts_pct}% of 1M free tier)"
+        f"{top_line}"
     )
     telegram_service.send_message(STORIES_CHAT_ID, message, channel_id="stories")
 

@@ -283,7 +283,7 @@ def send_daily_digest():
         mark = "✅" if domain.lower() in domains_today else "⬜"
         domain_lines.append(f"  {mark} {hour:02d}h → {domain}")
 
-    top = firestore_service.get_top_performers(n=1, days=7)
+    top = firestore_service.get_top_performers(n=1, days=7, channel_id="news")
     top_line = ""
     if top:
         t = top[0]
