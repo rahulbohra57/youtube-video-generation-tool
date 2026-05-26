@@ -74,11 +74,12 @@ def post(video_path: str, caption: str, title: str, job_id: str = "", public_id:
                 channel_label = "Tell Me Why" if channel_id == "stories" else "Kurrent Affairs"
                 send_message(
                     chat_id,
-                    f"🔴 *YouTube token expired — {channel_label} needs re-auth*\n\n"
+                    f"🔴 <b>YouTube token expired — {channel_label} needs re-auth</b>\n\n"
                     f"Tap to reconnect (takes 10 seconds, no server needed):\n"
-                    f"[Re-authenticate {channel_label} →]({reauth_url})\n\n"
-                    f"_Video sent here for manual upload in the meantime._",
+                    f'<a href="{reauth_url}">Re-authenticate {channel_label} →</a>\n\n'
+                    f"<i>Video sent here for manual upload in the meantime.</i>",
                     channel_id=channel_id,
+                    parse_mode="HTML",
                 )
                 firestore_service.mark_auth_failure(channel_id)
         else:

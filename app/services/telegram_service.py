@@ -28,8 +28,8 @@ def _bot_token_for(chat_id: str, channel_id: str = "") -> str:
     return news_bot_token
 
 
-def send_message(chat_id: str, text: str, channel_id: str = "") -> bool:
-    """Send Telegram message with markdown first, then plain-text fallback."""
+def send_message(chat_id: str, text: str, channel_id: str = "", parse_mode: str = "Markdown") -> bool:
+    """Send Telegram message with specified parse mode, then plain-text fallback."""
     token = _bot_token_for(chat_id, channel_id=channel_id)
     if not token:
         logger.warning("Telegram token missing for channel_id=%s chat_id=%s", channel_id, chat_id)
@@ -39,13 +39,13 @@ def send_message(chat_id: str, text: str, channel_id: str = "") -> bool:
     try:
         resp = httpx.post(
             url,
-            json={"chat_id": chat_id, "text": text, "parse_mode": "Markdown"},
+            json={"chat_id": chat_id, "text": text, "parse_mode": parse_mode},
             timeout=15,
         )
         resp.raise_for_status()
         return True
     except Exception as md_err:
-        logger.warning(f"Telegram Markdown send failed; retrying plain text: {md_err}")
+        logger.warning(f"Telegram {parse_mode} send failed; retrying plain text: {md_err}")
 
     try:
         resp = httpx.post(

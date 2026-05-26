@@ -26,14 +26,14 @@ if failed_channels:
         channel_label = "Tell Me Why" if ch == "stories" else "Kurrent Affairs"
         reauth_url = youtube_service._auth_url(ch)
         alert = (
-            f"🔴 *YouTube token expired — {channel_label} needs re-auth*\n\n"
+            f"🔴 <b>YouTube token expired — {channel_label} needs re-auth</b>\n\n"
             f"Tap to reconnect (takes 10 seconds, no server needed):\n"
-            f"[Re-authenticate {channel_label} →]({reauth_url})\n\n"
-            f"_Auto-posting resumes automatically after you authenticate._\n"
-            f"_This alert will not repeat until you do._"
+            f'<a href="{reauth_url}">Re-authenticate {channel_label} →</a>\n\n'
+            f"<i>Auto-posting resumes automatically after you authenticate.</i>\n"
+            f"<i>This alert will not repeat until you do.</i>"
         )
         try:
-            telegram_service.send_message(get_chat_id(ch), alert, channel_id=ch)
+            telegram_service.send_message(get_chat_id(ch), alert, channel_id=ch, parse_mode="HTML")
             firestore_service.mark_auth_failure(ch)
         except Exception:
             pass
