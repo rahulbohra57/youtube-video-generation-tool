@@ -63,8 +63,7 @@ class handler(BaseHTTPRequestHandler):
             if "error" in token:
                 raise RuntimeError(token.get("error_description", token["error"]))
 
-            existing = firestore_service.get_youtube_tokens(channel_id="news") or {}
-            refresh_token = token.get("refresh_token") or existing.get("refresh_token")
+            refresh_token = token.get("refresh_token")
             expires_in = int(token.get("expires_in", 3600))
             token_expiry = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
 
