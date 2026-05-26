@@ -1096,6 +1096,7 @@ def test_stories_daily_digest_uses_stories_queue_only(mock_fs, mock_get_channel_
     mock_fs.get_queue_snapshot.return_value = {"completed_24h": 1, "failed_24h": 0}
     mock_fs.get_tts_chars_today.return_value = 5000
     mock_fs.get_tts_chars_this_month.return_value = 100
+    mock_fs.get_top_performers.return_value = []
 
     from app.routes import stories
     stories._send_stories_daily_digest()
