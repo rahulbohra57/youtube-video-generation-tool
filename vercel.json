@@ -1,6 +1,6 @@
 {
   "functions": {
-    "api/**": { "maxDuration": 30 }
+    "api/**/*.py": { "maxDuration": 30 }
   },
   "rewrites": [
     { "source": "/admin", "destination": "/admin.html" },
