@@ -62,12 +62,17 @@ def set_pipeline_state(batch_id: str, state: str, channel_id: str = "news"):
 
 
 def set_pipeline_and_batch_state(batch_id: str, state: str, channel_id: str = "news"):
-    """Atomically update pipeline_state and news_batches status in a single Firestore batch write."""
+    """Update pipeline_state and news_batches status.
+
+    Uses set+merge for news_batches so the write never fails on a missing document —
+    pipeline_state is always cleared even if the batch doc was already cleaned up.
+    """
     db = _get_db()
     wb = db.batch()
-    wb.update(
+    wb.set(
         db.collection("news_batches").document(batch_id),
         {"status": state},
+        merge=True,
     )
     wb.set(
         db.collection("pipeline_state").document(channel_id),

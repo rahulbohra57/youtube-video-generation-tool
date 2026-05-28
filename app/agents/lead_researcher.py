@@ -398,7 +398,11 @@ def run() -> str | None:
 
         if is_stale:
             logger.warning("Clearing stale news pipeline (batch %s, last_run_at %s)", stale_batch_id, last_run_str)
-            firestore_service.set_pipeline_and_batch_state(stale_batch_id, "failed")
+            try:
+                firestore_service.set_pipeline_and_batch_state(stale_batch_id, "failed")
+            except Exception as _stale_err:
+                logger.warning("set_pipeline_and_batch_state failed during stale clear (%s) — clearing pipeline_state directly", _stale_err)
+                firestore_service.set_pipeline_state(stale_batch_id, "failed")
             send_message(
                 TELEGRAM_CHAT_ID,
                 f"⚠️ Stale pipeline cleared — batch `{stale_batch_id}` was stuck for 4+ hours. Retrying now...",

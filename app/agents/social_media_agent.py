@@ -143,6 +143,10 @@ def _finalize_pipeline_state(job_id: str, channel_id: str = "news"):
         state = firestore_service.get_pipeline_state(channel_id=channel_id)
         batch_id = state.get("active_batch_id")
         if batch_id:
-            _set_pipeline_and_batch_state(batch_id, "completed", channel_id=channel_id)
+            try:
+                _set_pipeline_and_batch_state(batch_id, "completed", channel_id=channel_id)
+            except Exception as _batch_err:
+                logger.warning("set_pipeline_and_batch_state failed (%s) — clearing pipeline_state directly", _batch_err)
+                firestore_service.set_pipeline_state(batch_id, "completed", channel_id=channel_id)
     except Exception as e:
         logger.warning(f"Failed to finalize pipeline state: {e}")
