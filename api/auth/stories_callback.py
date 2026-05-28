@@ -1,8 +1,11 @@
 """Vercel serverless function — OAuth callback for the Stories (Tell Me Why) channel."""
 import os
 import json
+import base64
+import time
 import urllib.parse
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from http.server import BaseHTTPRequestHandler
 from datetime import datetime, timezone, timedelta
 
@@ -11,7 +14,6 @@ import httpx
 logger = logging.getLogger(__name__)
 
 _TOKEN_URI = "https://oauth2.googleapis.com/token"
-_GCP_TOKEN_URI = "https://oauth2.googleapis.com/token"
 _PROJECT_ID = "youtube-video-generator-492211"
 _FS_BASE = f"https://firestore.googleapis.com/v1/projects/{_PROJECT_ID}/databases/(default)/documents"
 
@@ -24,38 +26,82 @@ def _html(title: str, body: str) -> bytes:
 </head><body>{body}</body></html>""".encode()
 
 
+def _b64url(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+
 def _get_gcp_access_token() -> str:
-    """Mint a GCP access token from the service account JSON — no SDK, no gRPC."""
-    from google.oauth2 import service_account
-    from google.auth.transport.requests import Request as GoogleRequest
+    """Mint a GCP service-account access token using a hand-rolled RS256 JWT.
+
+    Avoids importing google.oauth2.service_account and google.auth.transport
+    (both are heavy cold-start importers). Uses only cryptography + httpx,
+    which are already present in the process.
+    """
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import padding as asym_padding
+
     key = json.loads(os.getenv("GCP_SERVICE_ACCOUNT_JSON", "{}"))
-    creds = service_account.Credentials.from_service_account_info(
-        key, scopes=["https://www.googleapis.com/auth/datastore"]
+    now = int(time.time())
+
+    header = _b64url(json.dumps({"alg": "RS256", "typ": "JWT"}).encode())
+    payload = _b64url(json.dumps({
+        "iss": key["client_email"],
+        "scope": "https://www.googleapis.com/auth/datastore",
+        "aud": _TOKEN_URI,
+        "iat": now,
+        "exp": now + 3600,
+    }).encode())
+
+    signing_input = f"{header}.{payload}".encode()
+    private_key = serialization.load_pem_private_key(key["private_key"].encode(), password=None)
+    sig = _b64url(private_key.sign(signing_input, asym_padding.PKCS1v15(), hashes.SHA256()))
+
+    resp = httpx.post(
+        _TOKEN_URI,
+        data={"grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer", "assertion": f"{header}.{payload}.{sig}"},
+        timeout=8,
     )
-    creds.refresh(GoogleRequest())
-    return creds.token
+    resp.raise_for_status()
+    return resp.json()["access_token"]
 
 
-def _save_tokens_rest(tokens: dict, doc_name: str) -> None:
-    """Write tokens to Firestore via REST API (avoids heavy gRPC SDK cold-start)."""
-    access_token = _get_gcp_access_token()
+def _exchange_youtube_code(code: str, client_id: str, client_secret: str, redirect_uri: str) -> dict:
+    resp = httpx.post(
+        _TOKEN_URI,
+        data={
+            "code": code,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "redirect_uri": redirect_uri,
+            "grant_type": "authorization_code",
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        timeout=8,
+    )
+    token = resp.json()
+    if "error" in token:
+        raise RuntimeError(token.get("error_description", token["error"]))
+    return token
+
+
+def _save_tokens_rest(tokens: dict, doc_name: str, access_token: str) -> None:
     fields = {k: {"stringValue": str(v)} for k, v in tokens.items() if v is not None}
-    url = f"{_FS_BASE}/oauth_tokens/{doc_name}"
     resp = httpx.patch(
-        url,
+        f"{_FS_BASE}/oauth_tokens/{doc_name}",
         json={"fields": fields},
         headers={"Authorization": f"Bearer {access_token}"},
         timeout=8,
     )
     resp.raise_for_status()
-    return access_token
 
 
 def _clear_auth_failure_rest(channel_id: str, access_token: str) -> None:
-    """Delete the auth_failure config doc so run_refresh_auth.py stops skipping this channel."""
-    url = f"{_FS_BASE}/config/auth_failure_{channel_id}"
     try:
-        httpx.delete(url, headers={"Authorization": f"Bearer {access_token}"}, timeout=5)
+        httpx.delete(
+            f"{_FS_BASE}/config/auth_failure_{channel_id}",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=5,
+        )
     except Exception:
         pass  # Non-critical — worst case the refresh workflow retries in 6h
 
@@ -81,33 +127,25 @@ class handler(BaseHTTPRequestHandler):
         redirect_uri = os.getenv("STORIES_YOUTUBE_REDIRECT_URI", "")
 
         try:
-            resp = httpx.post(
-                _TOKEN_URI,
-                data={
-                    "code": code,
-                    "client_id": client_id,
-                    "client_secret": client_secret,
-                    "redirect_uri": redirect_uri,
-                    "grant_type": "authorization_code",
-                },
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-                timeout=8,
-            )
-            token = resp.json()
-            if "error" in token:
-                raise RuntimeError(token.get("error_description", token["error"]))
+            # Run YouTube code exchange and GCP token mint in parallel — both are
+            # independent HTTP calls and were previously sequential (~1s wasted).
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                yt_future = pool.submit(_exchange_youtube_code, code, client_id, client_secret, redirect_uri)
+                gcp_future = pool.submit(_get_gcp_access_token)
+                token = yt_future.result()
+                gcp_token = gcp_future.result()
 
             refresh_token = token.get("refresh_token")
             expires_in = int(token.get("expires_in", 3600))
             token_expiry = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
 
-            gcp_token = _save_tokens_rest({
+            _save_tokens_rest({
                 "access_token": token["access_token"],
                 "refresh_token": refresh_token,
                 "token_expiry": token_expiry,
                 "client_id": client_id,
                 "client_secret": client_secret,
-            }, doc_name="youtube_stories")
+            }, doc_name="youtube_stories", access_token=gcp_token)
             _clear_auth_failure_rest("stories", gcp_token)
 
             body = _html(
