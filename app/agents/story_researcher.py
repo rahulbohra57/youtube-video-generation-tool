@@ -8,7 +8,7 @@ import re
 import random
 import hashlib
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 
 from app.services import firestore_service
@@ -102,14 +102,36 @@ def run() -> str | None:
 
     state = firestore_service.get_pipeline_state(channel_id="stories")
     if state.get("state") == "processing":
-        logger.info("Tell Me Why pipeline busy — skipping this run")
-        send_message(
-            STORIES_CHAT_ID,
-            f"⏭️ Tell Me Why scheduler slot skipped — pipeline is busy processing batch "
-            f"`{state.get('active_batch_id', '?')}`.",
-            channel_id="stories",
-        )
-        return None
+        stale_batch_id = state.get("active_batch_id", "?")
+        last_run_str = state.get("last_run_at", "")
+        is_stale = False
+        if last_run_str:
+            try:
+                last_run = datetime.fromisoformat(last_run_str.replace("Z", "+00:00"))
+                if last_run.tzinfo is None:
+                    last_run = last_run.replace(tzinfo=timezone.utc)
+                is_stale = (datetime.now(timezone.utc) - last_run) > timedelta(hours=4)
+            except Exception:
+                pass
+
+        if is_stale:
+            logger.warning("Clearing stale Tell Me Why pipeline (batch %s, last_run_at %s)", stale_batch_id, last_run_str)
+            firestore_service.set_pipeline_and_batch_state(stale_batch_id, "failed", channel_id="stories")
+            send_message(
+                STORIES_CHAT_ID,
+                f"⚠️ Stale pipeline cleared — batch `{stale_batch_id}` was stuck for 4+ hours. Retrying now...",
+                channel_id="stories",
+            )
+            # Fall through and generate a new video for this slot
+        else:
+            logger.info("Tell Me Why pipeline busy — skipping this run")
+            send_message(
+                STORIES_CHAT_ID,
+                f"⏭️ Tell Me Why scheduler slot skipped — pipeline is busy processing batch "
+                f"`{stale_batch_id}`.",
+                channel_id="stories",
+            )
+            return None
 
     language = "en"
     recently_used = _recently_used_titles()

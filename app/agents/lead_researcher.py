@@ -384,15 +384,37 @@ def run() -> str | None:
 
     state = firestore_service.get_pipeline_state() or {}
     if state.get("state") == "processing":
-        slot_domain = _get_slot_domain(firestore_service.get_domain_schedule())
-        send_message(
-            TELEGRAM_CHAT_ID,
-            f"⏭️ Scheduler slot skipped — pipeline is busy processing batch "
-            f"`{state.get('active_batch_id', '?')}`. "
-            f"Assigned domain for this slot: *{slot_domain}*.",
-            channel_id="news",
-        )
-        return None
+        stale_batch_id = state.get("active_batch_id", "?")
+        last_run_str = state.get("last_run_at", "")
+        is_stale = False
+        if last_run_str:
+            try:
+                last_run = datetime.fromisoformat(last_run_str.replace("Z", "+00:00"))
+                if last_run.tzinfo is None:
+                    last_run = last_run.replace(tzinfo=timezone.utc)
+                is_stale = (datetime.now(timezone.utc) - last_run) > timedelta(hours=4)
+            except Exception:
+                pass
+
+        if is_stale:
+            logger.warning("Clearing stale news pipeline (batch %s, last_run_at %s)", stale_batch_id, last_run_str)
+            firestore_service.set_pipeline_and_batch_state(stale_batch_id, "failed")
+            send_message(
+                TELEGRAM_CHAT_ID,
+                f"⚠️ Stale pipeline cleared — batch `{stale_batch_id}` was stuck for 4+ hours. Retrying now...",
+                channel_id="news",
+            )
+            # Fall through and run this slot normally
+        else:
+            slot_domain = _get_slot_domain(firestore_service.get_domain_schedule())
+            send_message(
+                TELEGRAM_CHAT_ID,
+                f"⏭️ Scheduler slot skipped — pipeline is busy processing batch "
+                f"`{stale_batch_id}`. "
+                f"Assigned domain for this slot: *{slot_domain}*.",
+                channel_id="news",
+            )
+            return None
 
     lookback_hours = 24
     from_date = (

@@ -48,6 +48,16 @@ def _save_tokens_rest(tokens: dict, doc_name: str) -> None:
         timeout=8,
     )
     resp.raise_for_status()
+    return access_token
+
+
+def _clear_auth_failure_rest(channel_id: str, access_token: str) -> None:
+    """Delete the auth_failure config doc so run_refresh_auth.py stops skipping this channel."""
+    url = f"{_FS_BASE}/config/auth_failure_{channel_id}"
+    try:
+        httpx.delete(url, headers={"Authorization": f"Bearer {access_token}"}, timeout=5)
+    except Exception:
+        pass  # Non-critical — worst case the refresh workflow retries in 6h
 
 
 class handler(BaseHTTPRequestHandler):
@@ -91,13 +101,14 @@ class handler(BaseHTTPRequestHandler):
             expires_in = int(token.get("expires_in", 3600))
             token_expiry = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
 
-            _save_tokens_rest({
+            gcp_token = _save_tokens_rest({
                 "access_token": token["access_token"],
                 "refresh_token": refresh_token,
                 "token_expiry": token_expiry,
                 "client_id": client_id,
                 "client_secret": client_secret,
             }, doc_name="youtube_stories")
+            _clear_auth_failure_rest("stories", gcp_token)
 
             body = _html(
                 "Auth Complete",
