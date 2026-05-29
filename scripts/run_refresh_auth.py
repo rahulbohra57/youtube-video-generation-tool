@@ -25,10 +25,13 @@ if failed_channels:
     for ch in failed_channels:
         channel_label = "Tell Me Why" if ch == "stories" else "Kurrent Affairs"
         reauth_url = youtube_service._auth_url(ch)
+        local_script = "auth_stories_local.py" if ch == "stories" else "auth_news_local.py"
         alert = (
             f"🔴 <b>YouTube token expired — {channel_label} needs re-auth</b>\n\n"
-            f"Tap to reconnect (takes 10 seconds, no server needed):\n"
+            f"Option 1 — browser (no server needed):\n"
             f'<a href="{reauth_url}">Re-authenticate {channel_label} →</a>\n\n'
+            f"Option 2 — run locally if the link above fails:\n"
+            f"<code>export $(grep -v '^#' .env | xargs)\npython scripts/{local_script}</code>\n\n"
             f"<i>Auto-posting resumes automatically after you authenticate.</i>\n"
             f"<i>This alert will not repeat until you do.</i>"
         )
