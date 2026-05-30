@@ -351,7 +351,7 @@ def request_job_cancel(job_id: str, requested_by: str = "telegram") -> bool:
         return False
 
 
-def list_recent_jobs(limit: int = 50) -> list[dict]:
+def list_recent_jobs(limit: int = 50, channel_id: str | None = None) -> list[dict]:
     docs = (
         _get_db()
         .collection("jobs")
@@ -364,6 +364,8 @@ def list_recent_jobs(limit: int = 50) -> list[dict]:
         data = d.to_dict() or {}
         data["job_id"] = d.id
         rows.append(data)
+    if channel_id:
+        rows = [r for r in rows if r.get("channel_id", "news") == channel_id]
     return rows
 
 
@@ -670,10 +672,10 @@ def get_top_performers(n: int = 3, days: int | None = None, channel_id: str = "n
         return []
 
 
-def get_failed_auto_jobs(max_age_hours: int = 12) -> list[dict]:
+def get_failed_auto_jobs(max_age_hours: int = 12, channel_id: str | None = None) -> list[dict]:
     """Return recent auto-generated failed jobs that haven't been retried yet."""
     try:
-        all_jobs = list_recent_jobs(limit=50)
+        all_jobs = list_recent_jobs(limit=50, channel_id=channel_id)
         now_ts = datetime.now(timezone.utc).timestamp()
         result = []
         for data in all_jobs:

@@ -289,10 +289,10 @@ def send_daily_digest():
         t = top[0]
         top_line = f"\n\n🏆 Weekly Top Video: _{t['topic']}_ ({t['view_count']:,} views)"
 
-    # Failed jobs awaiting manual re-send
-    failed_jobs = firestore_service.get_failed_auto_jobs(max_age_hours=24)
+    # Failed jobs awaiting manual re-send — scoped to news channel only
+    failed_jobs = firestore_service.get_failed_auto_jobs(max_age_hours=24, channel_id="news")
     delivered_manual = [
-        j for j in firestore_service.list_recent_jobs(limit=50)
+        j for j in firestore_service.list_recent_jobs(limit=50, channel_id="news")
         if j.get("status") == "delivered_manual"
         and _parse_iso(j.get("updated_at")) and
         (datetime.now(timezone.utc) - _parse_iso(j.get("updated_at")).astimezone(timezone.utc)).total_seconds() < 86400
