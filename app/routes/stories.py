@@ -67,15 +67,50 @@ def _send_stories_daily_digest():
     prev_window_start = current_window_start - timedelta(hours=24)
 
     queue = firestore_service.get_queue_snapshot(window_start=prev_window_start, channel_id="stories")
+    quota = firestore_service.get_quota_usage_snapshot()
     tts_chars_today = firestore_service.get_tts_chars_today(window_start=prev_window_start, channel_id="stories")
     tts_chars_month = firestore_service.get_tts_chars_this_month(channel_id="stories")
     tts_pct = round((tts_chars_month / 1_000_000) * 100, 1)
+
+    # Slot coverage: show the categories of completed stories jobs from yesterday
+    yesterday_jobs = [
+        j for j in firestore_service.list_recent_jobs(limit=50, channel_id="stories")
+        if j.get("status") in ("completed", "delivered_manual")
+        and j.get("updated_at")
+        and (datetime.now(timezone.utc) - _parse_iso_utc(j.get("updated_at"))).total_seconds() < 86400
+    ]
+    slot_lines = []
+    for j in sorted(yesterday_jobs, key=lambda x: x.get("updated_at", ""))[:6]:
+        genre = (j.get("genre") or "unknown").title()
+        slot_lines.append(f"  ✅ {genre}")
+    if not slot_lines:
+        slot_lines = ["  ⬜ No videos generated"]
 
     top = firestore_service.get_top_performers(n=1, days=7, channel_id="stories")
     top_line = ""
     if top:
         t = top[0]
         top_line = f"\n\n🏆 Weekly Top Video: _{t['topic']}_ ({t['view_count']:,} views)"
+
+    # Failed / delivered_manual jobs needing attention
+    failed_jobs = firestore_service.get_failed_auto_jobs(max_age_hours=24, channel_id="stories")
+    delivered_manual = [
+        j for j in firestore_service.list_recent_jobs(limit=50, channel_id="stories")
+        if j.get("status") == "delivered_manual"
+        and j.get("updated_at")
+        and (datetime.now(timezone.utc) - _parse_iso_utc(j.get("updated_at"))).total_seconds() < 86400
+    ]
+    failed_lines = ""
+    if failed_jobs or delivered_manual:
+        failed_lines = "\n\n⚠️ Jobs Needing Attention\n"
+        for j in failed_jobs[:5]:
+            pid = j.get("public_id", j.get("job_id", "?"))
+            failed_lines += f"  ❌ Failed: `{pid}` — {j.get('topic', '')[:40]}\n"
+        for j in delivered_manual[:5]:
+            pid = j.get("public_id", j.get("job_id", "?"))
+            failed_lines += f"  📤 Manual: `{pid}` — {j.get('topic', '')[:40]}\n"
+        failed_lines = failed_lines.rstrip()
+        failed_lines += "\n  _(Use RESEND <id> to re-send to Telegram)_"
 
     message = (
         f"📅 Tell Me Why Daily Report — {now_ist.strftime('%d %b %Y, %I:%M %p IST')}\n\n"
@@ -85,12 +120,25 @@ def _send_stories_daily_digest():
         f"  Videos: {int(yt.get('video_count', 0))}\n\n"
         f"⚙️ Pipeline (24h)\n"
         f"  Completed: {queue.get('completed_24h', 0)}\n"
-        f"  Failed: {queue.get('failed_24h', 0)}\n\n"
+        f"  Failed: {queue.get('failed_24h', 0)}\n"
+        f"  Quota errors: {quota.get('quota_errors_24h', 0)}\n"
+        f"  Quota pressure: {quota.get('pressure', 'unknown')}\n\n"
         f"📊 TTS Usage Today\n"
-        f"  {tts_chars_today:,} today | {tts_chars_month:,} this month ({tts_pct}% of 1M free tier)"
-        f"{top_line}"
+        f"  {tts_chars_today:,} today | {tts_chars_month:,} this month ({tts_pct}% of 1M free tier)\n\n"
+        f"🗂️ Categories Yesterday\n"
+        + "\n".join(slot_lines)
+        + top_line
+        + failed_lines
     )
     telegram_service.send_message(STORIES_CHAT_ID, message, channel_id="stories")
+
+
+def _parse_iso_utc(dt_str: str) -> datetime:
+    try:
+        dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+        return dt.astimezone(timezone.utc) if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except Exception:
+        return datetime.now(timezone.utc)
 
 
 @router.post("/generate/stories-task")
