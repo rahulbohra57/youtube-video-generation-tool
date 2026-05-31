@@ -289,16 +289,21 @@ def send_daily_digest():
         t = top[0]
         top_line = f"\n\n🏆 Weekly Top Video: _{t['topic']}_ ({t['view_count']:,} views)"
 
-    # Failed jobs awaiting manual re-send — scoped to news channel only
-    failed_jobs = firestore_service.get_failed_auto_jobs(max_age_hours=24, channel_id="news")
+    # Failed jobs awaiting manual re-send — scoped to news channel only, not yet notified
+    failed_jobs = [
+        j for j in firestore_service.get_failed_auto_jobs(max_age_hours=24, channel_id="news")
+        if not j.get("digest_notified")
+    ]
     delivered_manual = [
         j for j in firestore_service.list_recent_jobs(limit=50, channel_id="news")
         if j.get("status") == "delivered_manual"
+        and not j.get("digest_notified")
         and _parse_iso(j.get("updated_at")) and
         (datetime.now(timezone.utc) - _parse_iso(j.get("updated_at")).astimezone(timezone.utc)).total_seconds() < 86400
     ]
+    attention_jobs = failed_jobs[:5] + delivered_manual[:5]
     failed_lines = ""
-    if failed_jobs or delivered_manual:
+    if attention_jobs:
         failed_lines = "\n\n⚠️ Jobs Needing Attention\n"
         for j in failed_jobs[:5]:
             pid = j.get("public_id", j.get("job_id", "?"))
@@ -330,6 +335,13 @@ def send_daily_digest():
         + failed_lines
     )
     send_message(TELEGRAM_CHAT_ID, message, channel_id="news")
+
+    # Mark shown attention jobs so they don't reappear in future digests
+    for j in attention_jobs:
+        try:
+            firestore_service.create_or_update_job(j["job_id"], {"digest_notified": True})
+        except Exception:
+            pass
 
 
 

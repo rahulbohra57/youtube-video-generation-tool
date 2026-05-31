@@ -118,11 +118,21 @@ def _send_stories_daily_digest():
         t = top[0]
         top_line = f"\n\n🏆 Weekly Top Video: _{t['topic']}_ ({t['view_count']:,} views)"
 
-    # Failed / delivered_manual jobs needing attention — fact jobs only
-    failed_jobs = [j for j in fact_jobs if j.get("status") == "failed" and j.get("updated_at") and _parse_iso_utc(j.get("updated_at")).timestamp() >= window_ts and not j.get("retry_attempted")]
-    delivered_manual = [j for j in fact_24h if j.get("status") == "delivered_manual"]
+    # Failed / delivered_manual jobs needing attention — fact jobs only, not yet notified
+    failed_jobs = [
+        j for j in fact_jobs
+        if j.get("status") == "failed"
+        and j.get("updated_at") and _parse_iso_utc(j.get("updated_at")).timestamp() >= window_ts
+        and not j.get("retry_attempted")
+        and not j.get("digest_notified")
+    ]
+    delivered_manual = [
+        j for j in fact_24h
+        if j.get("status") == "delivered_manual" and not j.get("digest_notified")
+    ]
+    attention_jobs = failed_jobs[:5] + delivered_manual[:5]
     failed_lines = ""
-    if failed_jobs or delivered_manual:
+    if attention_jobs:
         failed_lines = "\n\n⚠️ Jobs Needing Attention\n"
         for j in failed_jobs[:5]:
             pid = j.get("public_id", j.get("job_id", "?"))
@@ -153,6 +163,13 @@ def _send_stories_daily_digest():
         + failed_lines
     )
     telegram_service.send_message(STORIES_CHAT_ID, message, channel_id="stories")
+
+    # Mark shown attention jobs so they don't reappear in future digests
+    for j in attention_jobs:
+        try:
+            firestore_service.create_or_update_job(j["job_id"], {"digest_notified": True})
+        except Exception:
+            pass
 
 
 def _parse_iso_utc(dt_str: str) -> datetime:
