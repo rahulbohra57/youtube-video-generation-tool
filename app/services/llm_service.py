@@ -12,10 +12,14 @@ logger = logging.getLogger(__name__)
 _model = None
 
 
+_GCP_PROJECT = "youtube-video-generator-492211"
+_GCP_LOCATION = "us-central1"
+
+
 def _get_model() -> GenerativeModel:
     global _model
     if _model is None:
-        vertexai.init()
+        vertexai.init(project=_GCP_PROJECT, location=_GCP_LOCATION)
         _model = GenerativeModel("gemini-2.5-flash")
     return _model
 

@@ -52,7 +52,7 @@ def test_generate_image_uses_16x9_by_default():
     mock_model.generate_images.return_value = [mock_img]
     mock_img.save = MagicMock()
 
-    with patch("app.services.image_service.model", mock_model), \
+    with patch("app.services.image_service._get_model", return_value=mock_model), \
          patch("app.services.image_service.ensure_dir"):
         from app.services.image_service import generate_image
         generate_image("a robot", 0)
@@ -69,7 +69,7 @@ def test_generate_image_uses_9x16_ratio():
     mock_model.generate_images.return_value = [mock_img]
     mock_img.save = MagicMock()
 
-    with patch("app.services.image_service.model", mock_model), \
+    with patch("app.services.image_service._get_model", return_value=mock_model), \
          patch("app.services.image_service.ensure_dir"):
         from app.services.image_service import generate_image
         generate_image("a robot", 0, aspect_ratio="9:16")

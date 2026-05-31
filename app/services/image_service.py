@@ -12,10 +12,20 @@ from PIL import Image, ImageDraw
 # highest image quality and prompt adherence. 20 QPM quota is sufficient for
 # 5-scene videos. Exponential backoff handles occasional rate-limit spikes.
 MODEL_NAME = "imagen-3.0-generate-002"
+_GCP_PROJECT = "youtube-video-generator-492211"
+_GCP_LOCATION = "us-central1"
 
 ensure_dir(TEMP_DIR)
 
-model = ImageGenerationModel.from_pretrained(MODEL_NAME)
+_model = None
+
+
+def _get_model() -> ImageGenerationModel:
+    global _model
+    if _model is None:
+        vertexai.init(project=_GCP_PROJECT, location=_GCP_LOCATION)
+        _model = ImageGenerationModel.from_pretrained(MODEL_NAME)
+    return _model
 
 # Retry delays (seconds) for Imagen quota / rate-limit errors (429).
 # Quota window is 1 minute, so each wait must be long enough for the bucket
@@ -86,7 +96,7 @@ def generate_image(prompt: str, idx: int, aspect_ratio: str = "16:9") -> str:
 
     for attempt, wait in enumerate(_QUOTA_RETRY_DELAYS, start=1):
         try:
-            images = model.generate_images(
+            images = _get_model().generate_images(
                 prompt=enhanced_prompt,
                 number_of_images=1,
                 aspect_ratio=aspect_ratio,

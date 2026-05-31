@@ -241,8 +241,9 @@ def test_generate_fallback_image_creates_local_png():
     assert os.path.exists(out)
 
 
-@patch("app.services.image_service.model")
-def test_generate_image_empty_response_raises_safety_filter(mock_model):
+@patch("app.services.image_service._get_model")
+def test_generate_image_empty_response_raises_safety_filter(mock_get_model):
+    mock_model = mock_get_model.return_value
     class _EmptyTruthy:
         def __bool__(self):
             return True
