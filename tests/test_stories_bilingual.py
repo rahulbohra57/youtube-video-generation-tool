@@ -125,15 +125,11 @@ def test_generate_stories_task_route_passes_language_to_generator():
 # ── English safety-filter fallback ──────────────────────────────────────────
 
 def test_english_story_safety_fallback_uses_sketch_prompt():
-    """When an English story scene is safety-filtered, the sketch/illustration fallback prompt is used."""
+    """Each Tell Me Why fact category has a safe fallback prompt with an illustration/design descriptor."""
     from app.agents.generator_agent import _STORY_GENRE_SAFE_PROMPTS_EN
-    expected_genres = {
-        "inspiring", "heartfelt", "comedy", "crime", "action",
-        "sci-fi", "mythology", "thriller", "mystery",
-        "adventure", "slice-of-life", "historical",
-    }
-    assert set(_STORY_GENRE_SAFE_PROMPTS_EN.keys()) == expected_genres
-    sketch_terms = {"illustration", "sketch", "graphic novel", "storybook", "watercolor", "pencil", "charcoal"}
+    from app.agents.story_researcher import _FACT_CATEGORIES
+    assert set(_STORY_GENRE_SAFE_PROMPTS_EN.keys()) == set(_FACT_CATEGORIES)
+    style_terms = {"illustration", "sketch", "graphic novel", "storybook", "watercolor", "pencil", "charcoal", "flat-design", "flat design"}
     for genre, prompt in _STORY_GENRE_SAFE_PROMPTS_EN.items():
-        has_sketch = any(term in prompt.lower() for term in sketch_terms)
-        assert has_sketch, f"Genre '{genre}' fallback missing sketch/illustration descriptor: {prompt}"
+        has_style = any(term in prompt.lower() for term in style_terms)
+        assert has_style, f"Genre '{genre}' fallback missing style descriptor: {prompt}"
