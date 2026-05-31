@@ -94,7 +94,7 @@ def generate_image(prompt: str, idx: int, aspect_ratio: str = "16:9") -> str:
                     "trademark logo, brand logo, embedded text, readable words, "
                     "captions, watermark, text overlay, subtitles"
                 ),
-                safety_filter_level="block_few",
+                safety_filter_level="block_fewest",
                 person_generation="allow_adult",
             )
 

@@ -62,21 +62,22 @@ _STORY_GENRE_SAFE_PROMPTS = {
 }
 
 
-# English-story safe fallback prompts — realistic/photorealistic style.
-# Used when an English story scene is rejected by Imagen's safety filter.
+# Safe fallback prompts for Tell Me Why (English facts) channel.
+# Keyed by the 12 fact categories used in story_researcher._FACT_CATEGORIES.
+# Used when an image prompt is rejected by Imagen's safety filter.
 _STORY_GENRE_SAFE_PROMPTS_EN = {
-    "inspiring": "Vibrant storybook illustration, bold outlines — a young person planting a seedling in golden morning light, hopeful smile, warm colors, no text, no words",
-    "heartfelt": "Soft pencil sketch illustration, warm golden tones — two friends sharing tea at a sunlit window, gentle expressions, no text, no words",
-    "comedy": "Bold graphic novel style, vivid palette — a person stumbling over a garden hose while a dog watches with amusement, playful scene, no text, no words",
-    "crime": "Charcoal sketch with watercolor wash — a determined detective at a cluttered desk under a glowing lamp, moody warm atmosphere, no text, no words",
-    "action": "Vibrant storybook illustration, bold outlines — a figure sprinting across a sunlit field, motion lines, dynamic energy, no text, no words",
-    "sci-fi": "Bold graphic novel style, cool blue palette — a scientist holding a glowing holographic sphere in a bright laboratory, wonder on their face, no text, no words",
-    "mythology": "Soft pencil sketch illustration, golden tones — a sage meditating beneath an ancient stone temple in morning mist, serene atmosphere, no text, no words",
-    "thriller": "Charcoal sketch with watercolor wash, warm amber — a curious figure holding a lantern on a cobblestone path at dusk, no text, no words",
-    "mystery": "Children's book illustration style, warm pastels — a child peering into an old wooden chest in a sunlit attic, curious expression, no text, no words",
-    "adventure": "Vibrant storybook illustration, bold outlines — a hiker at a mountain viewpoint at sunrise studying a map, vast green valley below, no text, no words",
-    "slice-of-life": "Soft pencil sketch illustration, warm tones — a family sharing breakfast at a bright kitchen table, warm morning sunlight, genuine smiles, no text, no words",
-    "historical": "Soft pencil sketch illustration, muted sepia tones — a scholar in traditional robes in an ancient palace courtyard with blossoming trees, serene and regal, no text, no words",
+    "science & space": "Vibrant flat-design illustration — a telescope pointed at a starry night sky, glowing planets in the background, warm cosmic colors, no text, no words",
+    "history & civilizations": "Soft pencil sketch illustration, muted sepia tones — an ancient stone archway leading to a sunlit marketplace, people in traditional robes, serene atmosphere, no text, no words",
+    "human body & biology": "Clean flat-design infographic style — a glowing human silhouette with colorful abstract shapes representing cells and organs, bright blue-green palette, no text, no words",
+    "technology & ai": "Bold graphic novel style, cool blue palette — a scientist holding a glowing holographic sphere in a bright modern laboratory, wonder on their face, no text, no words",
+    "health & fitness": "Vibrant storybook illustration — a person stretching at sunrise on a hilltop overlooking a green valley, energetic and joyful, warm colors, no text, no words",
+    "psychology & dark psychology": "Soft pencil sketch, cool blue-grey tones — a lone figure looking at their own reflection in a still lake, abstract swirling shapes behind them, no text, no words",
+    "relationships & dating": "Soft watercolor illustration, warm golden tones — two friends sharing tea at a sunlit window, gentle expressions, no text, no words",
+    "self-improvement & habits": "Vibrant storybook illustration, bold outlines — a young person planting a seedling in golden morning light, hopeful smile, warm colors, no text, no words",
+    "business & finance": "Clean flat-design illustration — stacked coins and a rising graph on a wooden desk beside a coffee cup, warm morning light, no text, no words",
+    "culture & society": "Vibrant flat-design illustration — a diverse group of illustrated figures standing together under a colorful mosaic arch, joyful atmosphere, no text, no words",
+    "philosophy & life": "Soft pencil sketch illustration, warm golden tones — a figure sitting on a cliff edge at sunset gazing at the horizon, contemplative mood, no text, no words",
+    "mysteries & unexplained": "Bold graphic novel style, deep navy and amber palette — a lone explorer with a lantern inside a vast ancient cave with glowing rock formations, no text, no words",
 }
 
 
@@ -454,9 +455,10 @@ def run(
                         if language == "en"
                         else _STORY_GENRE_SAFE_PROMPTS
                     )
+                    _default_safe = next(iter(_safe_prompts.values()))
                     fallback_visual = _safe_prompts.get(
-                        (genre or "inspiring").lower(),
-                        _safe_prompts["inspiring"],
+                        (genre or "").lower(),
+                        _default_safe,
                     )
                     try:
                         image_path, image_retries = _run_with_backoff(
