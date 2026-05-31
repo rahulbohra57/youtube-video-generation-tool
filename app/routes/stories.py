@@ -66,20 +66,31 @@ def _send_stories_daily_digest():
     current_window_start = firestore_service._ist_window_start()
     prev_window_start = current_window_start - timedelta(hours=24)
 
-    queue = firestore_service.get_queue_snapshot(window_start=prev_window_start, channel_id="stories")
     quota = firestore_service.get_quota_usage_snapshot()
     tts_chars_today = firestore_service.get_tts_chars_today(window_start=prev_window_start, channel_id="stories")
     tts_chars_month = firestore_service.get_tts_chars_this_month(channel_id="stories")
     tts_pct = round((tts_chars_month / 1_000_000) * 100, 1)
 
-    # Slot coverage: show categories of completed/delivered jobs from yesterday (up to 6)
-    all_recent = firestore_service.list_recent_jobs(limit=100, channel_id="stories")
-    yesterday_jobs = [
-        j for j in all_recent
-        if j.get("status") in ("completed", "delivered_manual")
-        and j.get("updated_at")
-        and (datetime.now(timezone.utc) - _parse_iso_utc(j.get("updated_at"))).total_seconds() < 86400
+    # Scope all pipeline metrics to new-era fact jobs only (genre in _FACT_CATEGORIES)
+    # Old Hindi-stories era jobs still exist in Firestore with genres like "inspiring",
+    # "comedy", etc. — exclude them so the numbers reflect the current facts channel.
+    from app.agents.story_researcher import _FACT_CATEGORIES
+    _fact_set = set(_FACT_CATEGORIES)
+
+    all_recent = firestore_service.list_recent_jobs(limit=500, channel_id="stories")
+    fact_jobs = [j for j in all_recent if (j.get("genre") or "").lower() in _fact_set]
+
+    # Pipeline counts: fact jobs updated in the previous 24h window
+    window_ts = prev_window_start.timestamp()
+    fact_24h = [
+        j for j in fact_jobs
+        if j.get("updated_at") and _parse_iso_utc(j.get("updated_at")).timestamp() >= window_ts
     ]
+    completed_24h = sum(1 for j in fact_24h if j.get("status") == "completed")
+    failed_24h = sum(1 for j in fact_24h if j.get("status") == "failed")
+
+    # Categories Yesterday: fact jobs completed/delivered in previous 24h window
+    yesterday_jobs = [j for j in fact_24h if j.get("status") in ("completed", "delivered_manual")]
     slot_lines = []
     for j in sorted(yesterday_jobs, key=lambda x: x.get("updated_at", ""))[:6]:
         genre = (j.get("genre") or "unknown").title()
@@ -88,14 +99,14 @@ def _send_stories_daily_digest():
         slot_lines = ["  ⬜ No videos generated"]
 
     # 7-day rotation: which of the 12 fact categories have been covered
-    from app.agents.story_researcher import _FACT_CATEGORIES
+    week_ts = (datetime.now(timezone.utc) - timedelta(days=7)).timestamp()
     week_jobs = [
-        j for j in firestore_service.list_recent_jobs(limit=200, channel_id="stories")
+        j for j in fact_jobs
         if j.get("status") in ("completed", "delivered_manual")
         and j.get("updated_at")
-        and (datetime.now(timezone.utc) - _parse_iso_utc(j.get("updated_at"))).total_seconds() < 86400 * 7
+        and _parse_iso_utc(j.get("updated_at")).timestamp() >= week_ts
     ]
-    covered_this_week = {(j.get("genre") or "").lower() for j in week_jobs}
+    covered_this_week = {(j.get("genre") or "").lower() for j in week_jobs} & _fact_set
     uncovered = [c.title() for c in _FACT_CATEGORIES if c not in covered_this_week]
     rotation_line = f"\n\n🔄 Category Rotation (7d): {len(covered_this_week)}/{len(_FACT_CATEGORIES)} covered"
     if uncovered:
@@ -107,14 +118,9 @@ def _send_stories_daily_digest():
         t = top[0]
         top_line = f"\n\n🏆 Weekly Top Video: _{t['topic']}_ ({t['view_count']:,} views)"
 
-    # Failed / delivered_manual jobs needing attention
-    failed_jobs = firestore_service.get_failed_auto_jobs(max_age_hours=24, channel_id="stories")
-    delivered_manual = [
-        j for j in firestore_service.list_recent_jobs(limit=50, channel_id="stories")
-        if j.get("status") == "delivered_manual"
-        and j.get("updated_at")
-        and (datetime.now(timezone.utc) - _parse_iso_utc(j.get("updated_at"))).total_seconds() < 86400
-    ]
+    # Failed / delivered_manual jobs needing attention — fact jobs only
+    failed_jobs = [j for j in fact_jobs if j.get("status") == "failed" and j.get("updated_at") and _parse_iso_utc(j.get("updated_at")).timestamp() >= window_ts and not j.get("retry_attempted")]
+    delivered_manual = [j for j in fact_24h if j.get("status") == "delivered_manual"]
     failed_lines = ""
     if failed_jobs or delivered_manual:
         failed_lines = "\n\n⚠️ Jobs Needing Attention\n"
@@ -134,8 +140,8 @@ def _send_stories_daily_digest():
         f"  Total Views: {int(yt.get('view_count', 0)):,}\n"
         f"  Videos: {int(yt.get('video_count', 0))}\n\n"
         f"⚙️ Pipeline (24h)\n"
-        f"  Completed: {queue.get('completed_24h', 0)}\n"
-        f"  Failed: {queue.get('failed_24h', 0)}\n"
+        f"  Completed: {completed_24h}\n"
+        f"  Failed: {failed_24h}\n"
         f"  Quota errors: {quota.get('quota_errors_24h', 0)}\n"
         f"  Quota pressure: {quota.get('pressure', 'unknown')}\n\n"
         f"📊 TTS Usage Today\n"

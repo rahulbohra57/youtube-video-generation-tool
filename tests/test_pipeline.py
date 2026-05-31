@@ -1093,15 +1093,19 @@ def test_research_run_returns_skipped_when_no_batch(mock_lr):
 def test_stories_daily_digest_uses_stories_queue_only(mock_fs, mock_get_channel_stats, _mock_send_message):
     mock_get_channel_stats.return_value = {"subscriber_count": 1, "view_count": 10, "video_count": 2}
     mock_fs._ist_window_start.return_value = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
-    mock_fs.get_queue_snapshot.return_value = {"completed_24h": 1, "failed_24h": 0}
     mock_fs.get_tts_chars_today.return_value = 5000
     mock_fs.get_tts_chars_this_month.return_value = 100
     mock_fs.get_top_performers.return_value = []
+    mock_fs.get_quota_usage_snapshot.return_value = {"quota_errors_24h": 0, "pressure": "low"}
+    # Pipeline numbers now computed directly from list_recent_jobs filtered to fact categories
+    mock_fs.list_recent_jobs.return_value = []
 
     from app.routes import stories
     stories._send_stories_daily_digest()
 
-    assert mock_fs.get_queue_snapshot.call_args[1]["channel_id"] == "stories"
+    # Verify list_recent_jobs is called with channel_id="stories" (not unscoped)
+    call_kwargs = mock_fs.list_recent_jobs.call_args_list[0][1]
+    assert call_kwargs.get("channel_id") == "stories"
 
 
 @patch("app.routes.webhook.whatsapp_agent")
