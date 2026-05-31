@@ -35,8 +35,9 @@ _FACT_CATEGORIES = [
     "mysteries & unexplained",
 ]
 
-# Slot hours matching stories-run.yml cron: 2am, 6am, 10am, 2pm, 6pm, 10pm IST
-_SLOT_HOURS = [2, 6, 10, 14, 18, 22]
+# Slot hours matching stories-run.yml cron: 3am, 7am, 11am, 3pm, 7pm, 11pm IST
+# Offset by 1h from news channel (2am/8am/2pm/8pm) to avoid shared concurrency group clashes
+_SLOT_HOURS = [3, 7, 11, 15, 19, 23]
 
 
 def _is_topic_already_used(title: str) -> bool:
