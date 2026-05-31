@@ -72,9 +72,10 @@ def _send_stories_daily_digest():
     tts_chars_month = firestore_service.get_tts_chars_this_month(channel_id="stories")
     tts_pct = round((tts_chars_month / 1_000_000) * 100, 1)
 
-    # Slot coverage: show the categories of completed stories jobs from yesterday
+    # Slot coverage: show categories of completed/delivered jobs from yesterday (up to 6)
+    all_recent = firestore_service.list_recent_jobs(limit=100, channel_id="stories")
     yesterday_jobs = [
-        j for j in firestore_service.list_recent_jobs(limit=50, channel_id="stories")
+        j for j in all_recent
         if j.get("status") in ("completed", "delivered_manual")
         and j.get("updated_at")
         and (datetime.now(timezone.utc) - _parse_iso_utc(j.get("updated_at"))).total_seconds() < 86400
@@ -85,6 +86,20 @@ def _send_stories_daily_digest():
         slot_lines.append(f"  ✅ {genre}")
     if not slot_lines:
         slot_lines = ["  ⬜ No videos generated"]
+
+    # 7-day rotation: which of the 12 fact categories have been covered
+    from app.agents.story_researcher import _FACT_CATEGORIES
+    week_jobs = [
+        j for j in firestore_service.list_recent_jobs(limit=200, channel_id="stories")
+        if j.get("status") in ("completed", "delivered_manual")
+        and j.get("updated_at")
+        and (datetime.now(timezone.utc) - _parse_iso_utc(j.get("updated_at"))).total_seconds() < 86400 * 7
+    ]
+    covered_this_week = {(j.get("genre") or "").lower() for j in week_jobs}
+    uncovered = [c.title() for c in _FACT_CATEGORIES if c not in covered_this_week]
+    rotation_line = f"\n\n🔄 Category Rotation (7d): {len(covered_this_week)}/{len(_FACT_CATEGORIES)} covered"
+    if uncovered:
+        rotation_line += f"\n  Pending: {', '.join(uncovered)}"
 
     top = firestore_service.get_top_performers(n=1, days=7, channel_id="stories")
     top_line = ""
@@ -125,8 +140,9 @@ def _send_stories_daily_digest():
         f"  Quota pressure: {quota.get('pressure', 'unknown')}\n\n"
         f"📊 TTS Usage Today\n"
         f"  {tts_chars_today:,} today | {tts_chars_month:,} this month ({tts_pct}% of 1M free tier)\n\n"
-        f"🗂️ Categories Yesterday\n"
+        f"🗂️ Categories Yesterday (6 slots)\n"
         + "\n".join(slot_lines)
+        + rotation_line
         + top_line
         + failed_lines
     )
