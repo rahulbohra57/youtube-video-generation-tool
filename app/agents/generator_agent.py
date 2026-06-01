@@ -29,7 +29,7 @@ from app.agents.senior_script_reviewer import review_package
 logger = logging.getLogger(__name__)
 
 # Maximum scenes to generate — keeps us under free-tier Imagen quota (5 images/min)
-MAX_SCENES = 3
+MAX_SCENES = 4
 
 # How many times the outer wrapper retries a fully-exhausted scene.
 # image_service already does 3 internal quota retries (30s/60s/120s).
@@ -344,6 +344,7 @@ def run(
         scenes = reviewed.get("scenes") or scenes
         reviewed_title = reviewed.get("title") or headline
         reviewed_caption = reviewed.get("caption") or ""
+        reviewed_tags = reviewed.get("tags") or []
 
         # Persist the reviewed title so REDO uses the same title as the original upload
         firestore_service.create_or_update_job(effective_job_id, {"reviewed_title": reviewed_title})
@@ -645,6 +646,7 @@ def run(
             genre=genre,
             source=source,
             channel_id=channel_id,
+            tags=reviewed_tags,
         )
         # If post() returned None the video was delivered via Telegram (delivered_manual).
         # Do not overwrite that status — just record the local path and scene count.

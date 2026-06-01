@@ -44,7 +44,7 @@ def _deliver_video_to_telegram(
         })
 
 
-def post(video_path: str, caption: str, title: str, job_id: str = "", public_id: str = "", genre: str = "", source: str = "", channel_id: str = "news"):
+def post(video_path: str, caption: str, title: str, job_id: str = "", public_id: str = "", genre: str = "", source: str = "", channel_id: str = "news", tags: list | None = None):
     chat_id = get_chat_id(channel_id)
     enhanced = enhance_caption(caption)
     enhanced = format_caption_for_youtube(enhanced)
@@ -54,7 +54,7 @@ def post(video_path: str, caption: str, title: str, job_id: str = "", public_id:
         firestore_service.create_or_update_job(job_id, {"final_caption": enhanced})
 
     try:
-        url = youtube_service.upload_video(video_path, title, enhanced, genre=genre, channel_id=channel_id)
+        url = youtube_service.upload_video(video_path, title, enhanced, genre=genre, channel_id=channel_id, tags=tags or [])
     except Exception as e:
         err = str(e)
         if "youtube_quota_exceeded" in err:

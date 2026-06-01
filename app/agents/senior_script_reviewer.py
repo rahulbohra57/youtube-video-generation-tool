@@ -99,11 +99,13 @@ def review_package(
     )
     title = (title_caption.get("title") or topic).strip()[:100]
     caption = (title_caption.get("caption") or "").strip()
+    tags = title_caption.get("tags") or []
 
     return {
         "scenes": reviewed_scenes,
         "title": title or topic.strip(),
         "caption": caption,
+        "tags": tags,
         "estimated_seconds": round(_estimate_seconds(reviewed_scenes), 1),
     }
 

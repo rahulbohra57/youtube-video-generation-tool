@@ -848,10 +848,12 @@ def test_handle_reply_force_create_bypasses_duplicate_status(mock_fs, mock_teleg
         "scenes": [
             {"scene": 1, "narration": "Big AI news story.", "visual": "AI illustration"},
             {"scene": 2, "narration": "Second scene narration.", "visual": "Tech illustration"},
+            {"scene": 3, "narration": "Third scene narration.", "visual": "Data illustration"},
         ],
         "title": "Big AI news story",
         "caption": "Great caption #ai",
-        "estimated_seconds": 22.0,
+        "tags": ["artificial intelligence", "tech news"],
+        "estimated_seconds": 33.0,
     },
 )
 @patch("app.agents.generator_agent.create_video")
@@ -872,6 +874,7 @@ def test_generator_agent_run_calls_social_media_agent(
     mock_extract.return_value = [
         {"scene": 1, "narration": "draft", "visual": "draft"},
         {"scene": 2, "narration": "draft2", "visual": "draft2"},
+        {"scene": 3, "narration": "draft3", "visual": "draft3"},
     ]
 
     from app.agents import generator_agent

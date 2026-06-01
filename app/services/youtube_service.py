@@ -42,19 +42,10 @@ _DEFAULT_CATEGORY = "28"  # Science & Technology — better default than News & 
 _UPLOAD_DEFAULTS: dict[str, str] = {
     "news": (
         "----\n\n"
-        "So, what is Kurrent Affairs?\n\n"
-        "Kurrent Affairs is a modern YouTube channel that keeps you updated with the latest in Tech, AI, and innovation — without the noise.\n\n"
-        "Our goal is simple: save you time by cutting through the clutter and delivering only what truly matters. Instead of scrolling endlessly, you get clear, concise, and relevant updates that help you stay ahead in a fast-moving digital world.\n\n"
-        "We simplify complex topics and break them down into easy-to-understand insights, so you can quickly grasp what's happening and why it matters.\n\n"
-        "On this channel, you'll find:\n\n"
-        "Latest updates in AI and emerging technologies\n"
-        "Quick breakdowns of trending topics\n"
-        "Insights on tools, startups, and digital innovation\n"
-        "No-fluff content designed for speed and clarity\n\n"
-        "Whether you're building, learning, or just staying informed — Kurrent Affairs helps you stay sharp, informed, and future-ready.\n\n"
-        "Stay updated. Stay ahead. Stay Kurrent.\n\n"
-        "📈 YOUTUBE ALGORITHM & SEO KEYWORDS:\n"
-        "ai news 2026, tech news updates, artificial intelligence trends, latest ai tools, generative ai updates, tech explained simple, trending ai news, future of ai technology, daily tech updates, ai tools explained, youtube algorithm 2026, youtube growth 2026, youtube seo 2026, youtube seo optimization, youtube tags optimization, youtube impressions increase, youtube ctr increase, youtube shorts algorithm 2026"
+        "📲 Follow for daily tech & AI news in under a minute.\n"
+        "🔔 Subscribe so you never miss a headline.\n\n"
+        "Kurrent Affairs breaks down the biggest stories in Tech, AI, and innovation — fast, clear, and without the noise.\n\n"
+        "🔗 Subscribe: https://www.youtube.com/@KurrentAffairs"
     ),
     "stories": (
         "----\n\n"
@@ -190,7 +181,7 @@ def refresh_all_tokens() -> dict[str, str]:
     return results
 
 
-def upload_video(video_path: str, title: str, description: str, genre: str = "", channel_id: str = "news") -> str:
+def upload_video(video_path: str, title: str, description: str, genre: str = "", channel_id: str = "news", tags: list | None = None) -> str:
     creds = get_credentials(channel_id=channel_id)
     youtube = build("youtube", "v3", credentials=creds)
 
@@ -202,12 +193,25 @@ def upload_video(video_path: str, title: str, description: str, genre: str = "",
     # Append channel-specific boilerplate for SEO and subscriber context
     desc = desc.rstrip() + "\n\n" + _UPLOAD_DEFAULTS.get(channel_id, "")
 
+    # Merge base Shorts tags with topic-specific tags from the script reviewer.
+    # YouTube caps total tag characters at 500; truncate to stay within limit.
+    base_tags = ["Shorts", "shorts"]
+    extra_tags = [str(t).strip() for t in (tags or []) if str(t).strip()]
+    all_tags = base_tags + extra_tags
+    char_count = 0
+    trimmed_tags: list[str] = []
+    for tag in all_tags:
+        if char_count + len(tag) > 500:
+            break
+        trimmed_tags.append(tag)
+        char_count += len(tag)
+
     body = {
         "snippet": {
             "title": normalize_title(title, limit=100),
             "description": desc,
             "categoryId": genre_to_category_id(genre),
-            "tags": ["Shorts", "shorts"],
+            "tags": trimmed_tags,
         },
         "status": {
             "privacyStatus": "public",

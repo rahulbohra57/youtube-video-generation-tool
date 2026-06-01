@@ -71,6 +71,9 @@ _VISUAL_STYLE_POOL = [
     "Documentary-style, natural soft lighting, gritty texture, ultra-realistic",
     "Futuristic neon-lit environment, deep blue and purple hues, cinematic 4K, photorealistic",
     "Epic wide establishing shot, overcast moody sky, high dynamic range, photorealistic",
+    "Journalistic editorial style, high contrast black-and-white with selective colour accent, photorealistic",
+    "Split-screen infographic composition, bold colour fields, clean visual hierarchy, photorealistic 4K",
+    "Aerial drone shot perspective, crisp daylight, wide environmental context, photorealistic 4K",
 ]
 
 _FACT_VISUAL_STYLE_POOL_CINEMATIC = [
@@ -147,6 +150,7 @@ Each scene object must have:
 - "visual": VERY DETAILED image generation prompt in English
 
 NARRATION RULES — follow strictly:
+- SCENE 1 HOOK (CRITICAL): The very first sentence of scene 1 must be 12 words or fewer. Open with a specific number, a named person doing something surprising, or a direct question. No scene-setting, no context-building — the viewer decides to stay or swipe in the first 2 seconds.
 - Write in simple, reader-friendly language (clear and natural; avoid jargon unless necessary).
 - Write COMPLETE information. Never tease or leave a fact unresolved.
 - Every sentence must teach something specific: include real figures, dates, mechanisms, or consequences where relevant.
@@ -324,6 +328,7 @@ Each scene object must have:
 - "visual": VERY DETAILED image generation prompt in English
 
 NARRATION RULES — follow strictly:
+- SCENE 1 HOOK (CRITICAL): The very first sentence of scene 1 must be 12 words or fewer. Open with a specific number, a named person doing something surprising, or a direct question. No scene-setting, no context-building — the viewer decides to stay or swipe in the first 2 seconds.
 - Write in simple, reader-friendly language (clear and natural; avoid jargon unless necessary).
 - Write COMPLETE information. Never tease or leave a fact unresolved.
 - Every sentence must teach something specific: include real figures, dates, mechanisms, or consequences where relevant.
@@ -1181,14 +1186,16 @@ def review_title_and_caption_with_senior_reviewer(
     prompt = f"""
 You are a senior script reviewer.
 Create:
-1) A YouTube Shorts title that maximises click-through rate. Use one of these proven patterns — pick whichever fits the script facts best:
-   - Number/stat: "X Countries Just Banned This AI Tool"
-   - Curiosity gap: "The Real Reason NASA Delayed This Launch"
+1) A YouTube Shorts title that maximises click-through rate. Strongly prefer these two patterns — they consistently outperform others on Shorts:
+   - Curiosity gap (PREFERRED): "The Real Reason NASA Delayed This Launch" / "Why X Countries Are Quietly Banning This"
+   - Number/stat (PREFERRED): "X Countries Just Banned This AI Tool" / "OpenAI Made $6.6B — Here's the Catch"
+   Only use these if the facts clearly suit them:
    - Specificity: "OpenAI's $6.6B Deal — What It Actually Means"
    - Stakes: "This Ruling Could Change How You Use the Internet"
    Constraints: max 70 characters; use only facts present in the script; no fabrication; no generic openers like "Breaking:", "This Is", or "Here's Why".
 2) A reader-friendly caption aligned with the voiceover script (same core points), preserving all specific names, numbers, and facts.
 3) 10-15 relevant hashtags derived from the script content and topic — mix broad popular tags with niche-specific ones.{genre_hint}
+4) 15-20 YouTube search tags (plain keywords, NOT hashtags) — include the topic name, key people/orgs/places mentioned, the domain (e.g. "artificial intelligence", "tech news"), and related search terms viewers would use to find this video. These power YouTube search and suggested video discovery.
 
 Rules:
 - Keep language simple and natural.
@@ -1197,7 +1204,7 @@ Rules:
 - Do not use vague placeholders like "a grandpa", "a man", "a woman", "a company" when the script contains their actual name or identity.
 - Do not exaggerate or promise things not in script.
 - Always include #Shorts and #YouTubeShorts in the hashtags.
-- Return ONLY a valid JSON object with keys: title, caption, hashtags (array of strings).
+- Return ONLY a valid JSON object with keys: title, caption, hashtags (array of strings), tags (array of strings).
 - Language rule: {title_caption_lang}
 
 Topic: {topic}
@@ -1217,8 +1224,11 @@ Script scenes:
         else:
             hashtag_line = ""
         caption = f"{caption_body}\n\n{hashtag_line}".strip() if hashtag_line else caption_body
+        tags = payload.get("tags") or []
+        if not isinstance(tags, list):
+            tags = []
         if title or caption:
-            return {"title": title, "caption": caption}
+            return {"title": title, "caption": caption, "tags": tags}
     except Exception:
         pass
-    return {"title": topic.strip(), "caption": generate_shorts_caption(topic, language=language)}
+    return {"title": topic.strip(), "caption": generate_shorts_caption(topic, language=language), "tags": []}
