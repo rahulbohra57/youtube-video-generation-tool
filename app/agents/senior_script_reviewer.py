@@ -80,6 +80,7 @@ def review_package(
     min_seconds: int = 15,
     max_seconds: int = 58,
     genre: str = "",
+    channel_id: str = "news",
 ) -> dict:
     reviewed_scenes = review_script_with_senior_reviewer(
         topic=topic,
@@ -96,6 +97,7 @@ def review_package(
         scenes=reviewed_scenes,
         language=language,
         genre=genre,
+        channel_id=channel_id,
     )
     title = (title_caption.get("title") or topic).strip()[:100]
     caption = (title_caption.get("caption") or "").strip()

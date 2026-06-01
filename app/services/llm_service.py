@@ -95,6 +95,11 @@ _FACT_VISUAL_STYLE_POOL_ILLUSTRATED = [
     "Minimalist editorial illustration, bold ink outlines, limited colour palette",
     "Dynamic graphic novel style, expressive characters, vivid saturated palette",
     "Bright poster-style illustration, flat colour fills, strong silhouettes",
+    "Expressive ink wash illustration, monochrome with single warm accent colour, emotional brushwork, cinematic crop",
+    "Retro editorial illustration, mid-century poster style, warm muted palette, strong silhouettes, no text",
+    "Digital concept art, surrealist composition, dreamlike proportions, vivid saturated palette, cinematic lighting",
+    "Minimalist line art, clean geometric shapes, soft pastel wash background, emotionally resonant figures",
+    "Painterly gouache illustration, rich textured brushstrokes, warm colour palette, expressive characters",
 ]
 
 _CINEMATIC_CATEGORIES = {
@@ -288,13 +293,16 @@ def generate_script_with_search(topic: str, language: str = "en", aspect_ratio: 
         system_instruction = (
             "You are a scriptwriter for 'Tell Me Why', a YouTube Shorts channel about surprising, "
             "mind-blowing facts. Use Google Search to verify the fact and find supporting details. "
-            "Structure every script as: Scene 1 — Hook (lead with the most surprising or counterintuitive "
-            "angle; the shocking number or claim); Scene 2 — Elaboration (the science, history, or mechanism "
-            "behind it — the 'why'); Scene 3 — Payoff (a related mind-blowing extension or real-world "
-            "implication the viewer will want to share). "
-            "CRITICAL: Scene 1 narration MUST begin with the exact words 'Tell me why' followed by the topic "
-            "as a hook question or surprising claim — e.g. 'Tell me why adding a bad option makes you spend more.' "
-            "This opening is the channel's signature phrase and must appear in every video. "
+            "Structure every script as exactly 4 scenes:\n"
+            "Scene 1 — Hook: MUST begin with the exact words 'Tell me why' followed by the topic as a shocking "
+            "claim or question. The complete first sentence must be 12 words or fewer (including 'Tell me why'). "
+            "Lead with the most counterintuitive angle — a specific number or claim that stops the viewer from swiping.\n"
+            "Scene 2 — Mechanism: Explain the science, history, or psychology behind it — the actual 'why'. "
+            "Keep it simple and concrete, no jargon.\n"
+            "Scene 3 — Deeper Implication: Reveal a surprising extension or nuance most people don't know, "
+            "even within this topic. Escalate the surprise.\n"
+            "Scene 4 — Shareable Payoff: A quotable, mind-blowing closer that reframes how the viewer sees "
+            "the world — something they will want to send to someone. End on the most memorable line.\n"
             "Narration: conversational English, 20-24 words per scene, no jargon. "
             "Visual prompts: always English, safe for Imagen."
         )
@@ -821,6 +829,25 @@ Return only a valid JSON object, no markdown:
     }
 
 
+_OVERUSED_FACT_PATTERNS = [
+    r"humans?.*only.*10\s*%.*brain",
+    r"lightning.*never.*strikes?.*twice",
+    r"goldfish.*(?:second|memory)",
+    r"great wall.*(?:seen|visible).*space",
+    r"bumblebee.*shouldn.t.*fly",
+    r"cracking knuckles.*arthritis",
+    r"hair.*nails.*grow.*after death",
+    r"tongue.*(?:taste zones?|taste map)",
+    r"we.*only.*5\s*%.*universe",
+    r"drink.*8.*glasses.*water",
+]
+
+
+def _is_overused_fact(title: str, premise: str) -> bool:
+    text = (title + " " + premise).lower()
+    return any(re.search(pat, text) for pat in _OVERUSED_FACT_PATTERNS)
+
+
 def generate_fact_topic(category: str, recently_used_titles: list[str] | None = None) -> dict:
     """Generate a specific, punchy fact topic for the given category.
 
@@ -850,14 +877,18 @@ Rules:
 Return only a valid JSON object, no markdown:
 {{"title": "...", "premise": "..."}}"""
 
-    for attempt in range(2):
+    for attempt in range(3):
         try:
             response = _get_model().generate_content(prompt)
             result = _extract_json_object(_response_text(response))
             if result.get("title") and result.get("premise"):
-                if len((result["premise"] or "").strip().split()) >= 15:
-                    return result
-                logger.warning("Fact topic premise quality gate failed (attempt %d): %s", attempt + 1, result.get("premise"))
+                if len((result["premise"] or "").strip().split()) < 15:
+                    logger.warning("Fact topic premise quality gate failed (attempt %d): %s", attempt + 1, result.get("premise"))
+                    continue
+                if _is_overused_fact(result["title"], result["premise"]):
+                    logger.warning("Fact topic is a well-known cliché, retrying (attempt %d): %s", attempt + 1, result.get("title"))
+                    continue
+                return result
         except Exception:
             pass
     return {
@@ -1180,19 +1211,37 @@ def review_title_and_caption_with_senior_reviewer(
     scenes: list[dict],
     language: str = "en",
     genre: str = "",
+    channel_id: str = "news",
 ) -> dict:
     title_caption_lang = _TITLE_CAPTION_LANG_INSTRUCTIONS.get(language, _TITLE_CAPTION_LANG_INSTRUCTIONS["en"])
     genre_hint = f" Focus hashtags around the {genre} domain." if genre else ""
+
+    if channel_id == "stories":
+        title_pattern_instruction = (
+            "1) A YouTube Shorts title that maximises click-through rate for a curiosity-driven facts channel. "
+            "Strongly prefer direct question format — it matches the channel's 'Tell me why' voice and performs best in the feed:\n"
+            "   - Direct question (PREFERRED): 'Why Does Your Heart Race When You're in Love?' / 'Why Can't You Tickle Yourself?'\n"
+            "   - Shocking fact statement (PREFERRED): 'Your Brain Has Tasted Every Food You've Ever Smelled'\n"
+            "   Only use these if the facts clearly suit them:\n"
+            "   - Number/stat: '99% of Your DNA Is Identical to a Banana's'\n"
+            "   - Curiosity gap: 'The Real Reason You Can't Remember Being a Baby'\n"
+            "   Constraints: max 70 characters; use only facts present in the script; no fabrication; no generic openers like 'Did You Know' or 'This Is'."
+        )
+    else:
+        title_pattern_instruction = (
+            "1) A YouTube Shorts title that maximises click-through rate. Strongly prefer these two patterns — they consistently outperform others on Shorts:\n"
+            "   - Curiosity gap (PREFERRED): \"The Real Reason NASA Delayed This Launch\" / \"Why X Countries Are Quietly Banning This\"\n"
+            "   - Number/stat (PREFERRED): \"X Countries Just Banned This AI Tool\" / \"OpenAI Made $6.6B — Here's the Catch\"\n"
+            "   Only use these if the facts clearly suit them:\n"
+            "   - Specificity: \"OpenAI's $6.6B Deal — What It Actually Means\"\n"
+            "   - Stakes: \"This Ruling Could Change How You Use the Internet\"\n"
+            "   Constraints: max 70 characters; use only facts present in the script; no fabrication; no generic openers like \"Breaking:\", \"This Is\", or \"Here's Why\"."
+        )
+
     prompt = f"""
 You are a senior script reviewer.
 Create:
-1) A YouTube Shorts title that maximises click-through rate. Strongly prefer these two patterns — they consistently outperform others on Shorts:
-   - Curiosity gap (PREFERRED): "The Real Reason NASA Delayed This Launch" / "Why X Countries Are Quietly Banning This"
-   - Number/stat (PREFERRED): "X Countries Just Banned This AI Tool" / "OpenAI Made $6.6B — Here's the Catch"
-   Only use these if the facts clearly suit them:
-   - Specificity: "OpenAI's $6.6B Deal — What It Actually Means"
-   - Stakes: "This Ruling Could Change How You Use the Internet"
-   Constraints: max 70 characters; use only facts present in the script; no fabrication; no generic openers like "Breaking:", "This Is", or "Here's Why".
+{title_pattern_instruction}
 2) A reader-friendly caption aligned with the voiceover script (same core points), preserving all specific names, numbers, and facts.
 3) 10-15 relevant hashtags derived from the script content and topic — mix broad popular tags with niche-specific ones.{genre_hint}
 4) 15-20 YouTube search tags (plain keywords, NOT hashtags) — include the topic name, key people/orgs/places mentioned, the domain (e.g. "artificial intelligence", "tech news"), and related search terms viewers would use to find this video. These power YouTube search and suggested video discovery.

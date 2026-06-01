@@ -39,6 +39,14 @@ _FACT_CATEGORIES = [
 # Offset by 1h from news channel (2am/8am/2pm/8pm) to avoid shared concurrency group clashes
 _SLOT_HOURS = [3, 7, 11, 15, 19, 23]
 
+# Categories that perform better at each time of day (used as a 2x weight boost).
+# Evening: introspective/emotional categories — viewers scroll more and linger longer.
+# Morning: discovery/learning categories — viewers are fresh and curious.
+# Midday: practical/actionable categories — viewers want useful insights during breaks.
+_EVENING_PREFERRED = {"psychology & dark psychology", "relationships & dating", "mysteries & unexplained", "philosophy & life"}
+_MORNING_PREFERRED = {"science & space", "history & civilizations", "human body & biology"}
+_MIDDAY_PREFERRED = {"self-improvement & habits", "business & finance", "technology & ai", "health & fitness"}
+
 
 def _is_topic_already_used(title: str) -> bool:
     return firestore_service.is_headline_already_suggested(
@@ -59,8 +67,18 @@ def _recently_used_titles(limit: int = 60) -> list[str]:
         return []
 
 
+def _time_of_day_preferred() -> set:
+    """Return the category set preferred at the current IST hour."""
+    hour = datetime.now(ZoneInfo("Asia/Kolkata")).hour
+    if hour >= 19 or hour < 6:   # 7pm – 5:59am: evening/night
+        return _EVENING_PREFERRED
+    if hour < 13:                 # 6am – 12:59pm: morning
+        return _MORNING_PREFERRED
+    return _MIDDAY_PREFERRED      # 1pm – 6:59pm: midday
+
+
 def _select_category() -> str:
-    """Select fact category using performance-weighted randomization with deterministic fallback."""
+    """Select fact category using performance-weighted randomization with time-of-day bias."""
     from app.services.firestore_service import get_genre_performance_fortnightly
 
     try:
@@ -68,14 +86,24 @@ def _select_category() -> str:
     except Exception:
         perf = {}
 
+    preferred = _time_of_day_preferred()
+
     if perf:
         scores = [perf.get(g, 0.0) for g in _FACT_CATEGORIES]
         known = sorted(s for s in scores if s > 0)
         baseline = known[len(known) // 2] if known else 100.0
         weights = [s if s > 0 else baseline for s in scores]
+    else:
+        # Equal baseline weights for deterministic fallback path
+        weights = [1.0] * len(_FACT_CATEGORIES)
+
+    # Apply 2x boost for time-of-day preferred categories
+    weights = [w * 2.0 if _FACT_CATEGORIES[i] in preferred else w for i, w in enumerate(weights)]
+
+    if any(w > 0 for w in weights):
         return random.choices(_FACT_CATEGORIES, weights=weights, k=1)[0]
 
-    # Deterministic IST schedule-slot rotation
+    # Final fallback: deterministic slot rotation
     now_ist = datetime.now(ZoneInfo("Asia/Kolkata"))
     slot_index = None
     for idx, hour in enumerate(_SLOT_HOURS):
