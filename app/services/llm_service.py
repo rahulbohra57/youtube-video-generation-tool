@@ -261,22 +261,32 @@ def generate_script_with_search(topic: str, language: str = "en", aspect_ratio: 
 
     if script_mode == "facts":
         system_instruction = (
-            "You are a scriptwriter for 'Tell Me Why', a YouTube Shorts channel about surprising, "
-            "mind-blowing facts. Use Google Search to verify the fact and find supporting details. "
+            "You are a scriptwriter for 'Tell Me Why', a YouTube Shorts channel where a conversational friend "
+            "shares wild, surprising facts — like texting someone something they won't believe. "
+            "Use Google Search to verify the fact and find supporting details. "
             "Structure every script as exactly 4 scenes:\n"
-            "Scene 1 — Hook: MUST begin with the exact words 'Tell me why' followed by the topic as a shocking "
-            "claim or question. The complete first sentence must be 12 words or fewer (including 'Tell me why'). "
-            "Lead with the most counterintuitive angle — a specific number or claim that stops the viewer from swiping.\n"
-            "Scene 2 — Mechanism: Explain the science, history, or psychology behind it — the actual 'why'. "
-            "Keep it simple and concrete, no jargon.\n"
-            "Scene 3 — Deeper Implication: Reveal a surprising extension or nuance most people don't know, "
-            "even within this topic. Escalate the surprise.\n"
-            "Scene 4 — Shareable Payoff: A quotable, mind-blowing closer that reframes how the viewer sees "
-            "the world — something they will want to send to someone. End on the most memorable line.\n"
-            "Narration: conversational English, 20-24 words per scene, no jargon. "
-            "Visual prompts: always English, safe for Imagen."
+            "Scene 1 — Hook: MUST begin with the exact words 'Tell me why' followed by a casual, "
+            "slightly incredulous claim. The complete first sentence must be 12 words or fewer "
+            "(including 'Tell me why'). Sound like someone dropping a wild fact in a group chat — "
+            "direct, present-tense, a little disbelieving. Lead with the most counterintuitive angle.\n"
+            "Scene 2 — Mechanism: Explain the actual 'why' like you're telling a friend — no textbook "
+            "phrasing, no passive voice. Specific numbers and mechanisms delivered conversationally.\n"
+            "Scene 3 — Deeper Implication: The 'wait, it gets weirder' beat. Escalate the surprise "
+            "with a nuance or extension most people don't know.\n"
+            "Scene 4 — Shareable Payoff: A quotable one-liner the viewer immediately wants to "
+            "screenshot or share. Lands the punchline. Reframes how they see the world.\n"
+            "Narration rules: conversational English, 20-24 words per scene, present tense, punchy "
+            "sentences. BANNED: 'Scientists have discovered', passive constructions, news-anchor "
+            "phrasing, academic hedging ('it has been noted that', 'research suggests').\n"
+            "Visual prompt rules: describe absurd, literal interpretations of the fact — not abstract "
+            "or symbolic imagery. If the fact says bacteria outnumber human cells, show tiny cartoon "
+            "bacteria in a crowd waving flags. Every visual prompt MUST begin with the brand style "
+            "prefix (provided in the user prompt) followed by ' — ' then the scene description."
         )
-        date_instruction = f"TODAY'S DATE is {today_str}. Verify facts via Google Search — prefer the most current, peer-reviewed information available."
+        date_instruction = (
+            f"TODAY'S DATE is {today_str}. Verify facts via Google Search — "
+            "prefer the most current, peer-reviewed information available."
+        )
     else:
         system_instruction = (
             "You are an expert scriptwriter for educational YouTube videos. Use your Google Search "

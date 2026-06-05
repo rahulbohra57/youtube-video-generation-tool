@@ -12,3 +12,44 @@ def test_fact_visual_style_is_single_brand_string():
     assert style_space == style_psych, "All categories must share the same brand aesthetic"
     assert "flat" in style_space.lower(), "Brand style must be flat illustration"
     assert "electric blue" in style_space.lower(), "Brand palette must include electric blue"
+
+
+# ── Task 2 ──────────────────────────────────────────────────────────────────
+
+def test_facts_script_instruction_has_conversational_voice():
+    """generate_script_with_search with script_mode='facts' sends conversational-friend rules."""
+    from app.services import llm_service
+
+    captured = {}
+
+    mock_model = MagicMock()
+    def _capture(prompt, **kw):
+        captured["prompt"] = prompt
+        resp = MagicMock()
+        resp.text = '[{"scene":1,"narration":"Tell me why bananas are radioactive.","visual":"flat"}]'
+        return resp
+    mock_model.generate_content.side_effect = _capture
+
+    with patch.object(llm_service, "_get_search_model", return_value=mock_model), \
+         patch.object(llm_service, "_search_grounding_disabled", False):
+        try:
+            llm_service.generate_script_with_search("bananas radioactive", script_mode="facts")
+        except Exception:
+            pass  # we only care about the captured prompt
+
+    assert "prompt" in captured, "generate_content was not called"
+    p = captured["prompt"]
+
+    # New voice rules must be present
+    assert "conversational friend" in p.lower(), "Must instruct conversational-friend voice"
+    assert "wait, it gets weirder" in p.lower(), "Must describe scene 3 as escalation beat"
+    assert "shareable" in p.lower(), "Must instruct shareable payoff for scene 4"
+
+    # Old journalistic opener must be removed from the channel description
+    assert "mind-blowing facts" not in p, "Old journalistic opener must be removed"
+    # Banned phrases must appear in a BANNED context, not as encouraged patterns
+    banned_section = p.lower().find("banned:")
+    assert banned_section != -1, "Prompt must include a BANNED phrases list"
+    assert "scientists have discovered" in p.lower()[banned_section:], (
+        "Banned phrase must appear in the banned list, not as an encouraged pattern"
+    )
