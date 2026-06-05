@@ -66,18 +66,66 @@ _STORY_GENRE_SAFE_PROMPTS = {
 # Keyed by the 12 fact categories used in story_researcher._FACT_CATEGORIES.
 # Used when an image prompt is rejected by Imagen's safety filter.
 _STORY_GENRE_SAFE_PROMPTS_EN = {
-    "science & space": "Vibrant flat-design illustration — a telescope pointed at a starry night sky, glowing planets in the background, warm cosmic colors, no text, no words",
-    "history & civilizations": "Soft pencil sketch illustration, muted sepia tones — an ancient stone archway leading to a sunlit marketplace, people in traditional robes, serene atmosphere, no text, no words",
-    "human body & biology": "Clean flat-design infographic style — a glowing human silhouette with colorful abstract shapes representing cells and organs, bright blue-green palette, no text, no words",
-    "technology & ai": "Bold graphic novel style, cool blue palette — a scientist holding a glowing holographic sphere in a bright modern laboratory, wonder on their face, no text, no words",
-    "health & fitness": "Vibrant storybook illustration — a person stretching at sunrise on a hilltop overlooking a green valley, energetic and joyful, warm colors, no text, no words",
-    "psychology & dark psychology": "Soft pencil sketch, cool blue-grey tones — a lone figure looking at their own reflection in a still lake, abstract swirling shapes behind them, no text, no words",
-    "relationships & dating": "Soft watercolor illustration, warm golden tones — two friends sharing tea at a sunlit window, gentle expressions, no text, no words",
-    "self-improvement & habits": "Vibrant storybook illustration, bold outlines — a young person planting a seedling in golden morning light, hopeful smile, warm colors, no text, no words",
-    "business & finance": "Clean flat-design illustration — stacked coins and a rising graph on a wooden desk beside a coffee cup, warm morning light, no text, no words",
-    "culture & society": "Vibrant flat-design illustration — a diverse group of illustrated figures standing together under a colorful mosaic arch, joyful atmosphere, no text, no words",
-    "philosophy & life": "Soft pencil sketch illustration, warm golden tones — a figure sitting on a cliff edge at sunset gazing at the horizon, contemplative mood, no text, no words",
-    "mysteries & unexplained": "Bold graphic novel style, deep navy and amber palette — a lone explorer with a lantern inside a vast ancient cave with glowing rock formations, no text, no words",
+    "science & space": (
+        "Bright flat digital illustration, thick bold outlines, electric blue and warm yellow palette — "
+        "a cartoon astronaut floating beside an oversized glowing planet with exaggerated wide eyes, "
+        "playful and quirky composition, clean white background, no text, no words"
+    ),
+    "history & civilizations": (
+        "Bright flat digital illustration, thick bold outlines, coral red and warm yellow palette — "
+        "a cartoonish ancient explorer holding an oversized map with a look of total surprise, "
+        "slightly surreal composition, clean white background, no text, no words"
+    ),
+    "human body & biology": (
+        "Bright flat digital illustration, thick bold outlines, electric blue and coral red palette — "
+        "a cartoon human silhouette with exaggeratedly large glowing organs and tiny cartoon cells "
+        "waving flags inside, playful and quirky, clean white background, no text, no words"
+    ),
+    "technology & ai": (
+        "Bright flat digital illustration, thick bold outlines, electric blue and warm yellow palette — "
+        "a cartoonish robot with a giant lightbulb head wearing a graduation cap, exaggerated surprised "
+        "expression, slightly surreal, clean gradient background, no text, no words"
+    ),
+    "health & fitness": (
+        "Bright flat digital illustration, thick bold outlines, coral red and warm yellow palette — "
+        "a cartoonish character doing an exaggerated stretch with tiny sweat drops flying everywhere, "
+        "cheerful and quirky, clean white background, no text, no words"
+    ),
+    "psychology & dark psychology": (
+        "Bright flat digital illustration, thick bold outlines, electric blue and coral red palette — "
+        "a cartoon brain wearing sunglasses and smugly ignoring an oversized nose in the corner, "
+        "absurd and playful composition, clean gradient background, no text, no words"
+    ),
+    "relationships & dating": (
+        "Bright flat digital illustration, thick bold outlines, warm yellow and coral red palette — "
+        "two cartoonish figures with exaggerated heart-eyes accidentally walking into each other, "
+        "slightly surreal and funny, clean white background, no text, no words"
+    ),
+    "self-improvement & habits": (
+        "Bright flat digital illustration, thick bold outlines, electric blue and warm yellow palette — "
+        "a cartoon character planting a giant glowing seedling while standing on a stack of books, "
+        "playful and quirky, clean white background, no text, no words"
+    ),
+    "business & finance": (
+        "Bright flat digital illustration, thick bold outlines, coral red and warm yellow palette — "
+        "a cartoonish figure surfing on an oversized rising graph with an exaggeratedly shocked "
+        "expression, slightly surreal, clean gradient background, no text, no words"
+    ),
+    "culture & society": (
+        "Bright flat digital illustration, thick bold outlines, electric blue and coral red palette — "
+        "a group of cartoonish figures from different backgrounds each holding an oversized object "
+        "representing their culture, playful mosaic composition, clean white background, no text, no words"
+    ),
+    "philosophy & life": (
+        "Bright flat digital illustration, thick bold outlines, warm yellow and electric blue palette — "
+        "a tiny cartoon figure sitting cross-legged on top of a giant question mark with a contemplative "
+        "expression, slightly surreal, clean gradient background, no text, no words"
+    ),
+    "mysteries & unexplained": (
+        "Bright flat digital illustration, thick bold outlines, electric blue and coral red palette — "
+        "a cartoonish explorer shining a comically tiny flashlight at an enormous glowing door with "
+        "exaggerated wide eyes, slightly surreal and quirky, clean dark gradient background, no text, no words"
+    ),
 }
 
 

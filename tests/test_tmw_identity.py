@@ -88,3 +88,20 @@ def test_fact_topic_prompt_has_timeless_guardrail_and_casual_titles():
         "Casual example titles must appear in the prompt"
     )
     assert "ancient romans" not in p.lower(), "Old academic example must be removed"
+
+
+# ── Task 4 ──────────────────────────────────────────────────────────────────
+
+def test_safe_prompts_match_brand_aesthetic():
+    """All _STORY_GENRE_SAFE_PROMPTS_EN values must use the brand flat-illustration aesthetic."""
+    from app.agents.generator_agent import _STORY_GENRE_SAFE_PROMPTS_EN
+
+    assert len(_STORY_GENRE_SAFE_PROMPTS_EN) == 12, "Must still have exactly 12 fallback prompts"
+
+    for category, prompt in _STORY_GENRE_SAFE_PROMPTS_EN.items():
+        p = prompt.lower()
+        assert "flat" in p, f"Category '{category}' safe prompt must use flat illustration style"
+        assert any(color in p for color in ["electric blue", "blue", "yellow", "coral"]), (
+            f"Category '{category}' safe prompt must reference brand palette"
+        )
+        assert "no text" in p, f"Category '{category}' safe prompt must include 'no text, no words'"
