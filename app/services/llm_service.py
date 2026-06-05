@@ -76,46 +76,16 @@ _VISUAL_STYLE_POOL = [
     "Aerial drone shot perspective, crisp daylight, wide environmental context, photorealistic 4K",
 ]
 
-_FACT_VISUAL_STYLE_POOL_CINEMATIC = [
-    "Cinematic 4K, dramatic side lighting, deep shadows, photorealistic",
-    "Wide-angle cinematic shot, warm golden-hour lighting, photorealistic",
-    "Overhead aerial perspective, cool blue tones, ultra-sharp 4K detail, photorealistic",
-    "Documentary-style, natural soft lighting, gritty texture, ultra-realistic",
-    "Futuristic neon-lit environment, deep blue and purple hues, cinematic 4K, photorealistic",
-    "Epic wide establishing shot, overcast moody sky, high dynamic range, photorealistic",
-    "Close-up macro cinematic, shallow depth of field, soft bokeh background, photorealistic",
-    "Dramatic low-angle shot, vibrant saturated colours, high contrast, cinematic 4K, photorealistic",
-]
-
-_FACT_VISUAL_STYLE_POOL_ILLUSTRATED = [
-    "Bold infographic illustration style, clean lines, vibrant accent colours, flat design",
-    "Bold illustrated style, strong geometric shapes, vivid palette, high contrast",
-    "Modern flat design illustration, bold typography-free layout, clean colour blocks",
-    "Isometric illustrated scene, bright primary colours, clean flat design",
-    "Minimalist editorial illustration, bold ink outlines, limited colour palette",
-    "Dynamic graphic novel style, expressive characters, vivid saturated palette",
-    "Bright poster-style illustration, flat colour fills, strong silhouettes",
-    "Expressive ink wash illustration, monochrome with single warm accent colour, emotional brushwork, cinematic crop",
-    "Retro editorial illustration, mid-century poster style, warm muted palette, strong silhouettes, no text",
-    "Digital concept art, surrealist composition, dreamlike proportions, vivid saturated palette, cinematic lighting",
-    "Minimalist line art, clean geometric shapes, soft pastel wash background, emotionally resonant figures",
-    "Painterly gouache illustration, rich textured brushstrokes, warm colour palette, expressive characters",
-]
-
-_CINEMATIC_CATEGORIES = {
-    "science & space",
-    "history & civilizations",
-    "human body & biology",
-    "technology & ai",
-    "health & fitness",
-    "mysteries & unexplained",
-}
+_TMW_VISUAL_STYLE = (
+    "Bright flat digital illustration, thick bold outlines, vivid complementary color palette "
+    "(electric blue, warm yellow, coral red), expressive cartoonish characters with exaggerated "
+    "reactions, slightly surreal visual metaphors, clean white or gradient background, "
+    "high contrast, playful and quirky composition"
+)
 
 
 def _fact_visual_style(category: str) -> str:
-    if category.lower() in _CINEMATIC_CATEGORIES:
-        return random.choice(_FACT_VISUAL_STYLE_POOL_CINEMATIC)
-    return random.choice(_FACT_VISUAL_STYLE_POOL_ILLUSTRATED)
+    return _TMW_VISUAL_STYLE
 
 
 def generate_script(topic: str, language: str = "en", aspect_ratio: str = "16:9", context: str = ""):
@@ -1073,9 +1043,15 @@ Return ONLY a valid JSON array, no markdown, no explanation:
 
 Articles:
 {articles_text}"""
-    response = _get_model().generate_content(prompt)
     from app.utils.helpers import extract_json
-    return extract_json(_response_text(response))
+    for attempt in range(3):
+        response = _get_model().generate_content(prompt)
+        try:
+            return extract_json(_response_text(response))
+        except ValueError:
+            if attempt == 2:
+                raise
+            print(f"rate_and_select_news: invalid JSON on attempt {attempt + 1}, retrying...")
 
 
 def enhance_caption(caption: str) -> str:
