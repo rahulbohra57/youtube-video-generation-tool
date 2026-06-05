@@ -30,7 +30,7 @@ def test_facts_script_instruction_has_conversational_voice():
         return resp
     mock_model.generate_content.side_effect = _capture
 
-    with patch.object(llm_service, "_get_search_model", return_value=mock_model), \
+    with patch.object(llm_service, "_get_search_model", return_value=mock_model),\
          patch.object(llm_service, "_search_grounding_disabled", False):
         try:
             llm_service.generate_script_with_search("bananas radioactive", script_mode="facts")
@@ -53,3 +53,38 @@ def test_facts_script_instruction_has_conversational_voice():
     assert "scientists have discovered" in p.lower()[banned_section:], (
         "Banned phrase must appear in the banned list, not as an encouraged pattern"
     )
+
+
+# ── Task 3 ──────────────────────────────────────────────────────────────────
+
+def test_fact_topic_prompt_has_timeless_guardrail_and_casual_titles():
+    """generate_fact_topic sends a prompt with the timeless guardrail and casual example titles."""
+    from app.services import llm_service
+
+    captured = {}
+
+    mock_model = MagicMock()
+    def _capture(prompt, **kw):
+        captured["prompt"] = prompt
+        resp = MagicMock()
+        resp.text = '{"title": "Your brain is hiding your nose from you right now", "premise": "The brain actively suppresses the image of your nose through a process called neural adaptation, filtering out constant stimuli to focus on novelty."}'
+        return resp
+    mock_model.generate_content.side_effect = _capture
+
+    with patch.object(llm_service, "_get_model", return_value=mock_model):
+        llm_service.generate_fact_topic("human body & biology")
+
+    assert "prompt" in captured
+    p = captured["prompt"]
+
+    # Timeless guardrail must be present
+    assert "timeless" in p.lower(), "Timeless guardrail must be in prompt"
+    assert "recent news" in p.lower() or "trending" in p.lower(), (
+        "Guardrail must explicitly ban news/trending topics"
+    )
+
+    # Casual title examples must be present; academic ones must be gone
+    assert "radioactive" in p.lower() or "hiding your nose" in p.lower(), (
+        "Casual example titles must appear in the prompt"
+    )
+    assert "ancient romans" not in p.lower(), "Old academic example must be removed"

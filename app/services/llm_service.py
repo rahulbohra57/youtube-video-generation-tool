@@ -840,18 +840,20 @@ def generate_fact_topic(category: str, recently_used_titles: list[str] | None = 
         lines = "\n".join(f"  - {t}" for t in recently_used_titles[:60])
         avoid_block = f"\nDo NOT reuse these recently covered topics:\n{lines}\n"
 
-    prompt = f"""You are a researcher for a YouTube Shorts channel called "Tell Me Why" that posts surprising, factual, and educational content.
+    prompt = f"""You are a researcher for a YouTube Shorts channel called "Tell Me Why" — where a conversational friend shares wild, surprising facts, like texting someone something they won't believe.
 
 Generate a specific, punchy fact topic for the category: {category.title()}{avoid_block}
 
 Rules:
-- title: 6-12 words, must be a hook question OR a shocking fact statement. Examples:
-  - "Why do humans feel heartbreak as physical pain?"
-  - "Your body replaces itself completely every 7 years — sort of"
-  - "Ancient Romans used crushed mouse brains as toothpaste"
-  - "The human eye can detect a single photon of light"
+- title: 6-12 words, casual and conversational — sounds like something you'd say out loud to a friend. Must be a hook statement or rhetorical question. Examples:
+  - "Your brain is actively hiding your nose from you right now"
+  - "Bananas are technically radioactive and you eat them anyway"
+  - "Your heartbreak is literally making your chest hurt — here's why"
+  - "The loudest animal on Earth is smaller than your thumbnail"
+  - "You share 60% of your DNA with a banana"
 - premise: 1-2 sentences of factual context that the script writer can expand. Must include the core mechanism, number, or surprising detail. Minimum 15 words.
 - Topic must be genuinely surprising or counterintuitive — avoid obvious or well-worn facts.
+- IMPORTANT: Do NOT generate topics about recent news events, trending topics, or anything time-sensitive. These must be timeless facts — just as surprising today as they were 10 years ago and will be 10 years from now.
 - Topic must be verifiable via Google Search.
 
 Return only a valid JSON object, no markdown:
