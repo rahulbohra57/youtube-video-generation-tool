@@ -2,6 +2,7 @@
 
 from vertexai.generative_models import GenerativeModel
 import vertexai
+import os
 import re
 import json
 import random
@@ -12,7 +13,7 @@ logger = logging.getLogger(__name__)
 _model = None
 
 
-_GCP_PROJECT = "youtube-video-generator-492211"
+_GCP_PROJECT = os.getenv("GCP_PROJECT_ID", "project-2cf07291-e18f-4a4e-ad2")
 _GCP_LOCATION = "us-central1"
 
 

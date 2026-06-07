@@ -38,6 +38,7 @@ jobs:
           GOOGLE_SEARCH_ENGINE_ID: ${{ secrets.GOOGLE_SEARCH_ENGINE_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           GITHUB_REPO: ${{ github.repository }}
           GITHUB_DISPATCH_TOKEN: ${{ github.token }}
         run: python scripts/run_research.py

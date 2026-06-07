@@ -14,7 +14,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 _TOKEN_URI = "https://oauth2.googleapis.com/token"
-_PROJECT_ID = "youtube-video-generator-492211"
+_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "project-2cf07291-e18f-4a4e-ad2")
 _FS_BASE = f"https://firestore.googleapis.com/v1/projects/{_PROJECT_ID}/databases/(default)/documents"
 
 

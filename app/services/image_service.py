@@ -1,5 +1,6 @@
 # app/services/image_service.py
 
+import os
 import vertexai
 from vertexai.preview.vision_models import ImageGenerationModel
 from app.config import TEMP_DIR
@@ -12,7 +13,7 @@ from PIL import Image, ImageDraw
 # highest image quality and prompt adherence. 20 QPM quota is sufficient for
 # 5-scene videos. Exponential backoff handles occasional rate-limit spikes.
 MODEL_NAME = "imagen-3.0-generate-002"
-_GCP_PROJECT = "youtube-video-generator-492211"
+_GCP_PROJECT = os.getenv("GCP_PROJECT_ID", "project-2cf07291-e18f-4a4e-ad2")
 _GCP_LOCATION = "us-central1"
 
 ensure_dir(TEMP_DIR)

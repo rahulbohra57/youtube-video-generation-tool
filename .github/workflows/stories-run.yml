@@ -37,6 +37,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           STORIES_BOT_TOKEN: ${{ secrets.STORIES_BOT_TOKEN }}
           STORIES_CHAT_ID: ${{ secrets.STORIES_CHAT_ID }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           GITHUB_REPO: ${{ github.repository }}
           GITHUB_DISPATCH_TOKEN: ${{ github.token }}
         run: python scripts/run_stories.py
