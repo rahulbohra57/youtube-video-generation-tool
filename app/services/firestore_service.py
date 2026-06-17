@@ -111,14 +111,15 @@ def _parse_iso(ts: str | None) -> datetime | None:
         return None
 
 
-def acquire_video_lock(owner: str, ttl_seconds: int = 1800, force: bool = False) -> bool:
+def acquire_video_lock(owner: str, ttl_seconds: int = 1800, force: bool = False, lock_key: str = "video_generation") -> bool:
     """Acquire a cross-instance video generation lock.
 
     Returns True only when this caller owns the lock.
     When force=True, unconditionally overwrites any existing lock (used by force_run).
+    lock_key allows separate locks for different pipelines (e.g. "long_video_generation").
     """
     db = _get_db()
-    doc_ref = db.collection("locks").document("video_generation")
+    doc_ref = db.collection("locks").document(lock_key)
     now = _utc_now()
     expires_at = now.timestamp() + ttl_seconds
     payload = {
@@ -160,10 +161,10 @@ def acquire_video_lock(owner: str, ttl_seconds: int = 1800, force: bool = False)
     return bool(_steal_if_expired(transaction))
 
 
-def release_video_lock(owner: str) -> bool:
+def release_video_lock(owner: str, lock_key: str = "video_generation") -> bool:
     """Release the lock only if the caller still owns it."""
     db = _get_db()
-    doc_ref = db.collection("locks").document("video_generation")
+    doc_ref = db.collection("locks").document(lock_key)
     transaction = db.transaction()
 
     @firestore.transactional
