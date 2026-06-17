@@ -79,3 +79,33 @@ def test_dispatch_falls_back_to_github_token(monkeypatch):
         gd.dispatch_video_generation({"job_id": "job_456"})
 
     assert mock_post.call_args[1]["headers"]["Authorization"] == "token gha-auto-token"
+
+
+def test_dispatch_long_video_posts_to_correct_workflow(monkeypatch):
+    monkeypatch.setenv("GITHUB_DISPATCH_TOKEN", "test-token")
+    monkeypatch.setenv("GITHUB_REPO", "owner/repo")
+
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status = MagicMock()
+
+    with patch("app.agents.github_dispatch.requests.post", return_value=mock_resp) as mock_post:
+        import app.agents.github_dispatch as gd
+        importlib.reload(gd)
+        gd.dispatch_long_video_generation({"job_id": "long_123", "headline": "Long Test"})
+
+    call_args = mock_post.call_args
+    assert "generate-long-video.yml" in call_args[0][0]
+    body = call_args[1]["json"]
+    payload = json.loads(body["inputs"]["payload"])
+    assert payload["job_id"] == "long_123"
+
+
+def test_dispatch_long_video_raises_without_token(monkeypatch):
+    monkeypatch.delenv("GITHUB_DISPATCH_TOKEN", raising=False)
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+
+    import app.agents.github_dispatch as gd
+    importlib.reload(gd)
+
+    with pytest.raises(RuntimeError, match="GITHUB_DISPATCH_TOKEN"):
+        gd.dispatch_long_video_generation({"job_id": "x"})
