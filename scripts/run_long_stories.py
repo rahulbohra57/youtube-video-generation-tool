@@ -4,6 +4,10 @@
 # Scheduled at 2pm IST daily by stories-long-run.yml.
 # Picks a Tell Me Why topic and dispatches generate-long-video.yml.
 
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import re
 import hashlib
 import logging
