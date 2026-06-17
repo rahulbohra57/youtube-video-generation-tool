@@ -2,7 +2,6 @@
 
 import os
 import logging
-import urllib.request
 import requests
 
 from app.config import TEMP_DIR
@@ -94,7 +93,12 @@ def fetch_clip(
             url = _best_video_file(clip)
             if not url:
                 continue
-            urllib.request.urlretrieve(url, dest)  # noqa: S310
+            api_key = os.getenv("PEXELS_API_KEY", "")
+            resp = requests.get(url, headers={"Authorization": api_key}, timeout=60, stream=True)
+            resp.raise_for_status()
+            with open(dest, "wb") as f:
+                for chunk in resp.iter_content(chunk_size=1 << 20):
+                    f.write(chunk)
             logger.info("[Pexels] scene=%d query=%r duration=%s", scene_idx, attempt_query, clip.get("duration"))
             return dest
         except Exception as exc:
