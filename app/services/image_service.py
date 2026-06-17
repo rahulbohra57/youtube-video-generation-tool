@@ -154,6 +154,46 @@ def generate_image(prompt: str, idx: int, aspect_ratio: str = "16:9") -> str:
     )
 
 
+import logging as _logging
+_logger = _logging.getLogger(__name__)
+
+
+def generate_thumbnail(prompt: str, code: str) -> str:
+    """Generate a 16:9 thumbnail image using Imagen 3. Returns local .png path."""
+    ensure_dir(TEMP_DIR)
+    output_path = os.path.join(TEMP_DIR, f"thumbnail_{code}.png")
+    full_prompt = (
+        f"{prompt} "
+        "Thumbnail composition: single bold focal subject, high contrast, vivid complementary colors, "
+        "cinematic lighting. No text, no words, no letters, no logos, no captions, no watermarks."
+    )
+    for delay in _QUOTA_RETRY_DELAYS + [None]:
+        try:
+            images = _get_model().generate_images(
+                prompt=full_prompt,
+                number_of_images=1,
+                aspect_ratio="16:9",
+                safety_filter_level="block_few",
+                person_generation="allow_adult",
+                negative_prompt="text, words, letters, numbers, logos, captions, subtitles, watermarks, signs",
+            )
+            img = _first_generated_image(images)
+            if img is None:
+                raise RuntimeError("Imagen returned no images for thumbnail")
+            img.save(output_path)
+            return output_path
+        except Exception as exc:
+            if delay is None:
+                raise
+            err = str(exc).lower()
+            if any(kw in err for kw in ("quota", "429", "resource_exhausted")):
+                _logger.warning("[Thumbnail] Quota error, waiting %ds: %s", delay, exc)
+                time.sleep(delay)
+            else:
+                raise
+    raise RuntimeError("generate_thumbnail: all retries exhausted")
+
+
 def generate_fallback_image(idx: int, aspect_ratio: str = "9:16", hint: str = "", language: str = "en") -> str:
     """Generate a text-card fallback frame when Imagen is unavailable.
 

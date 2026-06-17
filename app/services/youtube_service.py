@@ -60,6 +60,18 @@ _UPLOAD_DEFAULTS: dict[str, str] = {
         "https://www.youtube.com/@TellMeWhy-in\n\n"
         "#shorts #TellMeWhy #CuriosityFacts #DidYouKnow #LearnOnYouTube #WhyFacts #MindBlown"
     ),
+    "stories_long": (
+        "----\n\n"
+        "Welcome to Tell Me Why — your daily deep dive into curiosity.\n\n"
+        "Ever wondered why things work the way they do? We go deep on the questions you never thought to ask — from science and psychology to everyday mysteries and mind-bending facts.\n\n"
+        "🔍 Discover something surprising every day.\n"
+        "🧠 Feed your curiosity.\n"
+        "💡 Share the knowledge.\n\n"
+        "If you love learning something new every day, subscribe and never stop asking why.\n\n"
+        "🔔 Join the curious minds:\n"
+        "https://www.youtube.com/@TellMeWhy-in\n\n"
+        "#TellMeWhy #CuriosityFacts #DidYouKnow #LearnOnYouTube #WhyFacts #MindBlown #Educational"
+    ),
 }
 
 
@@ -181,13 +193,13 @@ def refresh_all_tokens() -> dict[str, str]:
     return results
 
 
-def upload_video(video_path: str, title: str, description: str, genre: str = "", channel_id: str = "news", tags: list | None = None) -> str:
+def upload_video(video_path: str, title: str, description: str, genre: str = "", channel_id: str = "news", tags: list | None = None, is_short: bool = True) -> str:
     creds = get_credentials(channel_id=channel_id)
     youtube = build("youtube", "v3", credentials=creds)
 
     # Ensure #Shorts is in the description so YouTube surfaces it in the Shorts feed
     desc = description or ""
-    if "#shorts" not in desc.lower():
+    if is_short and "#shorts" not in desc.lower():
         desc = desc.rstrip() + "\n#Shorts"
 
     # Append channel-specific boilerplate for SEO and subscriber context
@@ -254,15 +266,31 @@ def upload_video(video_path: str, title: str, description: str, genre: str = "",
 def extract_video_id(url: str) -> str:
     if not url:
         return ""
+    from urllib.parse import parse_qs
     parsed = urlparse(url)
+    # https://www.youtube.com/watch?v=VIDEO_ID
+    qs = parse_qs(parsed.query)
+    if "v" in qs:
+        return qs["v"][0].strip()
     path = (parsed.path or "").strip("/")
     if not path:
         return ""
+    # https://www.youtube.com/shorts/VIDEO_ID
     if path.startswith("shorts/"):
         return path.split("/", 1)[1].strip()
+    # https://youtu.be/VIDEO_ID
     if parsed.netloc.endswith("youtu.be"):
         return path.split("/")[0].strip()
     return ""
+
+
+def set_thumbnail(video_id: str, thumbnail_path: str, channel_id: str = "stories") -> None:
+    """Upload a custom thumbnail to an already-published YouTube video."""
+    creds = get_credentials(channel_id=channel_id)
+    youtube = build("youtube", "v3", credentials=creds)
+    media = MediaFileUpload(thumbnail_path, mimetype="image/png", resumable=False)
+    youtube.thumbnails().set(videoId=video_id, media_body=media).execute()
+    logger.info("[YouTube] Thumbnail set for video %s", video_id)
 
 
 _GENRE_PLAYLIST_NAMES: dict[str, str] = {
