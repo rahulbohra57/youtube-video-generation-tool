@@ -1270,3 +1270,62 @@ Script scenes:
     except Exception:
         pass
     return {"title": topic.strip(), "caption": generate_shorts_caption(topic, language=language), "tags": []}
+
+
+def generate_long_facts_script(topic: str, category: str = "", premise: str = "") -> str:
+    """Generate a 25–30 scene long-format facts script for Tell Me Why.
+
+    Each scene has: scene (int), segment (hook/core/retention/cta),
+    narration (40–50 words), visual_query (2–5 word Pexels search phrase).
+    Returns raw JSON string. Caller must parse with extract_json().
+    Tries Google Search grounding first; falls back to standard model on failure.
+    """
+    from datetime import date
+    today_str = date.today().isoformat()
+
+    category_block = f"\nCategory: {category}\n" if category else ""
+    premise_block = f"\nPremise: {premise.strip()}\n" if premise and premise.strip() else ""
+
+    prompt = f"""You are a scriptwriter for 'Tell Me Why', a YouTube educational channel. Write a long-form video script (8–10 minutes, 27 scenes) on the topic below. Verify all facts carefully before writing.
+
+Topic: {topic}{category_block}{premise_block}
+TODAY'S DATE: {today_str}.
+
+Return ONLY a valid JSON array — no markdown, no explanation, no code fences.
+
+Each scene object must have exactly these four fields:
+- "scene": integer (1-based, 1 to 27)
+- "segment": one of "hook", "core", "retention", "cta"
+- "narration": spoken content (40–50 words at natural conversational pace)
+- "visual_query": 2–5 word Pexels search phrase in English (e.g. "deep ocean bioluminescence")
+
+SEGMENT RULES — follow exactly:
+Scenes 1–2 → "hook": Scene 1 first sentence MUST be 12 words or fewer. Open with a surprising number, a named person doing something unexpected, or a direct question. No context-setting. Viewer decides in 3 seconds.
+Scenes 3–24 → "core": One concrete insight per scene — real figures, dates, mechanisms, consequences. No filler. No cliffhangers — every fact resolves within its scene.
+Scenes 25–26 → "retention": Conversational engagement — "Drop a comment below", "What surprised you most?", or a teaser for a related fact. Warm tone.
+Scene 27 → "cta": Like & Subscribe. One sentence, warm not pushy.
+Total: exactly 27 scenes.
+
+NARRATION RULES:
+- 40–50 words per scene (approx 16–20 seconds at 150 wpm)
+- Conversational English — like explaining to a curious friend
+- Banned phrases: "let's explore", "stay tuned", "it's fascinating", "game-changer", "in this video", "we'll discover"
+- Every fact resolves within its scene — no "but we'll get to that later"
+
+VISUAL_QUERY RULES:
+- 2–5 plain English words for a Pexels video search
+- Always in English
+- Describe what appears visually on screen
+- Examples: "human brain neurons firing", "ancient roman colosseum ruins", "stock market trading floor"
+
+Return the JSON array directly. Start with "[" and end with "]".
+"""
+    try:
+        search_model = _init_search_model(_SEARCH_MODEL_CANDIDATES[0])
+        response = search_model.generate_content(prompt)
+        return _response_text(response)
+    except Exception as search_exc:
+        logger.warning("Long script search grounding failed (%s), using standard model", search_exc)
+
+    response = _get_model().generate_content(prompt)
+    return _response_text(response)
