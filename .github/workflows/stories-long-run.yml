@@ -1,0 +1,43 @@
+name: Tell Me Why Long-Format Run
+
+on:
+  schedule:
+    - cron: "30 8 * * *"  # 2:00pm IST daily (UTC+5:30 → 08:30 UTC)
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  tell-me-why-long:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Set up GCP credentials
+        run: |
+          echo '${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}' > /tmp/gcp_key.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp_key.json" >> $GITHUB_ENV
+
+      - name: Run Tell Me Why long-format scheduler
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          STORIES_BOT_TOKEN: ${{ secrets.STORIES_BOT_TOKEN }}
+          STORIES_CHAT_ID: ${{ secrets.STORIES_CHAT_ID }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GITHUB_REPO: ${{ github.repository }}
+          GITHUB_DISPATCH_TOKEN: ${{ github.token }}
+        run: python scripts/run_long_stories.py
