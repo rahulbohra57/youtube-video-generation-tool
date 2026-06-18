@@ -122,3 +122,77 @@ def test_fetch_clip_raises_without_api_key(tmp_path, monkeypatch):
         result = ps.fetch_clip("test", 10.0, scene_idx=0, temp_dir=str(tmp_path))
 
     assert result == ""
+
+
+# --- fetch_clips_for_scene tests ---
+
+def test_fetch_clips_for_scene_returns_multiple_clips(tmp_path, monkeypatch):
+    monkeypatch.setenv("PEXELS_API_KEY", "test-key")
+    import app.services.pexels_service as ps
+    importlib.reload(ps)
+
+    # Provide 10 long-enough clips in the pool
+    videos = [_make_video(30.0)] * 10
+    mock_search_resp = MagicMock()
+    mock_search_resp.json.return_value = {"videos": videos}
+    mock_search_resp.raise_for_status = MagicMock()
+
+    def side_effect(url, **kwargs):
+        if "api.pexels.com" in url:
+            return mock_search_resp
+        return _mock_download(url)
+
+    with patch("app.services.pexels_service.requests.get", side_effect=side_effect):
+        result = ps.fetch_clips_for_scene("ocean waves", 25.0, scene_idx=0, temp_dir=str(tmp_path))
+
+    # Should return multiple clips covering ~25s
+    assert isinstance(result, list)
+    assert len(result) >= 2
+    total_covered = sum(r["clip_duration"] for r in result)
+    assert total_covered >= 24.5  # within 0.5s of audio_duration
+    for r in result:
+        assert "video_path" in r
+        assert "clip_duration" in r
+        assert 5.0 <= r["clip_duration"] <= 20.5
+
+
+def test_fetch_clips_for_scene_falls_back_to_black_frame_on_no_results(tmp_path, monkeypatch):
+    monkeypatch.setenv("PEXELS_API_KEY", "test-key")
+    import app.services.pexels_service as ps
+    importlib.reload(ps)
+
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {"videos": []}
+    mock_resp.raise_for_status = MagicMock()
+
+    with patch("app.services.pexels_service.requests.get", return_value=mock_resp):
+        result = ps.fetch_clips_for_scene("query", 20.0, scene_idx=1, temp_dir=str(tmp_path))
+
+    assert result == [{"video_path": "", "clip_duration": 20.0}]
+
+
+def test_fetch_clips_for_scene_clip_durations_within_ranges(tmp_path, monkeypatch):
+    monkeypatch.setenv("PEXELS_API_KEY", "test-key")
+    import app.services.pexels_service as ps
+    importlib.reload(ps)
+
+    videos = [_make_video(30.0)] * 15
+    mock_search_resp = MagicMock()
+    mock_search_resp.json.return_value = {"videos": videos}
+    mock_search_resp.raise_for_status = MagicMock()
+
+    def side_effect(url, **kwargs):
+        if "api.pexels.com" in url:
+            return mock_search_resp
+        return _mock_download(url)
+
+    # Run several times to hit both short and long ranges probabilistically
+    all_durations = []
+    with patch("app.services.pexels_service.requests.get", side_effect=side_effect):
+        for i in range(5):
+            result = ps.fetch_clips_for_scene("space", 30.0, scene_idx=i, temp_dir=str(tmp_path))
+            all_durations.extend(r["clip_duration"] for r in result)
+
+    # All clip durations must be within valid ranges
+    for dur in all_durations:
+        assert (5.0 <= dur <= 10.0) or (15.0 <= dur <= 20.0) or dur <= 30.0

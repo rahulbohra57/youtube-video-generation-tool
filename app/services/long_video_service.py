@@ -53,33 +53,64 @@ def create_long_video(
     scene_clips = []
 
     for idx, item in enumerate(clips):
-        video_path = item.get("video_path", "")
         audio_path = item["audio_path"]
         narration = item.get("narration", "")
 
         audio = AudioFileClip(audio_path)
         audio = _audio_fade_in(audio, AUDIO_FADE_IN)
         audio = _audio_fade_out(audio, AUDIO_FADE_OUT)
-        duration = audio.duration
+        total_duration = audio.duration
 
-        if video_path and os.path.exists(video_path):
-            raw = VideoFileClip(video_path)
-            if raw.duration >= duration:
-                base = _subclip(raw, 0, duration)
+        # Support new clips_list format and old video_path format
+        clips_list = item.get("clips_list")
+        if clips_list is None:
+            clips_list = [{"video_path": item.get("video_path", ""), "clip_duration": None}]
+
+        sub_clips = []
+        running = 0.0
+
+        for clip_info in clips_list:
+            video_path = clip_info.get("video_path", "")
+            target_dur = clip_info.get("clip_duration") or (total_duration - running)
+            remaining = total_duration - running
+            if remaining <= 0.05:
+                break
+            actual_dur = min(target_dur, remaining)
+
+            if video_path and os.path.exists(video_path):
+                raw = VideoFileClip(video_path)
+                if raw.duration >= actual_dur:
+                    seg = _subclip(raw, 0, actual_dur)
+                else:
+                    loops_needed = int(actual_dur / raw.duration) + 1
+                    looped = concatenate_videoclips([raw] * loops_needed)
+                    seg = _subclip(looped, 0, actual_dur)
+                seg = _fit_cover(seg, _TARGET_W, _TARGET_H)
             else:
-                loops_needed = int(duration / raw.duration) + 1
-                looped = concatenate_videoclips([raw] * loops_needed)
-                base = _subclip(looped, 0, duration)
-            base = _fit_cover(base, _TARGET_W, _TARGET_H)
-        else:
+                arr = np.zeros((_TARGET_H, _TARGET_W, 3), dtype=np.uint8)
+                seg = _clip_duration(ImageClip(arr), actual_dur)
+
+            sub_clips.append(seg)
+            running += actual_dur
+
+        # Pad any remaining duration with black if clips fall short
+        if running < total_duration - 0.05 and sub_clips:
             arr = np.zeros((_TARGET_H, _TARGET_W, 3), dtype=np.uint8)
-            base = _clip_duration(ImageClip(arr), duration)
+            sub_clips.append(_clip_duration(ImageClip(arr), total_duration - running))
+
+        if not sub_clips:
+            arr = np.zeros((_TARGET_H, _TARGET_W, 3), dtype=np.uint8)
+            base = _clip_duration(ImageClip(arr), total_duration)
+        elif len(sub_clips) == 1:
+            base = sub_clips[0]
+        else:
+            base = concatenate_videoclips(sub_clips, method="compose")
 
         base = _clip_audio(base, audio)
 
         try:
             caption_clips = _make_word_caption_clips(
-                narration, duration, _TARGET_W, _TARGET_H, language=language
+                narration, total_duration, _TARGET_W, _TARGET_H, language=language
             )
             clip = CompositeVideoClip([base] + caption_clips) if caption_clips else base
         except Exception as cap_err:

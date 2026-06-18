@@ -10,7 +10,7 @@ from app.config import TEMP_DIR, OUTPUT_DIR, TMP_RETENTION_DAYS, get_chat_id
 from app.services import firestore_service
 from app.services.llm_service import generate_long_facts_script, classify_music_genre
 from app.services.tts_service import generate_audio, choose_voice_for_video
-from app.services.pexels_service import fetch_clip
+from app.services.pexels_service import fetch_clips_for_scene
 from app.services.image_service import generate_thumbnail
 from app.services.long_video_service import create_long_video
 from app.services.telegram_service import send_message
@@ -149,15 +149,16 @@ def run(
             except Exception:
                 audio_duration = 20.0
 
-            video_path = fetch_clip(visual_query, audio_duration, scene_idx=i, category=genre, temp_dir=TEMP_DIR)
+            scene_clips = fetch_clips_for_scene(visual_query, audio_duration, scene_idx=i, category=genre, temp_dir=TEMP_DIR)
 
             video_clips.append({
-                "video_path": video_path,
+                "clips_list": scene_clips,
                 "audio_path": audio_path,
                 "narration": narration,
             })
             successful_scenes += 1
-            firestore_service.mark_scene_checkpoint(effective_job_id, i, "completed", audio_path=audio_path, image_path=video_path)
+            first_clip_path = scene_clips[0]["video_path"] if scene_clips else ""
+            firestore_service.mark_scene_checkpoint(effective_job_id, i, "completed", audio_path=audio_path, image_path=first_clip_path)
 
         if successful_scenes < LONG_MIN_SCENES:
             raise RuntimeError(f"Only {successful_scenes} scenes succeeded, need at least {LONG_MIN_SCENES}")

@@ -31,7 +31,7 @@ def test_run_completes_happy_path(tmp_path):
          patch("app.agents.long_generator_agent.extract_json", return_value=scenes), \
          patch("app.agents.long_generator_agent.choose_voice_for_video", return_value="en-US-Neural2-D"), \
          patch("app.agents.long_generator_agent.generate_audio"), \
-         patch("app.agents.long_generator_agent.fetch_clip", return_value=str(tmp_path / "clip.mp4")), \
+         patch("app.agents.long_generator_agent.fetch_clips_for_scene", return_value=[{"video_path": str(tmp_path / "clip.mp4"), "clip_duration": 8.0}]), \
          patch("app.agents.long_generator_agent.generate_thumbnail", return_value=str(tmp_path / "thumb.png")), \
          patch("app.agents.long_generator_agent.create_long_video", return_value=str(tmp_path / "out.mp4")), \
          patch("app.agents.long_generator_agent.classify_music_genre", return_value="Happy"), \
