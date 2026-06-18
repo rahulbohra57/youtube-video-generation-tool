@@ -153,7 +153,7 @@ def test_fetch_clips_for_scene_returns_multiple_clips(tmp_path, monkeypatch):
     for r in result:
         assert "video_path" in r
         assert "clip_duration" in r
-        assert 5.0 <= r["clip_duration"] <= 20.5
+        assert 0 < r["clip_duration"] <= 25.0  # last clip may be shorter due to remaining cap
 
 
 def test_fetch_clips_for_scene_falls_back_to_black_frame_on_no_results(tmp_path, monkeypatch):

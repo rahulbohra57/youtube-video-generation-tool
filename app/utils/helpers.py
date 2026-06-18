@@ -10,16 +10,17 @@ def extract_json(text: str):
     # Remove markdown ```json blocks
     text = re.sub(r"```json|```", "", text)
 
-    # Extract JSON array
-    match = re.search(r'\[.*\]', text, re.DOTALL)
-    
-    if match:
-        json_str = match.group()
+    # Parse only the first complete JSON array, stopping at its closing bracket.
+    # raw_decode stops as soon as it finishes the first valid JSON value, so
+    # duplicate/trailing arrays from the LLM don't cause "Extra data" errors.
+    start = text.find('[')
+    if start != -1:
         try:
-            return json.loads(json_str)
+            result, _ = json.JSONDecoder().raw_decode(text, start)
+            return result
         except json.JSONDecodeError as e:
             print("JSON parsing failed:", e)
-            print("Raw JSON:", json_str)
+            print("Raw JSON (first 500 chars):", text[start:start + 500])
             raise ValueError("Invalid JSON from LLM")
 
     raise ValueError("No JSON found in LLM response")
