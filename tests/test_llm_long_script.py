@@ -20,7 +20,7 @@ def _make_scene(i: int, segment: str = "core") -> dict:
 
 
 def test_generate_long_facts_script_returns_json_with_scenes():
-    scenes = [_make_scene(i, "hook" if i <= 2 else ("cta" if i == 27 else "core")) for i in range(1, 28)]
+    scenes = [_make_scene(i, "hook" if i <= 2 else ("cta" if i == 24 else "core")) for i in range(1, 25)]
     mock_get_model = _make_model_mock(json.dumps(scenes))
 
     with patch("app.services.llm_service._get_model", mock_get_model), \
@@ -34,7 +34,7 @@ def test_generate_long_facts_script_returns_json_with_scenes():
 
     parsed = json.loads(result)
     assert isinstance(parsed, list)
-    assert len(parsed) == 27
+    assert len(parsed) == 24
     assert parsed[0]["segment"] == "hook"
     assert "visual_query" in parsed[0]
     assert "narration" in parsed[0]
@@ -52,7 +52,7 @@ def test_generate_long_facts_script_includes_topic_in_prompt():
     assert "Octopus intelligence facts" in prompt
     assert "visual_query" in prompt
     assert "hook" in prompt
-    assert "27" in prompt
+    assert "24" in prompt
 
 
 def test_generate_long_facts_script_falls_back_to_standard_model_on_search_failure():

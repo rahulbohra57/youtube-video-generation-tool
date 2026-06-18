@@ -91,8 +91,8 @@ def _font_size(width: int, height: int) -> int:
         # 9:16 — readable on a phone, but not overwhelming
         return max(42, min(64, width // 13))
     else:
-        # 16:9 — smaller; text competes with the wide image canvas
-        return max(28, min(40, width // 38))
+        # 16:9 — slightly larger for readability on long-format videos
+        return max(34, min(48, width // 32))
 
 
 def _bottom_margin(width: int, height: int) -> int:

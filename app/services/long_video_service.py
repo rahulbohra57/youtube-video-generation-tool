@@ -27,10 +27,11 @@ from app.services.video_service import (
     _clip_audio,
     _clip_duration,
     BG_VOLUME,
-    VO_GAIN,
     AUDIO_FADE_IN,
     AUDIO_FADE_OUT,
 )
+
+LONG_VO_GAIN = 1.5  # higher than Shorts (1.08) — long-format needs clearer narration over B-roll
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +121,7 @@ def create_long_video(
         scene_clips.append(clip)
 
     final_video = concatenate_videoclips(scene_clips, method="compose")
-    vo_audio = _volume(_audio_fade_out(final_video.audio, 0.5), VO_GAIN)
+    vo_audio = _volume(_audio_fade_out(final_video.audio, 0.5), LONG_VO_GAIN)
     final_video = _clip_audio(final_video, vo_audio)
 
     music_path = _pick_music(music_genre)

@@ -1286,7 +1286,7 @@ def generate_long_facts_script(topic: str, category: str = "", premise: str = ""
     category_block = f"\nCategory: {category}\n" if category else ""
     premise_block = f"\nPremise: {premise.strip()}\n" if premise and premise.strip() else ""
 
-    prompt = f"""You are a scriptwriter for 'Tell Me Why', a YouTube educational channel. Write a long-form video script (8–10 minutes, 27 scenes) on the topic below. Verify all facts carefully before writing.
+    prompt = f"""You are a scriptwriter for 'Tell Me Why', a YouTube educational channel. Write a long-form video script (5–7 minutes, 24 scenes) on the topic below. Verify all facts carefully before writing.
 
 Topic: {topic}{category_block}{premise_block}
 TODAY'S DATE: {today_str}.
@@ -1294,20 +1294,20 @@ TODAY'S DATE: {today_str}.
 Return ONLY a valid JSON array — no markdown, no explanation, no code fences.
 
 Each scene object must have exactly these four fields:
-- "scene": integer (1-based, 1 to 27)
+- "scene": integer (1-based, 1 to 24)
 - "segment": one of "hook", "core", "retention", "cta"
-- "narration": spoken content (40–50 words at natural conversational pace)
+- "narration": spoken content (35–42 words at natural conversational pace)
 - "visual_query": 2–5 word Pexels search phrase in English (e.g. "deep ocean bioluminescence")
 
 SEGMENT RULES — follow exactly:
 Scenes 1–2 → "hook": Scene 1 first sentence MUST be 12 words or fewer. Open with a surprising number, a named person doing something unexpected, or a direct question. No context-setting. Viewer decides in 3 seconds.
-Scenes 3–24 → "core": One concrete insight per scene — real figures, dates, mechanisms, consequences. No filler. No cliffhangers — every fact resolves within its scene.
-Scenes 25–26 → "retention": Conversational engagement — "Drop a comment below", "What surprised you most?", or a teaser for a related fact. Warm tone.
-Scene 27 → "cta": Like & Subscribe. One sentence, warm not pushy.
-Total: exactly 27 scenes.
+Scenes 3–21 → "core": One concrete insight per scene — real figures, dates, mechanisms, consequences. No filler. No cliffhangers — every fact resolves within its scene.
+Scenes 22–23 → "retention": Conversational engagement — "Drop a comment below", "What surprised you most?", or a teaser for a related fact. Warm tone.
+Scene 24 → "cta": Like & Subscribe. One sentence, warm not pushy.
+Total: exactly 24 scenes.
 
 NARRATION RULES:
-- 40–50 words per scene (approx 16–20 seconds at 150 wpm)
+- 35–42 words per scene (approx 14–17 seconds at 150 wpm)
 - Conversational English — like explaining to a curious friend
 - Banned phrases: "let's explore", "stay tuned", "it's fascinating", "game-changer", "in this video", "we'll discover"
 - Every fact resolves within its scene — no "but we'll get to that later"

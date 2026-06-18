@@ -23,8 +23,8 @@ _LONG_LOCK_KEY = "long_video_generation"
 _LONG_PIPELINE_CHANNEL = "stories_long"
 _YOUTUBE_CHANNEL = "stories"
 
-LONG_MIN_SCENES = 22
-LONG_MAX_SCENES = 30
+LONG_MIN_SCENES = 18
+LONG_MAX_SCENES = 24
 
 _TMW_VISUAL_STYLE = (
     "Bright flat digital illustration, thick bold outlines, vivid complementary color palette "
