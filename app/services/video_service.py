@@ -191,10 +191,12 @@ def _make_word_caption_clips(
     height: int,
     language: str = "en",
     animated_entry: bool = False,
+    caption_bg: tuple | None = None,
 ) -> list:
     """
     Split narration into sentence chunks (at . ! ?), render each as a timed ImageClip.
-    Bold text, dark stroke outline, no background pill.
+    Bold text, dark stroke outline.
+    caption_bg: optional RGBA tuple for a semi-transparent background pad behind text.
     Respects YouTube Shorts safe zone (bottom + horizontal margins).
     Long sentences are wrapped to 2 lines automatically.
     Time is distributed proportionally by word count across sentences.
@@ -220,7 +222,7 @@ def _make_word_caption_clips(
 
     font_size  = _font_size(width, height)
     font       = _load_font(font_size, language)
-    stroke_w   = max(2, font_size // 20)
+    stroke_w   = max(3, font_size // 14)
     max_txt_w  = _max_text_width(width, height)
     margin_bot = _bottom_margin(width, height)
     cx         = width // 2
@@ -257,6 +259,22 @@ def _make_word_caption_clips(
 
         canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         draw   = ImageDraw.Draw(canvas)
+
+        # Optional semi-transparent background pad behind text block
+        if caption_bg:
+            pad_x, pad_y = int(font_size * 0.6), int(font_size * 0.35)
+            # Measure actual text block width across all lines
+            probe2 = Image.new("RGBA", (1, 1))
+            d2 = ImageDraw.Draw(probe2)
+            max_line_w = max(
+                d2.textbbox((0, 0), ln, font=font)[2] - d2.textbbox((0, 0), ln, font=font)[0]
+                for ln in lines
+            )
+            bg_x0 = cx - max_line_w // 2 - pad_x
+            bg_x1 = cx + max_line_w // 2 + pad_x
+            bg_y0 = ty_start - pad_y
+            bg_y1 = ty_start + block_h + pad_y
+            draw.rounded_rectangle([bg_x0, bg_y0, bg_x1, bg_y1], radius=int(font_size * 0.4), fill=caption_bg)
 
         for i, line in enumerate(lines):
             ty = ty_start + i * (line_h + line_gap)
