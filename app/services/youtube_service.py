@@ -202,8 +202,11 @@ def upload_video(video_path: str, title: str, description: str, genre: str = "",
     if is_short and "#shorts" not in desc.lower():
         desc = desc.rstrip() + "\n#Shorts"
 
-    # Append channel-specific boilerplate for SEO and subscriber context
-    desc = desc.rstrip() + "\n\n" + _UPLOAD_DEFAULTS.get(channel_id, "")
+    # Pick the right boilerplate: long-format "stories" uploads use the stories_long key
+    defaults_key = channel_id
+    if channel_id == "stories" and not is_short:
+        defaults_key = "stories_long"
+    desc = desc.rstrip() + "\n\n" + _UPLOAD_DEFAULTS.get(defaults_key, "")
 
     # Merge base Shorts tags with topic-specific tags from the script reviewer.
     # YouTube caps total tag characters at 500; truncate to stay within limit.

@@ -187,7 +187,7 @@ def run(
         youtube_url = upload_video(
             video_path=output_path,
             title=headline,
-            description="",
+            description=f"In this video, we explore: {headline}",
             genre=genre,
             channel_id=_YOUTUBE_CHANNEL,
             tags=["TellMeWhy", "facts", "educational", "longform", "curiosity"],
