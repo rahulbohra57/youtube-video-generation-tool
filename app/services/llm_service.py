@@ -178,8 +178,8 @@ Additional format constraints:
 
 _search_model = None  # lazily initialised on first call
 _SEARCH_MODEL_CANDIDATES = (
-    "gemini-2.0-flash",
     "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
 )
 _search_grounding_disabled = False
 

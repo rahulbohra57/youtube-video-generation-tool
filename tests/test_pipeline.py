@@ -163,34 +163,33 @@ def test_format_caption_for_youtube_normalizes_spacing_and_hashtags():
     assert "\n\n#AI #Tech" in out
 
 
-def test_search_model_candidates_starts_with_gemini_2_0_flash():
-    """Primary search candidate must be gemini-2.0-flash to avoid retired -001 routing."""
+def test_search_model_candidates_starts_with_gemini_2_5_flash():
+    """Primary search candidate must be gemini-2.5-flash (gemini-2.0-flash is deprecated)."""
     from app.services import llm_service
-    assert llm_service._SEARCH_MODEL_CANDIDATES[0] == "gemini-2.0-flash"
+    assert llm_service._SEARCH_MODEL_CANDIDATES[0] == "gemini-2.5-flash"
 
 
-def test_generate_script_with_search_falls_back_when_gemini_2_0_flash_001_error():
-    """Simulates the exact Vertex AI error seen in production: gemini-2.0-flash-001 not found.
-    Verifies fallback to next candidate succeeds."""
+def test_generate_script_with_search_falls_back_when_primary_unavailable():
+    """Verifies fallback to gemini-2.5-flash-lite when primary fails."""
     from app.services import llm_service
 
     llm_service._search_model = None
-    model_retired = MagicMock()
-    model_retired.generate_content.side_effect = Exception(
-        "404 publishers/google/models/gemini-2.0-flash-001 was not found"
+    model_fail = MagicMock()
+    model_fail.generate_content.side_effect = Exception(
+        "404 publishers/google/models/gemini-2.5-flash was not found"
     )
     model_ok = MagicMock()
     model_ok.generate_content.return_value = MagicMock(text='[{"scene":1,"narration":"n","visual":"v"}]')
 
     def _factory(name: str):
-        return model_retired if name == "gemini-2.0-flash" else model_ok
+        return model_fail if name == "gemini-2.5-flash" else model_ok
 
-    with patch("app.services.llm_service._SEARCH_MODEL_CANDIDATES", ("gemini-2.0-flash", "gemini-2.5-flash")):
+    with patch("app.services.llm_service._SEARCH_MODEL_CANDIDATES", ("gemini-2.5-flash", "gemini-2.5-flash-lite")):
         with patch("app.services.llm_service._init_search_model", side_effect=_factory):
             out = llm_service.generate_script_with_search("AI update")
 
     assert out.startswith("[")
-    assert model_retired.generate_content.call_count == 1
+    assert model_fail.generate_content.call_count == 1
     assert model_ok.generate_content.call_count == 1
 
 
@@ -208,7 +207,7 @@ def test_generate_script_with_search_falls_back_to_next_model_on_404():
     def _factory(name: str):
         return model_404 if name == "gemini-2.5-flash" else model_ok
 
-    with patch("app.services.llm_service._SEARCH_MODEL_CANDIDATES", ("gemini-2.5-flash", "gemini-2.0-flash")):
+    with patch("app.services.llm_service._SEARCH_MODEL_CANDIDATES", ("gemini-2.5-flash", "gemini-2.5-flash-lite")):
         with patch("app.services.llm_service._init_search_model", side_effect=_factory):
             out = llm_service.generate_script_with_search("AI update")
 
