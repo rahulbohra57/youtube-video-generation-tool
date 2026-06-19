@@ -116,3 +116,46 @@ def test_run_uses_long_lock_key():
     assert acquire_call[1].get("lock_key") == "long_video_generation" or \
            (len(acquire_call[0]) > 1 and acquire_call[0][1] == "long_video_generation") or \
            "long_video_generation" in str(acquire_call)
+
+
+def test_long_generator_collects_chapter_timestamps(tmp_path):
+    """After scene generation, chapters are passed to generate_long_video_description."""
+    scenes = _make_scenes(24)
+
+    with patch("app.agents.long_generator_agent.generate_long_facts_script", return_value=json.dumps(scenes)), \
+         patch("app.agents.long_generator_agent.extract_json", return_value=scenes), \
+         patch("app.agents.long_generator_agent.choose_voice_for_video", return_value="en-US-Neural2-D"), \
+         patch("app.agents.long_generator_agent.generate_audio"), \
+         patch("app.agents.long_generator_agent.fetch_clips_for_scene", return_value=[{"video_path": str(tmp_path / "clip.mp4"), "clip_duration": 8.0}]), \
+         patch("app.agents.long_generator_agent.generate_thumbnail", return_value=str(tmp_path / "thumb.png")), \
+         patch("app.agents.long_generator_agent.create_long_video", return_value=str(tmp_path / "out.mp4")), \
+         patch("app.agents.long_generator_agent.classify_music_genre", return_value="Happy"), \
+         patch("app.agents.long_generator_agent.generate_thumbnail_hook", return_value="HOOK TEXT"), \
+         patch("app.agents.long_generator_agent.generate_viral_title", return_value="Viral Title"), \
+         patch("app.agents.long_generator_agent.generate_long_video_description") as mock_desc, \
+         patch("app.agents.long_generator_agent.firestore_service") as mock_fs, \
+         patch("app.agents.long_generator_agent.send_message"), \
+         patch("app.agents.long_generator_agent.upload_video", return_value="https://www.youtube.com/watch?v=abc123"), \
+         patch("app.agents.long_generator_agent.set_thumbnail"), \
+         patch("app.agents.long_generator_agent.extract_video_id", return_value="abc123"):
+        mock_desc.return_value = "Test description"
+        mock_fs.get_job.return_value = {}
+        mock_fs.acquire_video_lock.return_value = True
+        mock_fs.create_or_update_job.return_value = None
+        mock_fs.mark_scene_checkpoint.return_value = None
+        mock_fs.set_pipeline_and_batch_state.return_value = None
+        mock_fs.release_video_lock.return_value = None
+
+        from app.agents.long_generator_agent import run
+        run("test headline", "t001", force_run=True)
+
+    assert mock_desc.called
+    call_args = mock_desc.call_args
+    # chapters may be passed as keyword arg or 4th positional
+    call_kwargs = call_args[1] if call_args else {}
+    call_pos = call_args[0] if call_args else ()
+    chapters = call_kwargs.get("chapters") or (call_pos[3] if len(call_pos) > 3 else None)
+    assert chapters is not None
+    assert isinstance(chapters, list)
+    assert len(chapters) > 0
+    assert "0:00" in chapters[0]

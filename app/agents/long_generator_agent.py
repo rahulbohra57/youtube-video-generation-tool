@@ -12,7 +12,7 @@ from app.services.llm_service import generate_long_facts_script, classify_music_
 from app.services.tts_service import generate_audio, choose_voice_for_video, choose_two_voices
 from app.services.pexels_service import fetch_clips_for_scene
 from app.services.image_service import generate_thumbnail
-from app.services.long_video_service import create_long_video
+from app.services.long_video_service import create_long_video, _TITLE_CARD_DURATION
 from app.services.telegram_service import send_message
 from app.services.youtube_service import upload_video, set_thumbnail, extract_video_id
 from app.utils.helpers import extract_json, ensure_dir, cleanup_files_older_than
@@ -133,6 +133,9 @@ def run(
         music_genre = classify_music_genre(headline, story_genre=genre)
         video_clips = []
         successful_scenes = 0
+        cumulative_seconds = _TITLE_CARD_DURATION  # account for title card prepended at start
+        chapter_timestamps: list[str] = ["0:00 Introduction"]
+        _CHAPTER_SCENE_INDICES = {0, 2, 7, 13, 19, 21, 23}  # scenes 1,3,8,14,20,22,24 (0-indexed)
 
         for i, scene in enumerate(scenes):
             narration = scene.get("narration", "")
@@ -156,6 +159,15 @@ def run(
                 _tmp.close()
             except Exception:
                 audio_duration = 20.0
+
+            # Chapter timestamp for key scenes
+            if i in _CHAPTER_SCENE_INDICES and i > 0:
+                mins = int(cumulative_seconds // 60)
+                secs = int(cumulative_seconds % 60)
+                first_words = " ".join(narration.split()[:5])
+                chapter_label = f"{mins}:{secs:02d} {first_words}..."
+                chapter_timestamps.append(chapter_label)
+            cumulative_seconds += audio_duration
 
             scene_clips = fetch_clips_for_scene(visual_query, audio_duration, scene_idx=i, category=genre, temp_dir=TEMP_DIR)
 
@@ -199,7 +211,7 @@ def run(
         # SEO description — non-fatal, falls back to simple line
         sample_narrations = [item.get("narration", "") for item in video_clips[:6]]
         try:
-            video_description = generate_long_video_description(headline, category=genre, narrations=sample_narrations)
+            video_description = generate_long_video_description(headline, category=genre, narrations=sample_narrations, chapters=chapter_timestamps)
         except Exception as desc_err:
             logger.warning("Description generation failed (non-fatal): %s", desc_err)
             video_description = f"Discover the fascinating truth about: {headline}"

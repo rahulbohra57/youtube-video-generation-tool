@@ -1352,7 +1352,7 @@ Return the JSON array directly. Start with "[" and end with "]".
     return _response_text(response)
 
 
-def generate_long_video_description(headline: str, category: str = "", narrations: list[str] | None = None) -> str:
+def generate_long_video_description(headline: str, category: str = "", narrations: list[str] | None = None, chapters: list[str] | None = None) -> str:
     """Generate an SEO-optimized YouTube description for a long-format Tell Me Why video.
 
     Returns the description text (without the channel boilerplate, which is appended separately).
@@ -1365,22 +1365,28 @@ def generate_long_video_description(headline: str, category: str = "", narration
 
     category_line = f"Category: {category}\n" if category else ""
 
+    chapters_block = ""
+    if chapters:
+        chapters_block = "\n\nVideo chapters (include these verbatim in the description after the bullet points):\n" + "\n".join(chapters)
+
     prompt = f"""You are an SEO copywriter for a YouTube educational channel called "Tell Me Why". Write an SEO-optimized video description for the video below.
 
 Video title: {headline}
-{category_line}{narration_sample}
+{category_line}{narration_sample}{chapters_block}
 
 Requirements:
 1. Opening hook (2-3 sentences): Describe what the viewer will discover. Make it compelling and keyword-rich. Do NOT start with "In this video" or "Welcome".
 2. "What You'll Learn" section: 4-6 bullet points (use • character) covering the key insights from the video. Each bullet should be 8-15 words, specific and factual.
-3. One short "Why This Matters" paragraph (2-3 sentences): Explain why this topic is important or fascinating.
-4. 8-12 relevant hashtags at the end on a single line, starting with #TellMeWhy and including topic-specific tags.
+3. Chapters section: Copy the following timestamps EXACTLY as-is, on their own line after the bullets:
+{chr(10).join(chapters) if chapters else ""}
+4. One short "Why This Matters" paragraph (2-3 sentences): Explain why this topic is important or fascinating.
+5. 8-12 relevant hashtags at the end on a single line, starting with #TellMeWhy and including topic-specific tags.
 
 Rules:
-- Total length: 150-250 words (not counting hashtags)
+- Total length: 150-300 words (not counting hashtags or chapters)
 - Write in second person ("you", "your") — conversational but informative
 - Include naturally placed keywords related to the topic (for YouTube SEO)
-- Do NOT include any channel links, subscribe prompts, or timestamps — those are added separately
+- Do NOT include any channel links, subscribe prompts — those are added separately
 - Do NOT use markdown headers like ## or ** — use plain text with the bullet character •
 
 Return only the description text. No preamble, no "here is the description".
