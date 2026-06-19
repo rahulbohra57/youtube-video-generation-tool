@@ -157,6 +157,30 @@ def generate_image(prompt: str, idx: int, aspect_ratio: str = "16:9") -> str:
 import logging as _logging
 _logger = _logging.getLogger(__name__)
 
+_THUMBNAIL_POWER_WORDS = {
+    "LIE", "LIES", "LIED", "LYING", "WRONG", "DEAD", "NEVER", "ALWAYS",
+    "SECRET", "SECRETS", "FAKE", "REAL", "TRUE", "TRUTH", "HIDDEN",
+    "ACTUALLY", "REALLY", "SHOCKING", "IMPOSSIBLE", "FORBIDDEN", "EXPOSED",
+    "BANNED", "STOLEN", "PROVEN", "MYTH", "DANGEROUS", "TERRIFYING", "HATE",
+}
+
+
+def _pick_highlight_word(hook_text: str) -> str:
+    """Pick the single most impactful word from hook_text to render in yellow.
+
+    Priority: power word → numeric token → longest word.
+    Returns the word stripped of punctuation, uppercase.
+    """
+    words = hook_text.upper().split()
+    stripped = [w.strip(".,!?:;") for w in words]
+    for w in stripped:
+        if w in _THUMBNAIL_POWER_WORDS:
+            return w
+    for w in stripped:
+        if w.isdigit():
+            return w
+    return max(stripped, key=len, default=stripped[0] if stripped else "")
+
 
 def generate_thumbnail(prompt: str, code: str, hook_text: str = "") -> str:
     """Generate a 16:9 thumbnail image using Imagen 3. Returns local .png path.
@@ -210,28 +234,32 @@ def generate_thumbnail(prompt: str, code: str, hook_text: str = "") -> str:
 
 
 def _add_thumbnail_text_overlay(image_path: str, hook_text: str) -> None:
-    """Add bold uppercase hook text on a dark top banner over the thumbnail in-place."""
+    """Overlay bold hook text at the bottom of the thumbnail.
+
+    No background patch — uses thick black stroke only for contrast.
+    The most impactful word is rendered in yellow; all others in white.
+    Font size scales inversely with word count so short hooks appear massive.
+    """
     from PIL import ImageFont
 
     img = Image.open(image_path).convert("RGB")
     width, height = img.size
     draw = ImageDraw.Draw(img, "RGBA")
 
-    banner_h = int(height * 0.30)
+    word_count = len(hook_text.split())
+    if word_count <= 3:
+        font_size = max(80, min(130, width // 12))
+    elif word_count == 4:
+        font_size = max(68, min(110, width // 14))
+    else:
+        font_size = max(56, min(90, width // 17))
 
-    # Dark gradient overlay across the top
-    for row in range(banner_h):
-        alpha = int(200 * (1 - row / banner_h) + 80 * (row / banner_h))
-        draw.line([(0, row), (width, row)], fill=(0, 0, 0, alpha))
-
-    # Load a bold font — try DejaVu Bold first, then system fallbacks
     _FONT_PATHS = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/System/Library/Fonts/HelveticaNeue.ttc",
         "/Library/Fonts/Arial Bold.ttf",
         "/Library/Fonts/Arial.ttf",
     ]
-    font_size = max(60, min(120, width // 10))
     font = None
     for fp in _FONT_PATHS:
         try:
@@ -242,8 +270,11 @@ def _add_thumbnail_text_overlay(image_path: str, hook_text: str) -> None:
     if font is None:
         font = ImageFont.load_default()
 
-    # Word-wrap the hook text within 90% of image width
-    max_text_w = int(width * 0.88)
+    highlight_word = _pick_highlight_word(hook_text)
+    max_text_w = int(width * 0.90)
+    stroke_w = max(5, font_size // 8)
+
+    # Word-wrap
     words = hook_text.split()
     lines: list[str] = []
     current: list[str] = []
@@ -258,27 +289,33 @@ def _add_thumbnail_text_overlay(image_path: str, hook_text: str) -> None:
     if current:
         lines.append(" ".join(current))
 
-    # Reduce font size if too many lines
-    if len(lines) > 2:
-        font_size = max(44, font_size - 20)
-        for fp in _FONT_PATHS:
-            try:
-                font = ImageFont.truetype(fp, font_size)
-                break
-            except Exception:
-                continue
-
-    line_h = draw.textbbox((0, 0), "Ag", font=font)[3] + int(font_size * 0.15)
+    line_h = draw.textbbox((0, 0), "Ag", font=font)[3] + int(font_size * 0.12)
     block_h = len(lines) * line_h
-    start_y = (banner_h - block_h) // 2
+    bottom_anchor = int(height * 0.93)
+    start_y = bottom_anchor - block_h
     cx = width // 2
 
     for li, line in enumerate(lines):
         ty = start_y + li * line_h
-        # Drop shadow
-        draw.text((cx + 3, ty + 3), line, font=font, fill=(0, 0, 0, 200), anchor="mt")
-        # Main white text
-        draw.text((cx, ty), line, font=font, fill=(255, 255, 255, 255), anchor="mt")
+        line_words = line.split()
+        line_bb = draw.textbbox((0, 0), line, font=font)
+        line_w = line_bb[2] - line_bb[0]
+        x = cx - line_w // 2
+
+        for word in line_words:
+            clean = word.strip(".,!?:;").upper()
+            color = (255, 220, 0, 255) if clean == highlight_word else (255, 255, 255, 255)
+            # Stroke pass
+            draw.text(
+                (x, ty), word, font=font, anchor="lt",
+                fill=(0, 0, 0, 0),
+                stroke_width=stroke_w,
+                stroke_fill=(0, 0, 0, 255),
+            )
+            # Coloured fill
+            draw.text((x, ty), word, font=font, anchor="lt", fill=color)
+            space_bb = draw.textbbox((0, 0), word + " ", font=font)
+            x += space_bb[2] - space_bb[0]
 
     img.save(image_path, "PNG")
 

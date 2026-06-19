@@ -1345,3 +1345,21 @@ def test_generate_viral_title_falls_back_to_headline_on_error():
         from app.services.llm_service import generate_viral_title
         result = generate_viral_title("Your brain needs to forget to learn", category="")
     assert "brain" in result.lower()
+
+
+def test_pick_highlight_word_prefers_power_word():
+    from app.services.image_service import _pick_highlight_word
+    result = _pick_highlight_word("YOUR BRAIN LIES TO YOU")
+    assert result == "LIES"
+
+
+def test_pick_highlight_word_prefers_number():
+    from app.services.image_service import _pick_highlight_word
+    result = _pick_highlight_word("9 HABITS THAT WORK")
+    assert result == "9"
+
+
+def test_pick_highlight_word_falls_back_to_longest():
+    from app.services.image_service import _pick_highlight_word
+    result = _pick_highlight_word("JAPAN STAYS SLIM")
+    assert result == "JAPAN"
