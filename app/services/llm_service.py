@@ -1329,3 +1329,77 @@ Return the JSON array directly. Start with "[" and end with "]".
 
     response = _get_model().generate_content(prompt)
     return _response_text(response)
+
+
+def generate_long_video_description(headline: str, category: str = "", narrations: list[str] | None = None) -> str:
+    """Generate an SEO-optimized YouTube description for a long-format Tell Me Why video.
+
+    Returns the description text (without the channel boilerplate, which is appended separately).
+    """
+    narration_sample = ""
+    if narrations:
+        sample = [n for n in narrations[:6] if n and len(n) > 20]
+        if sample:
+            narration_sample = "\n\nKey points covered in the video:\n" + "\n".join(f'- "{s}"' for s in sample[:5])
+
+    category_line = f"Category: {category}\n" if category else ""
+
+    prompt = f"""You are an SEO copywriter for a YouTube educational channel called "Tell Me Why". Write an SEO-optimized video description for the video below.
+
+Video title: {headline}
+{category_line}{narration_sample}
+
+Requirements:
+1. Opening hook (2-3 sentences): Describe what the viewer will discover. Make it compelling and keyword-rich. Do NOT start with "In this video" or "Welcome".
+2. "What You'll Learn" section: 4-6 bullet points (use • character) covering the key insights from the video. Each bullet should be 8-15 words, specific and factual.
+3. One short "Why This Matters" paragraph (2-3 sentences): Explain why this topic is important or fascinating.
+4. 8-12 relevant hashtags at the end on a single line, starting with #TellMeWhy and including topic-specific tags.
+
+Rules:
+- Total length: 150-250 words (not counting hashtags)
+- Write in second person ("you", "your") — conversational but informative
+- Include naturally placed keywords related to the topic (for YouTube SEO)
+- Do NOT include any channel links, subscribe prompts, or timestamps — those are added separately
+- Do NOT use markdown headers like ## or ** — use plain text with the bullet character •
+
+Return only the description text. No preamble, no "here is the description".
+"""
+    try:
+        response = _get_model().generate_content(prompt)
+        return _response_text(response).strip()
+    except Exception as exc:
+        logger.warning("generate_long_video_description failed: %s", exc)
+        return f"Discover the fascinating truth about: {headline}"
+
+
+def generate_thumbnail_hook(headline: str, category: str = "") -> str:
+    """Generate a 3-5 word punchy hook phrase for a video thumbnail text overlay.
+
+    Returns uppercase text like 'YOUR BRAIN LIES TO YOU' or 'THE LOTUS METHOD'.
+    Falls back to a shortened version of the headline on error.
+    """
+    prompt = f"""You are a YouTube thumbnail copywriter. Generate a punchy 3-5 word hook phrase for this video title that would appear as bold text on the thumbnail.
+
+Video title: {headline}
+{"Category: " + category if category else ""}
+
+Rules:
+- 3 to 5 words maximum — it must be readable at small thumbnail size
+- All caps (uppercase)
+- Curiosity-gap or shocking-claim style — make viewers want to click
+- No punctuation except for ellipsis (...) if it adds intrigue
+- Examples of good hooks: "YOUR BRAIN LIES TO YOU", "48 LAWS OF POWER", "THE LOTUS METHOD", "YOU MISUNDERSTOOD DESTINY", "JAPAN STAYS SLIM"
+
+Return ONLY the 3-5 word hook phrase. Nothing else.
+"""
+    try:
+        response = _get_model().generate_content(prompt)
+        hook = _response_text(response).strip().upper()
+        words = hook.split()
+        if 2 <= len(words) <= 7:
+            return hook
+    except Exception as exc:
+        logger.warning("generate_thumbnail_hook failed: %s", exc)
+
+    words = headline.upper().split()
+    return " ".join(words[:4]) if len(words) >= 4 else headline.upper()

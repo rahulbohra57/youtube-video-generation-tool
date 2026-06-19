@@ -158,14 +158,20 @@ import logging as _logging
 _logger = _logging.getLogger(__name__)
 
 
-def generate_thumbnail(prompt: str, code: str) -> str:
-    """Generate a 16:9 thumbnail image using Imagen 3. Returns local .png path."""
+def generate_thumbnail(prompt: str, code: str, hook_text: str = "") -> str:
+    """Generate a 16:9 thumbnail image using Imagen 3. Returns local .png path.
+
+    If hook_text is provided, overlays it as bold uppercase text on a dark banner
+    at the top of the thumbnail (viral thumbnail style).
+    """
     ensure_dir(TEMP_DIR)
     output_path = os.path.join(TEMP_DIR, f"thumbnail_{code}.png")
     full_prompt = (
         f"{prompt} "
-        "Thumbnail composition: single bold focal subject, high contrast, vivid complementary colors, "
-        "cinematic lighting. No text, no words, no letters, no logos, no captions, no watermarks."
+        "Thumbnail style: expressive illustrated character with exaggerated reaction or emotion, "
+        "bold flat design, vibrant high-contrast colors (red, orange, yellow, or electric blue background), "
+        "single focal subject centered, dynamic composition, clean and striking. "
+        "No text, no words, no letters, no logos, no captions, no watermarks."
     )
     for delay in _QUOTA_RETRY_DELAYS + [None]:
         try:
@@ -175,13 +181,13 @@ def generate_thumbnail(prompt: str, code: str) -> str:
                 aspect_ratio="16:9",
                 safety_filter_level="block_few",
                 person_generation="allow_adult",
-                negative_prompt="text, words, letters, numbers, logos, captions, subtitles, watermarks, signs",
+                negative_prompt="text, words, letters, numbers, logos, captions, subtitles, watermarks, signs, typography",
             )
             img = _first_generated_image(images)
             if img is None:
                 raise RuntimeError("Imagen returned no images for thumbnail")
             img.save(output_path)
-            return output_path
+            break
         except Exception as exc:
             if delay is None:
                 raise
@@ -191,7 +197,90 @@ def generate_thumbnail(prompt: str, code: str) -> str:
                 time.sleep(delay)
             else:
                 raise
-    raise RuntimeError("generate_thumbnail: all retries exhausted")
+    else:
+        raise RuntimeError("generate_thumbnail: all retries exhausted")
+
+    if hook_text:
+        try:
+            _add_thumbnail_text_overlay(output_path, hook_text.strip().upper())
+        except Exception as overlay_err:
+            _logger.warning("[Thumbnail] Text overlay failed (non-fatal): %s", overlay_err)
+
+    return output_path
+
+
+def _add_thumbnail_text_overlay(image_path: str, hook_text: str) -> None:
+    """Add bold uppercase hook text on a dark top banner over the thumbnail in-place."""
+    from PIL import ImageFont
+
+    img = Image.open(image_path).convert("RGB")
+    width, height = img.size
+    draw = ImageDraw.Draw(img, "RGBA")
+
+    banner_h = int(height * 0.30)
+
+    # Dark gradient overlay across the top
+    for row in range(banner_h):
+        alpha = int(200 * (1 - row / banner_h) + 80 * (row / banner_h))
+        draw.line([(0, row), (width, row)], fill=(0, 0, 0, alpha))
+
+    # Load a bold font — try DejaVu Bold first, then system fallbacks
+    _FONT_PATHS = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/System/Library/Fonts/HelveticaNeue.ttc",
+        "/Library/Fonts/Arial Bold.ttf",
+        "/Library/Fonts/Arial.ttf",
+    ]
+    font_size = max(60, min(120, width // 10))
+    font = None
+    for fp in _FONT_PATHS:
+        try:
+            font = ImageFont.truetype(fp, font_size)
+            break
+        except Exception:
+            continue
+    if font is None:
+        font = ImageFont.load_default()
+
+    # Word-wrap the hook text within 90% of image width
+    max_text_w = int(width * 0.88)
+    words = hook_text.split()
+    lines: list[str] = []
+    current: list[str] = []
+    for word in words:
+        candidate = " ".join(current + [word])
+        bb = draw.textbbox((0, 0), candidate, font=font)
+        if (bb[2] - bb[0]) > max_text_w and current:
+            lines.append(" ".join(current))
+            current = [word]
+        else:
+            current.append(word)
+    if current:
+        lines.append(" ".join(current))
+
+    # Reduce font size if too many lines
+    if len(lines) > 2:
+        font_size = max(44, font_size - 20)
+        for fp in _FONT_PATHS:
+            try:
+                font = ImageFont.truetype(fp, font_size)
+                break
+            except Exception:
+                continue
+
+    line_h = draw.textbbox((0, 0), "Ag", font=font)[3] + int(font_size * 0.15)
+    block_h = len(lines) * line_h
+    start_y = (banner_h - block_h) // 2
+    cx = width // 2
+
+    for li, line in enumerate(lines):
+        ty = start_y + li * line_h
+        # Drop shadow
+        draw.text((cx + 3, ty + 3), line, font=font, fill=(0, 0, 0, 200), anchor="mt")
+        # Main white text
+        draw.text((cx, ty), line, font=font, fill=(255, 255, 255, 255), anchor="mt")
+
+    img.save(image_path, "PNG")
 
 
 def generate_fallback_image(idx: int, aspect_ratio: str = "9:16", hint: str = "", language: str = "en") -> str:

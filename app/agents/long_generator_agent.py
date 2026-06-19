@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from app.config import TEMP_DIR, OUTPUT_DIR, TMP_RETENTION_DAYS, get_chat_id
 from app.services import firestore_service
-from app.services.llm_service import generate_long_facts_script, classify_music_genre
+from app.services.llm_service import generate_long_facts_script, classify_music_genre, generate_long_video_description, generate_thumbnail_hook
 from app.services.tts_service import generate_audio, choose_voice_for_video
 from app.services.pexels_service import fetch_clips_for_scene
 from app.services.image_service import generate_thumbnail
@@ -165,12 +165,25 @@ def run(
 
         # Thumbnail — non-fatal
         thumbnail_path = None
+        thumbnail_hook = ""
+        try:
+            thumbnail_hook = generate_thumbnail_hook(headline, category=genre)
+        except Exception:
+            pass
         try:
             thumbnail_prompt = f"{_TMW_VISUAL_STYLE} — {headline}"
-            thumbnail_path = generate_thumbnail(thumbnail_prompt, code)
+            thumbnail_path = generate_thumbnail(thumbnail_prompt, code, hook_text=thumbnail_hook)
         except Exception as thumb_err:
             logger.warning("Thumbnail generation failed (non-fatal): %s", thumb_err)
             send_message(_chat_id, f"⚠️ Thumbnail generation failed for `{public_id or effective_job_id}`: {str(thumb_err)[:200]}", channel_id=_YOUTUBE_CHANNEL)
+
+        # SEO description — non-fatal, falls back to simple line
+        sample_narrations = [item.get("narration", "") for item in video_clips[:6]]
+        try:
+            video_description = generate_long_video_description(headline, category=genre, narrations=sample_narrations)
+        except Exception as desc_err:
+            logger.warning("Description generation failed (non-fatal): %s", desc_err)
+            video_description = f"Discover the fascinating truth about: {headline}"
 
         output_path = os.path.join(OUTPUT_DIR, f"long_{code}_{timestamp}.mp4")
         create_long_video(video_clips, output_path, music_genre=music_genre, language="en")
@@ -187,7 +200,7 @@ def run(
         youtube_url = upload_video(
             video_path=output_path,
             title=headline,
-            description=f"In this video, we explore: {headline}",
+            description=video_description,
             genre=genre,
             channel_id=_YOUTUBE_CHANNEL,
             tags=["TellMeWhy", "facts", "educational", "longform", "curiosity"],
