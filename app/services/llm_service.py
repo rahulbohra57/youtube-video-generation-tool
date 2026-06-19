@@ -1296,27 +1296,48 @@ Return ONLY a valid JSON array — no markdown, no explanation, no code fences.
 Each scene object must have exactly these four fields:
 - "scene": integer (1-based, 1 to 24)
 - "segment": one of "hook", "core", "retention", "cta"
-- "narration": spoken content (35–42 words at natural conversational pace)
-- "visual_query": 2–5 word Pexels search phrase in English (e.g. "deep ocean bioluminescence")
+- "narration": spoken content (see length rules below)
+- "visual_query": 3-7 word Pexels search phrase in English (see rules below)
 
 SEGMENT RULES — follow exactly:
-Scenes 1–2 → "hook": Scene 1 first sentence MUST be 12 words or fewer. Open with a surprising number, a named person doing something unexpected, or a direct question. No context-setting. Viewer decides in 3 seconds.
-Scenes 3–21 → "core": One concrete insight per scene — real figures, dates, mechanisms, consequences. No filler. No cliffhangers — every fact resolves within its scene.
-Scenes 22–23 → "retention": Conversational engagement — "Drop a comment below", "What surprised you most?", or a teaser for a related fact. Warm tone.
-Scene 24 → "cta": Like & Subscribe. One sentence, warm not pushy.
+Scenes 1–2 → "hook"
+Scene 3–21 → "core"
+Scenes 22–23 → "retention"
+Scene 24 → "cta"
 Total: exactly 24 scenes.
 
-NARRATION RULES:
-- 35–42 words per scene (approx 14–17 seconds at 150 wpm)
-- Conversational English — like explaining to a curious friend
-- Banned phrases: "let's explore", "stay tuned", "it's fascinating", "game-changer", "in this video", "we'll discover"
-- Every fact resolves within its scene — no "but we'll get to that later"
+SCENE 1 — PATTERN INTERRUPT (CRITICAL):
+Do NOT open with a fact or question. Open with a contradiction — something the viewer believes that is false.
+Formula: "Most people think [X]. They're completely wrong." or "You've been told [X] your whole life. It's backwards."
+The contradiction must be resolved by the end of the video. Viewer must feel their world view has been challenged.
+Maximum 14 words for the first sentence.
+
+NARRATIVE SPINE:
+Thread a single through-line across the video — a scientist, a historical moment, a mystery, or a surprising character. Introduce it in scene 2. Reference it at key turns (scenes 8, 14, 20). Resolve it in scene 21.
+
+PLANTED PAYOFF (REQUIRED):
+In scene 3, plant a mystery or open question that you will NOT answer immediately. Use the exact phrase structure: "We'll come back to why this matters." Then answer it fully in scene 19. This creates a retention loop that keeps viewers watching.
+
+PUNCHY BREATHER SCENES:
+Exactly 5 of the core scenes (your choice of which 5, spread across scenes 4-21) must be "punchy breather" scenes: a single shocking one-liner of 8-15 words only. No explanation. The line should land alone. These create rhythm and prevent monotony.
+Example punchy scene: "The Romans called this their greatest secret. They had no idea they'd invented depression."
+Mark these with a visual_query that matches the one-liner's emotional punch.
+
+NARRATION LENGTH RULES:
+- Scene 1 (pattern interrupt): 10-15 words for the first sentence; up to 40 words total
+- Punchy breather scenes: exactly 8-15 words — no more
+- All other scenes: 35-42 words (approx 14-17 seconds at 150 wpm)
+- Conversational English — like explaining to a curious friend face-to-face
+- Banned phrases: "let's explore", "stay tuned", "it's fascinating", "game-changer", "in this video", "we'll discover", "incredibly"
+- Every fact resolves within its scene — EXCEPT the planted payoff in scene 3
 
 VISUAL_QUERY RULES:
-- 2–5 plain English words for a Pexels video search
+- 3-7 plain English words for a Pexels video search
+- Be SPECIFIC and CINEMATIC — avoid generic terms
+- Good: "close-up hand turning hourglass slow", "isolated researcher microscope lab night", "ancient ruins aerial drone golden hour"
+- Bad: "time passing", "science", "history", "nature"
+- Describe the exact visual moment — camera angle, subject, mood
 - Always in English
-- Describe what appears visually on screen
-- Examples: "human brain neurons firing", "ancient roman colosseum ruins", "stock market trading floor"
 
 Return the JSON array directly. Start with "[" and end with "]".
 """

@@ -65,3 +65,42 @@ def test_generate_long_facts_script_falls_back_to_standard_model_on_search_failu
 
     assert result == "[]"
     mock_get_model.return_value.generate_content.assert_called_once()
+
+
+def test_long_script_prompt_has_pattern_interrupt():
+    """Prompt must instruct scene 1 to open with a contradiction."""
+    mock_get_model = _make_model_mock("[]")
+
+    with patch("app.services.llm_service._get_model", mock_get_model), \
+         patch("app.services.llm_service._init_search_model", side_effect=Exception("no search")):
+        from app.services.llm_service import generate_long_facts_script
+        generate_long_facts_script("test topic")
+
+    prompt = mock_get_model.return_value.generate_content.call_args[0][0]
+    assert "contradiction" in prompt.lower() or "pattern interrupt" in prompt.lower() or "believe" in prompt.lower()
+
+
+def test_long_script_prompt_has_planted_payoff():
+    """Prompt must instruct scenes 2-3 to plant a mystery resolved in 18-20."""
+    mock_get_model = _make_model_mock("[]")
+
+    with patch("app.services.llm_service._get_model", mock_get_model), \
+         patch("app.services.llm_service._init_search_model", side_effect=Exception("no search")):
+        from app.services.llm_service import generate_long_facts_script
+        generate_long_facts_script("test topic")
+
+    prompt = mock_get_model.return_value.generate_content.call_args[0][0]
+    assert "mystery" in prompt.lower() or "plant" in prompt.lower() or "payoff" in prompt.lower()
+
+
+def test_long_script_prompt_has_punchy_scenes():
+    """Prompt must allow for short punchy breather scenes."""
+    mock_get_model = _make_model_mock("[]")
+
+    with patch("app.services.llm_service._get_model", mock_get_model), \
+         patch("app.services.llm_service._init_search_model", side_effect=Exception("no search")):
+        from app.services.llm_service import generate_long_facts_script
+        generate_long_facts_script("test topic")
+
+    prompt = mock_get_model.return_value.generate_content.call_args[0][0]
+    assert "punchy" in prompt.lower() or "8-15" in prompt or "one-liner" in prompt.lower()
