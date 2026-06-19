@@ -1294,3 +1294,33 @@ def test_get_slot_domain_rotating_shifts_next_day():
         from app.agents import lead_researcher
         result = lead_researcher._get_slot_domain(_make_schedule(["Technology", "Current Affairs", "Science"]))
         assert result == "Current Affairs"
+
+
+# ---------------------------------------------------------------------------
+# Task 1: generate_viral_title
+# ---------------------------------------------------------------------------
+
+def _make_llm_mock(return_text: str):
+    mock = MagicMock()
+    mock.return_value.generate_content.return_value.text = return_text
+    return mock
+
+
+def test_generate_viral_title_returns_string():
+    """generate_viral_title returns a non-empty string."""
+    mock = _make_llm_mock("Why Your Brain Secretly Hates You")
+    with patch("app.services.llm_service._get_model", mock):
+        from app.services.llm_service import generate_viral_title
+        result = generate_viral_title("Your brain needs to forget to learn", category="psychology")
+    assert isinstance(result, str)
+    assert len(result) > 5
+
+
+def test_generate_viral_title_falls_back_to_headline_on_error():
+    """generate_viral_title returns the original headline when LLM raises an error."""
+    mock = MagicMock()
+    mock.return_value.generate_content.side_effect = RuntimeError("quota")
+    with patch("app.services.llm_service._get_model", mock):
+        from app.services.llm_service import generate_viral_title
+        result = generate_viral_title("Your brain needs to forget to learn", category="")
+    assert "brain" in result.lower()

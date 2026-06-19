@@ -1403,3 +1403,43 @@ Return ONLY the 3-5 word hook phrase. Nothing else.
 
     words = headline.upper().split()
     return " ".join(words[:4]) if len(words) >= 4 else headline.upper()
+
+
+def generate_viral_title(headline: str, category: str = "") -> str:
+    """Reformulate the LLM topic into a viral YouTube title using proven formulas.
+
+    Formulas used:
+      - [Number] + [Topic] + [Unexpected Outcome]
+      - [Famous Concept] + [Contradiction]
+      - [Relatable Problem] + [Non-Obvious Cause]
+
+    Falls back to the original headline on any error.
+    """
+    category_line = f"Category: {category}\n" if category else ""
+    prompt = f"""You are a YouTube title copywriter for an educational channel called "Tell Me Why". Rewrite the topic below as a viral YouTube title using one of the proven formulas.
+
+Topic: {headline}
+{category_line}
+Viral title formulas (pick the best fit):
+  A. [Specific Number] + [Topic] + [Surprising Outcome] — e.g. "7 Things Your Brain Does While You Sleep (That Should Terrify You)"
+  B. [What Viewers Believe] + [Contradiction] — e.g. "You've Been Using Your Memory Wrong Your Whole Life"
+  C. [Relatable Problem] + [Non-Obvious Cause] — e.g. "Why You Always Feel Tired (It's Not Sleep)"
+  D. [Famous Thing] + [Reframe] — e.g. "The Real Reason Japan Lives Longer Than Everyone Else"
+
+Rules:
+- 8-14 words maximum
+- Must create curiosity gap or contradiction — viewer must feel they don't know the answer
+- Use "you/your" for personal relevance
+- No clickbait lies — must be accurate to the topic
+- No questions as titles (statement form only)
+
+Return ONLY the title. No quotes, no explanation.
+"""
+    try:
+        response = _get_model().generate_content(prompt)
+        title = _response_text(response).strip().strip('"').strip("'")
+        if 5 < len(title) < 150:
+            return title
+    except Exception as exc:
+        logger.warning("generate_viral_title failed: %s", exc)
+    return headline

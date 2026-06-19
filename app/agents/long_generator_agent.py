@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from app.config import TEMP_DIR, OUTPUT_DIR, TMP_RETENTION_DAYS, get_chat_id
 from app.services import firestore_service
-from app.services.llm_service import generate_long_facts_script, classify_music_genre, generate_long_video_description, generate_thumbnail_hook
+from app.services.llm_service import generate_long_facts_script, classify_music_genre, generate_long_video_description, generate_thumbnail_hook, generate_viral_title
 from app.services.tts_service import generate_audio, choose_voice_for_video
 from app.services.pexels_service import fetch_clips_for_scene
 from app.services.image_service import generate_thumbnail
@@ -177,6 +177,17 @@ def run(
             logger.warning("Thumbnail generation failed (non-fatal): %s", thumb_err)
             send_message(_chat_id, f"⚠️ Thumbnail generation failed for `{public_id or effective_job_id}`: {str(thumb_err)[:200]}", channel_id=_YOUTUBE_CHANNEL)
 
+        # Viral title — non-fatal, falls back to original headline
+        try:
+            viral_title = generate_viral_title(headline, category=genre)
+        except Exception:
+            viral_title = headline
+
+        firestore_service.create_or_update_job(effective_job_id, {
+            "reviewed_title": viral_title,
+            "scene_count": len(scenes),
+        })
+
         # SEO description — non-fatal, falls back to simple line
         sample_narrations = [item.get("narration", "") for item in video_clips[:6]]
         try:
@@ -199,7 +210,7 @@ def run(
         # YouTube upload (regular video, not Short)
         youtube_url = upload_video(
             video_path=output_path,
-            title=headline,
+            title=viral_title,
             description=video_description,
             genre=genre,
             channel_id=_YOUTUBE_CHANNEL,
