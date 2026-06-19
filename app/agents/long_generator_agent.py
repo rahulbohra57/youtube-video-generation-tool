@@ -205,7 +205,7 @@ def run(
             video_description = f"Discover the fascinating truth about: {headline}"
 
         output_path = os.path.join(OUTPUT_DIR, f"long_{code}_{timestamp}.mp4")
-        create_long_video(video_clips, output_path, music_genre=music_genre, language="en")
+        create_long_video(video_clips, output_path, music_genre=music_genre, language="en", title=headline)
 
         # GCS upload — non-fatal
         try:

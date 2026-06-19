@@ -3,6 +3,7 @@
 import os
 import logging
 import numpy as np
+from PIL import Image, ImageDraw, ImageFont
 
 try:
     from moviepy import (
@@ -38,20 +39,90 @@ logger = logging.getLogger(__name__)
 _TARGET_W = 1920
 _TARGET_H = 1080
 
+_TITLE_CARD_DURATION = 4.0
+_TRANSITION_DURATION = 0.1
+
+_FONT_PATHS = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/System/Library/Fonts/HelveticaNeue.ttc",
+    "/Library/Fonts/Arial Bold.ttf",
+    "/Library/Fonts/Arial.ttf",
+]
+
+
+def _make_title_card(title: str, duration: float = _TITLE_CARD_DURATION, width: int = _TARGET_W, height: int = _TARGET_H) -> "ImageClip":
+    """Create a black title card with centered white bold text."""
+    img = Image.new("RGB", (width, height), (0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    font_size = max(48, min(96, width // 18))
+    font = None
+    for fp in _FONT_PATHS:
+        try:
+            font = ImageFont.truetype(fp, font_size)
+            break
+        except Exception:
+            continue
+    if font is None:
+        font = ImageFont.load_default()
+
+    max_w = int(width * 0.80)
+    words = title.split()
+    lines: list = []
+    current: list = []
+    for word in words:
+        candidate = " ".join(current + [word])
+        bb = draw.textbbox((0, 0), candidate, font=font)
+        if (bb[2] - bb[0]) > max_w and current:
+            lines.append(" ".join(current))
+            current = [word]
+        else:
+            current.append(word)
+    if current:
+        lines.append(" ".join(current))
+
+    line_h = draw.textbbox((0, 0), "Ag", font=font)[3] + int(font_size * 0.2)
+    block_h = len(lines) * line_h
+    start_y = (height - block_h) // 2
+    cx = width // 2
+
+    for li, line in enumerate(lines):
+        ty = start_y + li * line_h
+        draw.text((cx + 2, ty + 2), line, font=font, fill=(80, 80, 80, 255), anchor="mt")
+        draw.text((cx, ty), line, font=font, fill=(255, 255, 255, 255), anchor="mt")
+
+    arr = np.array(img)
+    return _clip_duration(ImageClip(arr), duration)
+
+
+def _make_black_frame(duration: float = _TRANSITION_DURATION) -> "ImageClip":
+    """Create a brief black frame for use as a transition between scenes."""
+    arr = np.zeros((_TARGET_H, _TARGET_W, 3), dtype=np.uint8)
+    return _clip_duration(ImageClip(arr), duration)
+
 
 def create_long_video(
     clips: list[dict],
     output_path: str,
     music_genre: str = "general",
     language: str = "en",
+    title: str = "",
 ) -> str:
     """Assemble a long-format 16:9 video from Pexels clips + TTS audio.
 
     clips: list of {"video_path": str, "audio_path": str, "narration": str}
     video_path may be "" — black frame used as fallback for that scene.
+    title: optional headline — if non-empty, a title card is prepended.
     Returns output_path.
     """
     scene_clips = []
+
+    # Prepend title card if title is provided
+    if title:
+        try:
+            scene_clips.append(_make_title_card(title))
+        except Exception as tc_err:
+            logger.warning("[LongVideo] Title card failed (non-fatal): %s", tc_err)
 
     for idx, item in enumerate(clips):
         audio_path = item["audio_path"]
@@ -120,6 +191,9 @@ def create_long_video(
             clip = base
 
         scene_clips.append(clip)
+        # Add brief black frame transition between scenes (not after last)
+        if idx < len(clips) - 1:
+            scene_clips.append(_make_black_frame())
 
     final_video = concatenate_videoclips(scene_clips, method="compose")
     vo_audio = _volume(_audio_fade_out(final_video.audio, 0.5), LONG_VO_GAIN)
