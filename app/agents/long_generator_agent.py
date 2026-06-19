@@ -9,7 +9,7 @@ from uuid import uuid4
 from app.config import TEMP_DIR, OUTPUT_DIR, TMP_RETENTION_DAYS, get_chat_id
 from app.services import firestore_service
 from app.services.llm_service import generate_long_facts_script, classify_music_genre, generate_long_video_description, generate_thumbnail_hook, generate_viral_title
-from app.services.tts_service import generate_audio, choose_voice_for_video, choose_two_voices
+from app.services.tts_service import generate_audio, choose_two_voices
 from app.services.pexels_service import fetch_clips_for_scene
 from app.services.image_service import generate_thumbnail
 from app.services.long_video_service import create_long_video, _TITLE_CARD_DURATION

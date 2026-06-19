@@ -29,7 +29,6 @@ def test_run_completes_happy_path(tmp_path):
 
     with patch("app.agents.long_generator_agent.generate_long_facts_script", return_value=json.dumps(scenes)), \
          patch("app.agents.long_generator_agent.extract_json", return_value=scenes), \
-         patch("app.agents.long_generator_agent.choose_voice_for_video", return_value="en-US-Neural2-D"), \
          patch("app.agents.long_generator_agent.generate_audio"), \
          patch("app.agents.long_generator_agent.fetch_clips_for_scene", return_value=[{"video_path": str(tmp_path / "clip.mp4"), "clip_duration": 8.0}]), \
          patch("app.agents.long_generator_agent.generate_thumbnail", return_value=str(tmp_path / "thumb.png")), \
@@ -72,7 +71,6 @@ def test_run_marks_failed_when_too_few_scenes():
 
     with patch("app.agents.long_generator_agent.generate_long_facts_script", return_value=json.dumps(too_few)), \
          patch("app.agents.long_generator_agent.extract_json", return_value=too_few), \
-         patch("app.agents.long_generator_agent.choose_voice_for_video", return_value="en-US-Neural2-D"), \
          patch("app.agents.long_generator_agent.classify_music_genre", return_value="Happy"), \
          patch("app.agents.long_generator_agent.firestore_service") as mock_fs, \
          patch("app.agents.long_generator_agent.send_message"):
@@ -96,7 +94,6 @@ def test_run_marks_failed_when_too_few_scenes():
 def test_run_uses_long_lock_key():
     with patch("app.agents.long_generator_agent.generate_long_facts_script", return_value="[]"), \
          patch("app.agents.long_generator_agent.extract_json", return_value=[]), \
-         patch("app.agents.long_generator_agent.choose_voice_for_video", return_value="en-US-Neural2-D"), \
          patch("app.agents.long_generator_agent.classify_music_genre", return_value="Happy"), \
          patch("app.agents.long_generator_agent.firestore_service") as mock_fs, \
          patch("app.agents.long_generator_agent.send_message"):
@@ -124,7 +121,6 @@ def test_long_generator_collects_chapter_timestamps(tmp_path):
 
     with patch("app.agents.long_generator_agent.generate_long_facts_script", return_value=json.dumps(scenes)), \
          patch("app.agents.long_generator_agent.extract_json", return_value=scenes), \
-         patch("app.agents.long_generator_agent.choose_voice_for_video", return_value="en-US-Neural2-D"), \
          patch("app.agents.long_generator_agent.generate_audio"), \
          patch("app.agents.long_generator_agent.fetch_clips_for_scene", return_value=[{"video_path": str(tmp_path / "clip.mp4"), "clip_duration": 8.0}]), \
          patch("app.agents.long_generator_agent.generate_thumbnail", return_value=str(tmp_path / "thumb.png")), \
