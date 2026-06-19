@@ -165,6 +165,80 @@ _THUMBNAIL_POWER_WORDS = {
 }
 
 
+import re as _re
+
+_LIST_NUMBER_WORDS = {"one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"}
+_LIST_KEYWORDS = {"ways", "habits", "laws", "rules", "tips", "secrets", "things",
+                  "reasons", "steps", "facts", "signs", "lessons", "mistakes", "hacks"}
+
+
+def _is_list_topic(headline: str) -> bool:
+    """True when the headline is a numbered-list format ('9 Habits', 'Five Ways')."""
+    lower = headline.lower().strip()
+    words = lower.split()
+    if not words:
+        return False
+    if words[0].isdigit():
+        return True
+    if words[0] in _LIST_NUMBER_WORDS:
+        return True
+    if _re.search(r'\b\d+\b', lower) and any(kw in lower for kw in _LIST_KEYWORDS):
+        return True
+    return False
+
+
+def _image_saturation_score(path: str) -> float:
+    """Return pixel std-dev as a proxy for visual variety/saturation (higher = more vivid)."""
+    import numpy as np
+    arr = _np_array_from_image(path)
+    return float(np.std(arr))
+
+
+def _np_array_from_image(path: str):
+    import numpy as np
+    return np.array(Image.open(path).convert("RGB"), dtype=float)
+
+
+_CATEGORY_BORDER_COLORS: dict[str, tuple[int, int, int]] = {
+    "science & space":              (100, 180, 255),
+    "history & civilizations":      (210, 170,  50),
+    "human body & biology":         (255,  80,  80),
+    "technology & ai":              ( 80, 200, 255),
+    "health & fitness":             ( 80, 200,  80),
+    "psychology & dark psychology": (160,  80, 220),
+    "relationships & dating":       (255, 120, 160),
+    "self-improvement & habits":    (255, 160,  40),
+    "business & finance":           ( 40, 180, 120),
+    "culture & society":            (255, 200,  60),
+    "philosophy & life":            (180, 130, 255),
+    "mysteries & unexplained":      (150, 255, 200),
+}
+_DEFAULT_BORDER_COLOR: tuple[int, int, int] = (255, 200, 0)
+
+_EMOTION_FACE_MAP: dict[str, str] = {
+    "curious":    "wide-eyed wonder, slightly open mouth, leaning forward",
+    "shocked":    "jaw dropped, eyes wide open, hand on cheek",
+    "amused":     "big grin, raised eyebrows, eyes crinkling",
+    "motivated":  "determined jaw, intense focused eyes, fist clenched",
+    "unsettled":  "furrowed brow, one eyebrow raised, suspicious glance",
+    "fascinated": "eyes lit up, leaning forward, lips parted in interest",
+    "awed":       "looking upward with awe, mouth slightly open",
+    "amazed":     "wide eyes, both hands on cheeks, stunned expression",
+    "determined": "steely eyes, firm jaw, confident stance",
+}
+_DEFAULT_FACE_EMOTION = "wide-eyed curiosity, slight open mouth"
+
+
+def _add_thumbnail_border(image_path: str, color: tuple[int, int, int] = _DEFAULT_BORDER_COLOR, thickness: int = 8) -> None:
+    """Draw a thin coloured border around the entire thumbnail in-place."""
+    img = Image.open(image_path).convert("RGB")
+    draw = ImageDraw.Draw(img)
+    w, h = img.size
+    for i in range(thickness):
+        draw.rectangle([i, i, w - 1 - i, h - 1 - i], outline=color)
+    img.save(image_path, "PNG")
+
+
 def _pick_highlight_word(hook_text: str) -> str:
     """Pick the single most impactful word from hook_text to render in yellow.
 
@@ -182,47 +256,100 @@ def _pick_highlight_word(hook_text: str) -> str:
     return max(stripped, key=len, default=stripped[0] if stripped else "")
 
 
-def generate_thumbnail(prompt: str, code: str, hook_text: str = "") -> str:
-    """Generate a 16:9 thumbnail image using Imagen 3. Returns local .png path.
+def generate_thumbnail(
+    prompt: str,
+    code: str,
+    hook_text: str = "",
+    emotion: str = "",
+    headline: str = "",
+    category: str = "",
+) -> str:
+    """Generate a 16:9 thumbnail using Imagen 3. Returns local .png path.
 
-    If hook_text is provided, overlays it as bold uppercase text on a dark banner
-    at the top of the thumbnail (viral thumbnail style).
+    Generates 2 variants and picks the more vivid one (highest pixel std-dev).
+    Applies a category-coloured border and overlays hook_text with bottom-anchored
+    bold text using black stroke (no bg patch).
     """
     ensure_dir(TEMP_DIR)
     output_path = os.path.join(TEMP_DIR, f"thumbnail_{code}.png")
+
+    face_expr = _EMOTION_FACE_MAP.get(emotion.lower(), _DEFAULT_FACE_EMOTION)
+    is_list = _is_list_topic(headline) if headline else False
+
+    hook_hint = (
+        f"The overall image must visually represent this concept: '{hook_text}'. "
+        if hook_text else ""
+    )
+    if is_list:
+        composition = (
+            "Split-panel composition: left panel depicts the 'before' or problem state, "
+            "right panel depicts the 'after' or solution, separated by a bold vertical dividing line. "
+        )
+    else:
+        composition = (
+            f"Foreground: extreme close-up of an expressive illustrated human face showing "
+            f"{face_expr}, occupying the left 55% of the frame. "
+            "Background: rich thematic scene matching the topic. "
+        )
+
     full_prompt = (
         f"{prompt} "
-        "Thumbnail style: expressive illustrated character with exaggerated reaction or emotion, "
-        "bold flat design, vibrant high-contrast colors (red, orange, yellow, or electric blue background), "
-        "single focal subject centered, dynamic composition, clean and striking. "
-        "No text, no words, no letters, no logos, no captions, no watermarks."
+        f"{hook_hint}"
+        f"{composition}"
+        "Bold flat illustration style, vivid high-contrast colors "
+        "(electric red or orange or yellow or royal blue background), "
+        "single clear focal point, striking composition readable at thumbnail size. "
+        "No text, no words, no letters, no logos, no watermarks, no captions."
     )
-    for delay in _QUOTA_RETRY_DELAYS + [None]:
-        try:
-            images = _get_model().generate_images(
-                prompt=full_prompt,
-                number_of_images=1,
-                aspect_ratio="16:9",
-                safety_filter_level="block_few",
-                person_generation="allow_adult",
-                negative_prompt="text, words, letters, numbers, logos, captions, subtitles, watermarks, signs, typography",
-            )
-            img = _first_generated_image(images)
-            if img is None:
-                raise RuntimeError("Imagen returned no images for thumbnail")
-            img.save(output_path)
-            break
-        except Exception as exc:
-            if delay is None:
-                raise
-            err = str(exc).lower()
-            if any(kw in err for kw in ("quota", "429", "resource_exhausted")):
-                _logger.warning("[Thumbnail] Quota error, waiting %ds: %s", delay, exc)
-                time.sleep(delay)
-            else:
-                raise
-    else:
-        raise RuntimeError("generate_thumbnail: all retries exhausted")
+    negative = "text, words, letters, numbers, logos, captions, subtitles, watermarks, signs, typography"
+
+    best_path = output_path
+    best_score = -1.0
+
+    for variant_idx in range(2):
+        variant_path = os.path.join(TEMP_DIR, f"thumbnail_{code}_v{variant_idx}.png")
+        for delay in _QUOTA_RETRY_DELAYS + [None]:
+            try:
+                images = _get_model().generate_images(
+                    prompt=full_prompt,
+                    number_of_images=1,
+                    aspect_ratio="16:9",
+                    safety_filter_level="block_few",
+                    person_generation="allow_adult",
+                    negative_prompt=negative,
+                )
+                img = _first_generated_image(images)
+                if img is None:
+                    raise RuntimeError("Imagen returned no images for thumbnail")
+                img.save(variant_path)
+                score = _image_saturation_score(variant_path)
+                if score > best_score:
+                    best_score = score
+                    best_path = variant_path
+                break
+            except Exception as exc:
+                if delay is None:
+                    if variant_idx == 0:
+                        raise
+                    break  # second variant failed — keep first
+                err = str(exc).lower()
+                if any(kw in err for kw in ("quota", "429", "resource_exhausted")):
+                    _logger.warning("[Thumbnail] Quota error, waiting %ds: %s", delay, exc)
+                    time.sleep(delay)
+                else:
+                    if variant_idx == 0:
+                        raise
+                    break
+
+    if best_path != output_path:
+        import shutil
+        shutil.copy2(best_path, output_path)
+
+    border_color = _CATEGORY_BORDER_COLORS.get(category.lower(), _DEFAULT_BORDER_COLOR)
+    try:
+        _add_thumbnail_border(output_path, color=border_color)
+    except Exception as border_err:
+        _logger.warning("[Thumbnail] Border failed (non-fatal): %s", border_err)
 
     if hook_text:
         try:

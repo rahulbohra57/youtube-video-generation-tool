@@ -26,6 +26,21 @@ _YOUTUBE_CHANNEL = "stories"
 LONG_MIN_SCENES = 18
 LONG_MAX_SCENES = 24
 
+_GENRE_EMOTION: dict[str, str] = {
+    "science & space":              "awed",
+    "history & civilizations":      "amazed",
+    "human body & biology":         "shocked",
+    "technology & ai":              "curious",
+    "health & fitness":             "motivated",
+    "psychology & dark psychology": "unsettled",
+    "relationships & dating":       "fascinated",
+    "self-improvement & habits":    "motivated",
+    "business & finance":           "determined",
+    "culture & society":            "amused",
+    "philosophy & life":            "curious",
+    "mysteries & unexplained":      "fascinated",
+}
+
 _TMW_VISUAL_STYLE = (
     "Bright flat digital illustration, thick bold outlines, vivid complementary color palette "
     "(electric blue, warm yellow, coral red), expressive cartoonish characters with exaggerated "
@@ -192,7 +207,15 @@ def run(
             pass
         try:
             thumbnail_prompt = f"{_TMW_VISUAL_STYLE} — {headline}"
-            thumbnail_path = generate_thumbnail(thumbnail_prompt, code, hook_text=thumbnail_hook)
+            emotion = _GENRE_EMOTION.get((genre or "").lower(), "curious")
+            thumbnail_path = generate_thumbnail(
+                thumbnail_prompt,
+                code,
+                hook_text=thumbnail_hook,
+                emotion=emotion,
+                headline=headline,
+                category=(genre or "").lower(),
+            )
         except Exception as thumb_err:
             logger.warning("Thumbnail generation failed (non-fatal): %s", thumb_err)
             send_message(_chat_id, f"⚠️ Thumbnail generation failed for `{public_id or effective_job_id}`: {str(thumb_err)[:200]}", channel_id=_YOUTUBE_CHANNEL)

@@ -1347,6 +1347,32 @@ def test_generate_viral_title_falls_back_to_headline_on_error():
     assert "brain" in result.lower()
 
 
+def test_is_list_topic_detects_numeric_start():
+    from app.services.image_service import _is_list_topic
+    assert _is_list_topic("9 Habits That Keep You Slim") is True
+    assert _is_list_topic("Five Ways to Build Muscle") is True
+    assert _is_list_topic("Why Your Brain Lies to You") is False
+
+
+def test_is_list_topic_detects_digit_plus_keyword():
+    from app.services.image_service import _is_list_topic
+    assert _is_list_topic("The 3 Laws of Power Everyone Ignores") is True
+    assert _is_list_topic("Your Brain Needs to Forget to Learn") is False
+
+
+def test_image_saturation_score_returns_float(tmp_path):
+    import numpy as np
+    from PIL import Image
+    from app.services.image_service import _image_saturation_score
+    arr = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
+    img = Image.fromarray(arr)
+    p = str(tmp_path / "test.png")
+    img.save(p)
+    score = _image_saturation_score(p)
+    assert isinstance(score, float)
+    assert score > 0
+
+
 def test_pick_highlight_word_prefers_power_word():
     from app.services.image_service import _pick_highlight_word
     result = _pick_highlight_word("YOUR BRAIN LIES TO YOU")

@@ -11,13 +11,15 @@ def test_generate_thumbnail_returns_png_path(tmp_path):
     mock_images_obj.__getitem__ = lambda self, i: mock_img
 
     with patch("app.services.image_service._get_model") as mock_model, \
-         patch("app.services.image_service.TEMP_DIR", str(tmp_path)):
+         patch("app.services.image_service.TEMP_DIR", str(tmp_path)), \
+         patch("app.services.image_service._image_saturation_score", return_value=50.0), \
+         patch("shutil.copy2"):
         mock_model.return_value.generate_images.return_value = mock_images_obj
         from app.services.image_service import generate_thumbnail
         result = generate_thumbnail("A scientist with a glowing brain", "TEST01")
 
     assert result.endswith("thumbnail_TEST01.png")
-    mock_img.save.assert_called_once_with(result)
+    assert mock_img.save.call_count >= 1
 
 
 def test_set_thumbnail_calls_youtube_api():
