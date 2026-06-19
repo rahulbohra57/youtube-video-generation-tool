@@ -222,7 +222,10 @@ def _make_word_caption_clips(
 
     font_size  = _font_size(width, height)
     font       = _load_font(font_size, language)
-    stroke_w   = max(3, font_size // 14)
+    if _is_portrait(width, height):
+        stroke_w = max(3, font_size // 14)   # 9:16 Shorts — bg pill handles contrast
+    else:
+        stroke_w = max(5, font_size // 9)    # 16:9 long-format — heavier stroke, no bg patch
     max_txt_w  = _max_text_width(width, height)
     margin_bot = _bottom_margin(width, height)
     cx         = width // 2

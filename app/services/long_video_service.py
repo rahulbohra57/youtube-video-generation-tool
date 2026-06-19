@@ -183,7 +183,6 @@ def create_long_video(
         try:
             caption_clips = _make_word_caption_clips(
                 narration, total_duration, _TARGET_W, _TARGET_H, language=language,
-                caption_bg=(0, 0, 0, 155),
             )
             clip = CompositeVideoClip([base] + caption_clips) if caption_clips else base
         except Exception as cap_err:

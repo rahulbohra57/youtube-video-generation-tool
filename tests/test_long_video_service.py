@@ -187,3 +187,26 @@ def test_make_title_card_returns_image_clip():
     from app.services.long_video_service import _make_title_card
     card = _make_title_card("Test Title Card", duration=4.0, width=1920, height=1080)
     assert card is not None
+
+
+def test_create_long_video_caption_clips_called_without_caption_bg(tmp_path, mock_moviepy):
+    """_make_word_caption_clips must not receive caption_bg — long-format uses stroke only."""
+    captured_kwargs: list[dict] = []
+
+    def spy_caption(*args, **kwargs):
+        captured_kwargs.append(kwargs)
+        return []
+
+    clips = [
+        {"clips_list": [{"video_path": "", "clip_duration": 3.0}],
+         "audio_path": str(tmp_path / "a.mp3"),
+         "narration": "Hello world."},
+    ]
+
+    with patch("app.services.long_video_service._make_word_caption_clips", side_effect=spy_caption):
+        from app.services.long_video_service import create_long_video
+        create_long_video(clips, str(tmp_path / "out.mp4"))
+
+    assert captured_kwargs, "caption clips spy was never called"
+    for kw in captured_kwargs:
+        assert "caption_bg" not in kw, f"caption_bg must not be passed to _make_word_caption_clips; got {kw}"
