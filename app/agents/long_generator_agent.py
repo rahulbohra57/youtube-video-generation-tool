@@ -9,7 +9,7 @@ from uuid import uuid4
 from app.config import TEMP_DIR, OUTPUT_DIR, TMP_RETENTION_DAYS, get_chat_id
 from app.services import firestore_service
 from app.services.llm_service import generate_long_facts_script, classify_music_genre, generate_long_video_description, generate_thumbnail_hook, generate_viral_title
-from app.services.tts_service import generate_audio, choose_voice_for_video
+from app.services.tts_service import generate_audio, choose_voice_for_video, choose_two_voices
 from app.services.pexels_service import fetch_clips_for_scene
 from app.services.image_service import generate_thumbnail
 from app.services.long_video_service import create_long_video
@@ -91,8 +91,14 @@ def run(
         "started_at": datetime.now(timezone.utc).isoformat(),
     })
 
-    selected_voice = choose_voice_for_video(language="en", preference="shuffle", domain=genre or "")
-    firestore_service.create_or_update_job(effective_job_id, {"voice_selected": selected_voice})
+    hook_voice, core_voice = choose_two_voices(language="en")
+    # hook_voice for hook/retention/cta; core_voice for core facts
+    selected_voice = core_voice  # default for backward compat / firestore logging
+    firestore_service.create_or_update_job(effective_job_id, {
+        "voice_selected": selected_voice,
+        "hook_voice": hook_voice,
+        "core_voice": core_voice,
+    })
 
     if force_run:
         firestore_service.acquire_video_lock(lock_owner, force=True, lock_key=_LONG_LOCK_KEY)
@@ -136,7 +142,9 @@ def run(
 
             audio_path = os.path.join(TEMP_DIR, f"long_audio_{code}_{i}.mp3")
             try:
-                generate_audio(narration, audio_path, language="en", voice_name=selected_voice, channel_id=channel_id)
+                segment_type = scene.get("segment", "core")
+                scene_voice = hook_voice if segment_type in ("hook", "retention", "cta") else core_voice
+                generate_audio(narration, audio_path, language="en", voice_name=scene_voice, channel_id=channel_id)
             except Exception as tts_err:
                 logger.warning("Scene %d TTS failed, skipping: %s", i, tts_err)
                 continue

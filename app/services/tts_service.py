@@ -77,6 +77,31 @@ def choose_voice_for_video(language: str = "en", preference: str = "shuffle", do
     return random.choice(selected)["name"]
 
 
+def choose_two_voices(language: str = "en") -> tuple[str, str]:
+    """Return two distinct voices: (hook_voice, core_voice).
+
+    Picks one female and one male voice when both are available, to maximise
+    contrast between hook/retention scenes and core fact scenes.
+    hook_voice -> used for hook, retention, cta segments (energetic, engaging)
+    core_voice -> used for core segments (authoritative, informative)
+    """
+    options = get_voice_options(language)
+    female = [v for v in options if v.get("gender") == "female"]
+    male = [v for v in options if v.get("gender") == "male"]
+
+    if female and male:
+        hook_voice = random.choice(female)["name"]
+        core_voice = random.choice(male)["name"]
+    else:
+        # Fallback: pick any two different voices
+        shuffled = options[:]
+        random.shuffle(shuffled)
+        hook_voice = shuffled[0]["name"]
+        core_voice = shuffled[1]["name"] if len(shuffled) > 1 else shuffled[0]["name"]
+
+    return hook_voice, core_voice
+
+
 def generate_audio(text: str, output_file: str, language: str = "en", voice_name: str | None = None, channel_id: str = ""):
     if texttospeech is None:
         raise RuntimeError(

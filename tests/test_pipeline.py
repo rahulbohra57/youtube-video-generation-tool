@@ -343,6 +343,27 @@ def test_choose_voice_for_video_returns_requested_gender():
     assert options[voice] == "female"
 
 
+def test_choose_two_voices_returns_two_different_voices():
+    from app.services.tts_service import choose_two_voices
+    hook_voice, core_voice = choose_two_voices("en")
+    assert hook_voice != core_voice
+    from app.services.tts_service import _VOICE_OPTIONS
+    valid = [v["name"] for v in _VOICE_OPTIONS["en"]]
+    assert hook_voice in valid
+    assert core_voice in valid
+
+
+def test_choose_two_voices_different_genders_when_possible():
+    """The two voices should be from different genders for maximum contrast."""
+    from app.services.tts_service import choose_two_voices, _VOICE_OPTIONS
+    results = set()
+    for _ in range(20):
+        h, c = choose_two_voices("en")
+        results.add((h, c))
+    # At least some runs should produce different gender pairings
+    assert len(results) > 1
+
+
 # ---------------------------------------------------------------------------
 # Task 6: lead_researcher agent
 # ---------------------------------------------------------------------------
