@@ -155,7 +155,115 @@ def generate_image(prompt: str, idx: int, aspect_ratio: str = "16:9") -> str:
 
 
 import logging as _logging
+import random as _random
 _logger = _logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Thumbnail style pool — each entry is an Imagen-ready visual style description
+# derived from the curated reference thumbnails in thumbnail_pool/.
+# A random style is picked per video so thumbnails vary across the channel.
+# ---------------------------------------------------------------------------
+_THUMBNAIL_STYLE_POOL = [
+    # Style 1 — Triptych stick-figure line-art (ref: Lotus Method)
+    (
+        "Three-panel triptych layout on a warm cream or beige background. "
+        "Black ink line-art stick figures on the outer panels doing contrasting activities. "
+        "A detailed symbolic illustration (flower, brain, eye, object) centered in the middle panel. "
+        "Clean editorial graphic style, generous whitespace, minimal color palette."
+    ),
+    # Style 2 — Epic mythological anime (ref: Destiny)
+    (
+        "Epic mythological comic-book art. A heroic divine figure on the right facing a dejected mortal on the left. "
+        "Dramatic stormy background with glowing golden energy beams radiating between them. "
+        "Rich warm amber and deep blue-green color palette. Anime-influenced detailed character rendering. "
+        "Cinematic heroic composition with strong chiaroscuro lighting."
+    ),
+    # Style 3 — Split comparison infographic (ref: Japanese Habits)
+    (
+        "Clean split left-right comparison panel. Minimalist rounded blob-character illustrations. "
+        "Left panel has a warm beige or peach tone showing a struggling character. "
+        "Right panel has a cool blue-white tone showing a content character. "
+        "Simple clean infographic style. Charming approachable character designs with expressive faces. "
+        "Red curved arrows pointing inward from both sides."
+    ),
+    # Style 4 — Bold red manga background (ref: Unshakable)
+    (
+        "Bold solid red background filling the entire frame. "
+        "A detailed manga-style character — muscular, focused, reading or training — on the right two-thirds. "
+        "Left third is free for large bold white stacked text. "
+        "Japanese cultural motifs (bamboo, mountain, brush stroke) in background corners. "
+        "High-contrast, dramatic manga comic illustration style."
+    ),
+    # Style 5 — Black-and-white ink sketch (ref: 48 Laws of Power)
+    (
+        "Stark pure white background. High-contrast black pen-and-ink crosshatch sketch illustration. "
+        "A tiny simple stick figure stands facing a massive, detailed, hulking creature or monster. "
+        "Dramatic scale contrast between the small human and the enormous entity. "
+        "Raw hand-drawn sketchy texture. Minimalist yet intense composition."
+    ),
+    # Style 6 — Surreal dark ink on white (ref: Do Nothing / People Who Dream Big)
+    (
+        "Pure white background. Surreal dark black ink illustration occupying the right half of the frame. "
+        "Left half has minimal bold black serif or sans-serif text with a single red-background accent word. "
+        "Underground zine aesthetic. Expressive dark linework with symbolic or slightly eerie imagery. "
+        "High contrast, no color except black, white, and one red accent."
+    ),
+    # Style 7 — 3-panel comic strip (ref: 5:30 AM)
+    (
+        "Three-panel horizontal comic strip layout. Editorial cartoon illustration style. "
+        "Muted grayscale with subtle warm undertones. "
+        "Each panel shows a different everyday human scenario in a simple setting. "
+        "Clean sequential storytelling format. Large bold text centered across all three panels."
+    ),
+    # Style 8 — Anatomical cross-section split (ref: Before/After muscle)
+    (
+        "Split left-right before-and-after comparison illustration. "
+        "Hyper-detailed anatomical cross-section style. "
+        "Golden-yellow muscular body figure with vivid blue and cyan highlighted internal structures. "
+        "BEFORE badge on the left panel, AFTER badge on the right panel. "
+        "Clinical yet visually dramatic medical illustration aesthetic."
+    ),
+    # Style 9 — Lofi anime cinematic (ref: BE THAT 1%)
+    (
+        "Lofi anime or Studio Ghibli-influenced visual style. Wide cinematic landscape composition. "
+        "Warm gradient sunset sky with layered orange, pink, red and purple tones. "
+        "One or two figures silhouetted or viewed from behind in an elevated outdoor or rooftop setting. "
+        "Atmospheric depth with layered background elements. Minimal text. Moody, aspirational, wistful mood."
+    ),
+    # Style 10 — Watercolor storybook (ref: Power of Thinking Big)
+    (
+        "Warm watercolor and digital painting storybook illustration. "
+        "Single protagonist character in a rich historical, rural or fantastical outdoor setting. "
+        "Earthy amber, golden, and sage green palette with soft painterly brush texture. "
+        "Title rendered in a handwritten or calligraphic font with a decorative banner or scroll. "
+        "Folk-art, inspirational, fairytale aesthetic."
+    ),
+    # Style 11 — Ukiyo-e Japanese woodblock print (ref: I Will Do It Tomorrow)
+    (
+        "Traditional Japanese ukiyo-e woodblock print style. "
+        "Flat muted earth tones of moss green, brown, ochre and pale grey. "
+        "Single figure resting, meditating or sitting in a serene landscape with pine, bamboo or water. "
+        "Fine line detail with flat color fill areas. No gradients. "
+        "Bold large modern Western serif or sans-serif typography overlaid as a stark contrast to the art style."
+    ),
+    # Style 12 — Cinematic photo collage (ref: What If?)
+    (
+        "Cinematic real-photography collage of four side-by-side vertical panels. "
+        "Each panel shows a dramatic aspirational scene — wealth, ambition, luxury, or raw emotion. "
+        "Thick dark dividing bars between panels. "
+        "Deep moody photography with rich shadows, high contrast, desaturated tones. "
+        "Minimal single white text phrase centered across all panels. "
+        "Aspirational documentary aesthetic."
+    ),
+    # Style 13 — Dark editorial underground illustration (ref: Do It Anyway)
+    (
+        "Very dark charcoal or black background filling the frame. "
+        "A powerful dramatic illustrated central figure with a strong single accent color — red, orange, or electric blue. "
+        "Rough sketchy crosshatch or ink texture covering the entire composition. "
+        "Bold oversized serif font at the very top of the frame. "
+        "Underground editorial illustration aesthetic. Deep shadows, minimal palette, one vivid accent."
+    ),
+]
 
 _THUMBNAIL_POWER_WORDS = {
     "LIE", "LIES", "LIED", "LYING", "WRONG", "DEAD", "NEVER", "ALWAYS",
@@ -273,28 +381,15 @@ def generate_thumbnail(
     ensure_dir(TEMP_DIR)
     output_path = os.path.join(TEMP_DIR, f"thumbnail_{code}.png")
 
+    topic = headline.strip() if headline else prompt.strip()
+    style = _random.choice(_THUMBNAIL_STYLE_POOL)
     face_expr = _EMOTION_FACE_MAP.get(emotion.lower(), _DEFAULT_FACE_EMOTION)
-    is_list = _is_list_topic(headline) if headline else False
-
-    if is_list:
-        composition = (
-            "Split-panel composition: left panel depicts the 'before' or problem state, "
-            "right panel depicts the 'after' or solution, separated by a bold vertical dividing line. "
-        )
-    else:
-        composition = (
-            f"Foreground: extreme close-up of an expressive illustrated human face showing "
-            f"{face_expr}, occupying the left 55% of the frame. "
-            "Background: rich thematic scene matching the topic. "
-        )
 
     full_prompt = (
-        f"{prompt} "
-        f"{composition}"
-        "Bold flat illustration style, vivid high-contrast colors "
-        "(electric red or orange or yellow or royal blue background), "
-        "single clear focal point, striking composition readable at thumbnail size. "
-        "No text, no words, no letters, no logos, no watermarks, no captions."
+        f"YouTube thumbnail for a video about: {topic}. "
+        f"{style} "
+        f"Characters or subjects convey {face_expr}. "
+        "No text, no words, no letters, no numbers, no logos, no watermarks, no captions."
     )
     negative = "text, words, letters, numbers, logos, captions, subtitles, watermarks, signs, typography"
 

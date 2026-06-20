@@ -1373,6 +1373,13 @@ def test_image_saturation_score_returns_float(tmp_path):
     assert score > 0
 
 
+def test_thumbnail_style_pool_has_entries():
+    from app.services.image_service import _THUMBNAIL_STYLE_POOL
+    assert len(_THUMBNAIL_STYLE_POOL) >= 13, "Pool must have at least 13 style entries"
+    for style in _THUMBNAIL_STYLE_POOL:
+        assert isinstance(style, str) and len(style) > 50, f"Style entry too short: {style!r}"
+
+
 def test_pick_highlight_word_prefers_power_word():
     from app.services.image_service import _pick_highlight_word
     result = _pick_highlight_word("YOUR BRAIN LIES TO YOU")

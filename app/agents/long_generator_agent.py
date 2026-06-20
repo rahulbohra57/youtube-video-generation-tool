@@ -206,10 +206,9 @@ def run(
         except Exception:
             pass
         try:
-            thumbnail_prompt = f"{_TMW_VISUAL_STYLE} — {headline}"
             emotion = _GENRE_EMOTION.get((genre or "").lower(), "curious")
             thumbnail_path = generate_thumbnail(
-                thumbnail_prompt,
+                headline,
                 code,
                 hook_text=thumbnail_hook,
                 emotion=emotion,
