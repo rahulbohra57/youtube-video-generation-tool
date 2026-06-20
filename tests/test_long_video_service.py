@@ -151,8 +151,8 @@ def test_create_long_video_no_title_card_even_with_title(tmp_path, mock_moviepy)
     mock_moviepy["_make_black_frame"].assert_not_called()
 
 
-def test_create_long_video_black_frame_between_scenes(tmp_path, mock_moviepy):
-    """Black frame transition is inserted between scenes but not after the last."""
+def test_create_long_video_no_black_frames_between_scenes(tmp_path, mock_moviepy):
+    """No black frame transitions are inserted — scenes cut directly for smooth playback."""
     from app.services.long_video_service import create_long_video
     clips = [
         {"clips_list": [{"video_path": "", "clip_duration": 5.0}],
@@ -166,8 +166,7 @@ def test_create_long_video_black_frame_between_scenes(tmp_path, mock_moviepy):
          "narration": "scene three"},
     ]
     create_long_video(clips, str(tmp_path / "out.mp4"))
-    # 3 scenes → 2 black frame transitions (between 1-2 and 2-3, not after 3)
-    assert mock_moviepy["_make_black_frame"].call_count == 2
+    mock_moviepy["_make_black_frame"].assert_not_called()
 
 
 def test_create_long_video_no_title_card_when_title_empty(tmp_path, mock_moviepy):

@@ -183,9 +183,6 @@ def create_long_video(
             clip = base
 
         scene_clips.append(clip)
-        # Add brief black frame transition between scenes (not after last)
-        if idx < len(clips) - 1:
-            scene_clips.append(_make_black_frame())
 
     final_video = concatenate_videoclips(scene_clips, method="compose")
     vo_audio = _volume(_audio_fade_out(final_video.audio, 0.5), LONG_VO_GAIN)
