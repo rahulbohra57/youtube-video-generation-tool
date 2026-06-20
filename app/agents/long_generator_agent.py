@@ -12,7 +12,7 @@ from app.services.llm_service import generate_long_facts_script, classify_music_
 from app.services.tts_service import generate_audio, choose_two_voices
 from app.services.pexels_service import fetch_clips_for_scene
 from app.services.image_service import generate_thumbnail
-from app.services.long_video_service import create_long_video, _TITLE_CARD_DURATION
+from app.services.long_video_service import create_long_video
 from app.services.telegram_service import send_message
 from app.services.youtube_service import upload_video, set_thumbnail, extract_video_id
 from app.utils.helpers import extract_json, ensure_dir, cleanup_files_older_than
@@ -148,7 +148,7 @@ def run(
         music_genre = classify_music_genre(headline, story_genre=genre)
         video_clips = []
         successful_scenes = 0
-        cumulative_seconds = _TITLE_CARD_DURATION  # account for title card prepended at start
+        cumulative_seconds = 0.0
         chapter_timestamps: list[str] = ["0:00 Introduction"]
         _CHAPTER_SCENE_INDICES = {0, 2, 7, 13, 19, 21, 23}  # scenes 1,3,8,14,20,22,24 (0-indexed)
 

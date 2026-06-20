@@ -276,10 +276,6 @@ def generate_thumbnail(
     face_expr = _EMOTION_FACE_MAP.get(emotion.lower(), _DEFAULT_FACE_EMOTION)
     is_list = _is_list_topic(headline) if headline else False
 
-    hook_hint = (
-        f"The overall image must visually represent this concept: '{hook_text}'. "
-        if hook_text else ""
-    )
     if is_list:
         composition = (
             "Split-panel composition: left panel depicts the 'before' or problem state, "
@@ -294,7 +290,6 @@ def generate_thumbnail(
 
     full_prompt = (
         f"{prompt} "
-        f"{hook_hint}"
         f"{composition}"
         "Bold flat illustration style, vivid high-contrast colors "
         "(electric red or orange or yellow or royal blue background), "

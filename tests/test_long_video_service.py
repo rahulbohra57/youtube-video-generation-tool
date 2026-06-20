@@ -136,8 +136,8 @@ def mock_moviepy():
         p.stop()
 
 
-def test_create_long_video_prepends_title_card(tmp_path, mock_moviepy):
-    """create_long_video with title= prepends a 4s title card."""
+def test_create_long_video_no_title_card_even_with_title(tmp_path, mock_moviepy):
+    """create_long_video never prepends a title card, even when title= is provided."""
     from app.services.long_video_service import create_long_video
     clips = [
         {"clips_list": [{"video_path": "", "clip_duration": 5.0}],
@@ -145,8 +145,8 @@ def test_create_long_video_prepends_title_card(tmp_path, mock_moviepy):
          "narration": "test narration"},
     ]
     create_long_video(clips, str(tmp_path / "out.mp4"), title="My Test Title")
-    # _make_title_card should have been called once with the title
-    mock_moviepy["_make_title_card"].assert_called_once_with("My Test Title")
+    # Title card must NOT be generated — it causes viewer drop-off on first frame
+    mock_moviepy["_make_title_card"].assert_not_called()
     # _make_black_frame should NOT be called for a single scene (no transition after last)
     mock_moviepy["_make_black_frame"].assert_not_called()
 

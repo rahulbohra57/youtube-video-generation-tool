@@ -117,13 +117,6 @@ def create_long_video(
     """
     scene_clips = []
 
-    # Prepend title card if title is provided
-    if title:
-        try:
-            scene_clips.append(_make_title_card(title))
-        except Exception as tc_err:
-            logger.warning("[LongVideo] Title card failed (non-fatal): %s", tc_err)
-
     for idx, item in enumerate(clips):
         audio_path = item["audio_path"]
         narration = item.get("narration", "")
