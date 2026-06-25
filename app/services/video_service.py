@@ -402,18 +402,13 @@ def _tracks_in(directory: str) -> list[str]:
     return _music_cache[directory]
 
 
-def _pick_music(genre: str = "general") -> str | None:
+def _pick_music(channel_id: str = "news") -> str | None:
     if not os.path.isdir(MUSIC_DIR):
         return None
 
-    if genre and genre.lower() != "general":
-        genre_dir = os.path.join(MUSIC_DIR, genre)
-        genre_tracks = _tracks_in(genre_dir)
-        if genre_tracks:
-            return random.choice(genre_tracks)
-
-    root_tracks = _tracks_in(MUSIC_DIR)
-    return random.choice(root_tracks) if root_tracks else None
+    subfolder = "news" if channel_id == "news" else "generic"
+    tracks = _tracks_in(os.path.join(MUSIC_DIR, subfolder))
+    return random.choice(tracks) if tracks else None
 
 
 # ─── Main entry point ─────────────────────────────────────────────────────────
@@ -525,7 +520,7 @@ def create_video(
     vo_audio = _volume(_audio_fade_out(final_video.audio, 0.5), VO_GAIN)
     final_video = _clip_audio(final_video, vo_audio)
 
-    music_path = _pick_music(music_genre)
+    music_path = _pick_music(channel_id)
     if music_path:
         try:
             bg       = AudioFileClip(music_path)

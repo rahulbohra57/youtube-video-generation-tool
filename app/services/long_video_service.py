@@ -188,7 +188,7 @@ def create_long_video(
     vo_audio = _volume(_audio_fade_out(final_video.audio, 0.5), LONG_VO_GAIN)
     final_video = _clip_audio(final_video, vo_audio)
 
-    music_path = _pick_music(music_genre)
+    music_path = _pick_music("stories")
     if music_path:
         try:
             bg = AudioFileClip(music_path)
