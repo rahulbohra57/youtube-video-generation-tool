@@ -829,19 +829,46 @@ def _is_overused_fact(title: str, premise: str) -> bool:
     return any(re.search(pat, text) for pat in _OVERUSED_FACT_PATTERNS)
 
 
-def generate_fact_topic(category: str, recently_used_titles: list[str] | None = None) -> dict:
+def generate_fact_topic(category: str, recently_used_titles: list[str] | None = None, theme: str = "") -> dict:
     """Generate a specific, punchy fact topic for the given category.
 
     Returns {"title": str, "premise": str}.
     title — a hook question or punchy claim (6-12 words).
     premise — 1-2 sentence factual context the script generator can expand on.
+    theme — optional focus theme (e.g. "FIFA World Cup 2026") to constrain topic generation.
     """
     avoid_block = ""
     if recently_used_titles:
         lines = "\n".join(f"  - {t}" for t in recently_used_titles[:60])
         avoid_block = f"\nDo NOT reuse these recently covered topics:\n{lines}\n"
 
-    prompt = f"""You are a researcher for a YouTube Shorts channel called "Tell Me Why" — where a conversational friend shares wild, surprising facts, like texting someone something they won't believe.
+    if theme:
+        from datetime import date
+        today_str = date.today().isoformat()
+        prompt = f"""You are a researcher for a YouTube Shorts channel called "Tell Me Why" — where a conversational friend explains surprising things about {theme}, like texting someone something they won't believe about football.
+
+TODAY'S DATE: {today_str}. The {theme} is currently happening — topics may reference current teams, players, and results.
+
+Generate a specific, punchy topic about {theme} for the sub-category: {category.title()}{avoid_block}
+
+Rules:
+- title: 6-12 words, casual and conversational — sounds like something you'd text a friend. Must be a hook statement or rhetorical question. Examples:
+  - "Why a penalty kick is almost impossible to save"
+  - "The offside rule is not what most people think it is"
+  - "Brazil has won the World Cup more times than any other country"
+  - "Messi almost quit football at age 11 because of a hormone condition"
+  - "The World Cup trophy has been stolen twice in history"
+  - "How players are secretly selected months before the squad is announced"
+  - "Why the goalkeeper almost never saves a penalty and it's by design"
+- premise: 1-2 sentences of factual context the script writer can expand. Must include specific numbers, names, or mechanisms. Minimum 15 words.
+- Topic must be surprising, counterintuitive, or little-known — avoid obvious facts fans already know well.
+- Topic must be directly related to {theme} and the sub-category provided.
+- Topic must be verifiable via Google Search.
+
+Return only a valid JSON object, no markdown:
+{{"title": "...", "premise": "..."}}"""
+    else:
+        prompt = f"""You are a researcher for a YouTube Shorts channel called "Tell Me Why" — where a conversational friend shares wild, surprising facts, like texting someone something they won't believe.
 
 Generate a specific, punchy fact topic for the category: {category.title()}{avoid_block}
 
@@ -868,16 +895,20 @@ Return only a valid JSON object, no markdown:
                 if len((result["premise"] or "").strip().split()) < 15:
                     logger.warning("Fact topic premise quality gate failed (attempt %d): %s", attempt + 1, result.get("premise"))
                     continue
-                if _is_overused_fact(result["title"], result["premise"]):
+                if not theme and _is_overused_fact(result["title"], result["premise"]):
                     logger.warning("Fact topic is a well-known cliché, retrying (attempt %d): %s", attempt + 1, result.get("title"))
                     continue
                 return result
         except Exception:
             pass
-    return {
-        "title": f"The most surprising fact about {category}",
-        "premise": f"Scientists and researchers have uncovered a fact about {category} that challenges common assumptions and reveals something deeply counterintuitive about how the world works.",
-    }
+    fallback_title = f"The most surprising fact about {theme or category}" if theme else f"The most surprising fact about {category}"
+    fallback_premise = (
+        f"There is a surprising and counterintuitive aspect of {theme} related to {category} "
+        f"that most fans do not know, which changes how you understand the game."
+        if theme else
+        f"Scientists and researchers have uncovered a fact about {category} that challenges common assumptions and reveals something deeply counterintuitive about how the world works."
+    )
+    return {"title": fallback_title, "premise": fallback_premise}
 
 
 def generate_story_script(title: str, mood: str, premise: str = "", language: str = "hi") -> str:
@@ -1286,10 +1317,10 @@ def generate_long_facts_script(topic: str, category: str = "", premise: str = ""
     category_block = f"\nCategory: {category}\n" if category else ""
     premise_block = f"\nPremise: {premise.strip()}\n" if premise and premise.strip() else ""
 
-    prompt = f"""You are a scriptwriter for 'Tell Me Why', a YouTube educational channel. Write a long-form video script (5–7 minutes, 24 scenes) on the topic below. Verify all facts carefully before writing.
+    prompt = f"""You are a scriptwriter for 'Tell Me Why', a YouTube educational channel focused on FIFA World Cup 2026 — educating viewers about football rules, history, teams, players, records, and the culture of the World Cup. Write a long-form video script (5–7 minutes, 24 scenes) on the topic below. Verify all facts carefully before writing; use Google Search to confirm current World Cup 2026 teams, results, and player details.
 
 Topic: {topic}{category_block}{premise_block}
-TODAY'S DATE: {today_str}.
+TODAY'S DATE: {today_str}. The FIFA World Cup 2026 is currently underway or imminent — incorporate accurate, up-to-date information about participating teams and players where relevant.
 
 Return ONLY a valid JSON array — no markdown, no explanation, no code fences.
 
