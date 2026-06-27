@@ -210,8 +210,14 @@ def upload_video(video_path: str, title: str, description: str, genre: str = "",
 
     # Merge base Shorts tags with topic-specific tags from the script reviewer.
     # YouTube caps total tag characters at 500; truncate to stay within limit.
+    # Characters <, >, ", & are rejected by YouTube with invalidTags — strip them.
+    def _clean_tag(raw: str) -> str:
+        import re
+        cleaned = re.sub(r'[<>"&]', '', str(raw)).strip()
+        return cleaned[:100]  # YouTube per-tag hard cap
+
     base_tags = ["Shorts", "shorts"]
-    extra_tags = [str(t).strip() for t in (tags or []) if str(t).strip()]
+    extra_tags = [_clean_tag(t) for t in (tags or []) if _clean_tag(t)]
     all_tags = base_tags + extra_tags
     char_count = 0
     trimmed_tags: list[str] = []
