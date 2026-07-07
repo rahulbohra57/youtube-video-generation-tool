@@ -9,24 +9,32 @@ import time
 import hashlib
 from PIL import Image, ImageDraw
 
-# imagen-3.0-generate-002 is the latest Imagen 3 model (Jan 2025) with the
-# highest image quality and prompt adherence. 20 QPM quota is sufficient for
-# 5-scene videos. Exponential backoff handles occasional rate-limit spikes.
 MODEL_NAME = "imagen-3.0-generate-002"
-_GCP_PROJECT = os.getenv("GCP_PROJECT_ID", "project-2cf07291-e18f-4a4e-ad2")
+_FALLBACK_MODEL_NAME = "imagen-3.0-generate-001"
+_GCP_PROJECT = os.getenv("GCP_PROJECT_ID", "youtube-video-generator-492211")
 _GCP_LOCATION = "us-central1"
 
 ensure_dir(TEMP_DIR)
 
 _model = None
+_fallback_model = None
+_use_fallback = False  # set True permanently once 002 returns a 403
 
 
 def _get_model() -> ImageGenerationModel:
-    global _model
+    global _model, _fallback_model, _use_fallback
+    vertexai.init(project=_GCP_PROJECT, location=_GCP_LOCATION)
+    if _use_fallback:
+        if _fallback_model is None:
+            _fallback_model = ImageGenerationModel.from_pretrained(_FALLBACK_MODEL_NAME)
+        return _fallback_model
     if _model is None:
-        vertexai.init(project=_GCP_PROJECT, location=_GCP_LOCATION)
         _model = ImageGenerationModel.from_pretrained(MODEL_NAME)
     return _model
+
+
+def _active_model_name() -> str:
+    return _FALLBACK_MODEL_NAME if _use_fallback else MODEL_NAME
 
 # Retry delays (seconds) for Imagen quota / rate-limit errors (429).
 # Quota window is 1 minute, so each wait must be long enough for the bucket
@@ -127,12 +135,14 @@ def generate_image(prompt: str, idx: int, aspect_ratio: str = "16:9") -> str:
         except Exception as e:
             err = str(e)
             is_rate_limit = "429" in err or "quota" in err.lower() or "resource exhausted" in err.lower()
-            # SDK sometimes raises IndexError instead of returning an empty list
-            # when a response is filtered. Treat it the same as a safety filter.
             is_index_error = isinstance(e, IndexError) or "list index out of range" in err
+            # 403 "not visible to the current project" means this model variant
+            # is not accessible — switch permanently to the fallback model and retry.
+            is_model_access_error = "403" in err and (
+                "not visible" in err.lower() or "publisher" in err.lower()
+            )
 
             if err.startswith(SAFETY_FILTER_ERROR_PREFIX):
-                # Never retry safety-filter rejections — the same prompt = same block.
                 raise
 
             if is_index_error:
@@ -141,16 +151,24 @@ def generate_image(prompt: str, idx: int, aspect_ratio: str = "16:9") -> str:
                     "(likely empty/filtered response)"
                 )
 
+            if is_model_access_error:
+                global _use_fallback
+                if not _use_fallback:
+                    _use_fallback = True
+                    print(f"⚠️ {MODEL_NAME} returned 403 — switching permanently to {_FALLBACK_MODEL_NAME}")
+                    continue  # retry this scene immediately with fallback model, no sleep
+                else:
+                    raise  # fallback model also inaccessible — give up
+
             if is_rate_limit:
                 print(f"Retry {attempt} failed (rate limit – waiting {wait}s): {e}")
                 last_exc = e
                 time.sleep(wait)
             else:
-                # Unexpected non-quota error — raise immediately.
                 raise
 
     raise Exception(
-        f"Image generation failed after {len(_QUOTA_RETRY_DELAYS)} quota retries using {MODEL_NAME}: {last_exc}"
+        f"Image generation failed after {len(_QUOTA_RETRY_DELAYS)} quota retries using {_active_model_name()}: {last_exc}"
     )
 
 
@@ -418,11 +436,25 @@ def generate_thumbnail(
                     best_path = variant_path
                 break
             except Exception as exc:
+                err_str = str(exc)
+                err = err_str.lower()
+                is_model_403 = "403" in err_str and (
+                    "not visible" in err or "publisher" in err
+                )
+                if is_model_403:
+                    global _use_fallback
+                    if not _use_fallback:
+                        _use_fallback = True
+                        _logger.warning("[Thumbnail] %s returned 403 — switching to %s", MODEL_NAME, _FALLBACK_MODEL_NAME)
+                        continue  # retry immediately with fallback model
+                    elif variant_idx == 0:
+                        raise
+                    else:
+                        break
                 if delay is None:
                     if variant_idx == 0:
                         raise
                     break  # second variant failed — keep first
-                err = str(exc).lower()
                 if any(kw in err for kw in ("quota", "429", "resource_exhausted")):
                     _logger.warning("[Thumbnail] Quota error, waiting %ds: %s", delay, exc)
                     time.sleep(delay)
