@@ -30,17 +30,26 @@ _CATEGORY_FALLBACKS = {
     "culture & society": "culture people",
     "philosophy & life": "philosophy nature",
     "mysteries & unexplained": "mystery dark",
+    "artificial intelligence": "artificial intelligence technology",
+    "technology": "technology digital devices",
+    "current affairs": "news world affairs",
+    "science": "science research laboratory",
+    "health": "health medical",
+    "business": "business finance office",
+    "sports": "sports athletes stadium",
+    "entertainment": "entertainment celebrity event",
+    "environment": "environment nature climate",
 }
 
 
-def _search_pexels(query: str, per_page: int = 5) -> list[dict]:
+def _search_pexels(query: str, per_page: int = 5, orientation: str = "landscape") -> list[dict]:
     api_key = os.getenv("PEXELS_API_KEY", "")
     if not api_key:
         raise RuntimeError("PEXELS_API_KEY env var is not set")
     resp = requests.get(
         _VIDEOS_SEARCH_URL,
         headers={"Authorization": api_key},
-        params={"query": query, "orientation": "landscape", "size": "medium", "per_page": per_page},
+        params={"query": query, "orientation": orientation, "size": "medium", "per_page": per_page},
         timeout=15,
     )
     resp.raise_for_status()
@@ -74,11 +83,15 @@ def fetch_clip(
     scene_idx: int,
     category: str = "",
     temp_dir: str = TEMP_DIR,
+    orientation: str = "landscape",
 ) -> str:
-    """Search Pexels for a landscape video clip, download it, return local path.
+    """Search Pexels for a video clip, download it, return local path.
 
-    Falls back through: broad query → category keyword → generic → empty string.
-    Empty string means the caller should render a black frame for this scene.
+    Falls back through: broad query -> category keyword -> generic -> empty string.
+    When orientation="portrait", the whole fallback chain is retried once more with
+    orientation="landscape" before giving up (a downstream crop step in video_service
+    converts landscape footage to portrait). Empty string means the caller should
+    treat this scene as failed.
     """
     ensure_dir(temp_dir)
     dest = os.path.join(temp_dir, f"pexels_{scene_idx}.mp4")
@@ -88,29 +101,43 @@ def fetch_clip(
     category_fallback = _CATEGORY_FALLBACKS.get((category or "").lower().strip())
     fallback_chain = [q for q in [query, broad, category_fallback, "knowledge learning education"] if q]
 
-    for attempt_query in fallback_chain:
-        try:
-            videos = _search_pexels(attempt_query)
-            if not videos:
-                continue
-            clip = _select_clip(videos, audio_duration)
-            if not clip:
-                continue
-            url = _best_video_file(clip)
-            if not url:
-                continue
-            api_key = os.getenv("PEXELS_API_KEY", "")
-            resp = requests.get(url, headers={"Authorization": api_key}, timeout=60, stream=True)
-            resp.raise_for_status()
-            with open(dest, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=1 << 20):
-                    f.write(chunk)
-            logger.info("[Pexels] scene=%d query=%r duration=%s", scene_idx, attempt_query, clip.get("duration"))
-            return dest
-        except Exception as exc:
-            logger.warning("[Pexels] scene=%d query=%r failed: %s", scene_idx, attempt_query, exc)
+    orientations = [orientation]
+    if orientation == "portrait":
+        orientations.append("landscape")
 
-    logger.warning("[Pexels] scene=%d all fallbacks exhausted — black frame", scene_idx)
+    for attempt_orientation in orientations:
+        for attempt_query in fallback_chain:
+            try:
+                videos = _search_pexels(attempt_query, orientation=attempt_orientation)
+                if not videos:
+                    continue
+                clip = _select_clip(videos, audio_duration)
+                if not clip:
+                    continue
+                url = _best_video_file(clip)
+                if not url:
+                    continue
+                api_key = os.getenv("PEXELS_API_KEY", "")
+                resp = requests.get(url, headers={"Authorization": api_key}, timeout=60, stream=True)
+                resp.raise_for_status()
+                with open(dest, "wb") as f:
+                    for chunk in resp.iter_content(chunk_size=1 << 20):
+                        f.write(chunk)
+                logger.info(
+                    "[Pexels] scene=%d query=%r orientation=%s duration=%s",
+                    scene_idx, attempt_query, attempt_orientation, clip.get("duration"),
+                )
+                return dest
+            except Exception as exc:
+                logger.warning(
+                    "[Pexels] scene=%d query=%r orientation=%s failed: %s",
+                    scene_idx, attempt_query, attempt_orientation, exc,
+                )
+
+    logger.warning(
+        "[Pexels] scene=%d all fallbacks exhausted (orientations=%s) — signalling failure",
+        scene_idx, orientations,
+    )
     return ""
 
 

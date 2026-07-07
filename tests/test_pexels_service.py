@@ -124,6 +124,127 @@ def test_fetch_clip_raises_without_api_key(tmp_path, monkeypatch):
     assert result == ""
 
 
+def test_fetch_clip_portrait_orientation_searched_first(tmp_path, monkeypatch):
+    monkeypatch.setenv("PEXELS_API_KEY", "test-key")
+    import app.services.pexels_service as ps
+    importlib.reload(ps)
+
+    videos = [_make_video(25.0)]
+    mock_search_resp = MagicMock()
+    mock_search_resp.json.return_value = {"videos": videos}
+    mock_search_resp.raise_for_status = MagicMock()
+
+    seen_orientations = []
+
+    def side_effect(url, **kwargs):
+        if "api.pexels.com" in url:
+            seen_orientations.append(kwargs["params"]["orientation"])
+            return mock_search_resp
+        return _mock_download(url)
+
+    with patch("app.services.pexels_service.requests.get", side_effect=side_effect):
+        result = ps.fetch_clip("skyline sunrise city", 20.0, scene_idx=0, temp_dir=str(tmp_path), orientation="portrait")
+
+    assert result == str(tmp_path / "pexels_0.mp4")
+    assert seen_orientations[0] == "portrait"
+
+
+def test_fetch_clip_falls_back_to_landscape_when_portrait_exhausted(tmp_path, monkeypatch):
+    monkeypatch.setenv("PEXELS_API_KEY", "test-key")
+    import app.services.pexels_service as ps
+    importlib.reload(ps)
+
+    empty_resp = MagicMock()
+    empty_resp.json.return_value = {"videos": []}
+    empty_resp.raise_for_status = MagicMock()
+
+    landscape_resp = MagicMock()
+    landscape_resp.json.return_value = {"videos": [_make_video(25.0)]}
+    landscape_resp.raise_for_status = MagicMock()
+
+    seen_orientations = []
+
+    def side_effect(url, **kwargs):
+        if "api.pexels.com" in url:
+            orientation = kwargs["params"]["orientation"]
+            seen_orientations.append(orientation)
+            return empty_resp if orientation == "portrait" else landscape_resp
+        return _mock_download(url)
+
+    with patch("app.services.pexels_service.requests.get", side_effect=side_effect):
+        result = ps.fetch_clip("rare unusual query", 20.0, scene_idx=1, temp_dir=str(tmp_path), orientation="portrait")
+
+    assert result == str(tmp_path / "pexels_1.mp4")
+    # No category passed -> 3-item fallback chain (query, broad, generic).
+    # All 3 portrait attempts exhausted first, then the landscape pass
+    # succeeds on its first (exact-query) attempt.
+    assert seen_orientations.count("portrait") == 3
+    assert "landscape" in seen_orientations
+
+
+def test_fetch_clip_default_orientation_is_landscape_only(tmp_path, monkeypatch):
+    """Existing long-format caller never passes orientation — must stay single-pass landscape."""
+    monkeypatch.setenv("PEXELS_API_KEY", "test-key")
+    import app.services.pexels_service as ps
+    importlib.reload(ps)
+
+    empty_resp = MagicMock()
+    empty_resp.json.return_value = {"videos": []}
+    empty_resp.raise_for_status = MagicMock()
+
+    seen_orientations = []
+
+    def side_effect(url, **kwargs):
+        if "api.pexels.com" in url:
+            seen_orientations.append(kwargs["params"]["orientation"])
+            return empty_resp
+        return _mock_download(url)
+
+    with patch("app.services.pexels_service.requests.get", side_effect=side_effect):
+        result = ps.fetch_clip("very specific unusual query xyz", 20.0, scene_idx=2, temp_dir=str(tmp_path))
+
+    assert result == ""
+    assert set(seen_orientations) == {"landscape"}
+    # No category passed -> 3-item fallback chain (query, broad, generic),
+    # single orientation pass (default orientation="landscape", no portrait retry).
+    assert len(seen_orientations) == 3
+
+
+def test_fetch_clip_news_category_fallback_terms(tmp_path, monkeypatch):
+    monkeypatch.setenv("PEXELS_API_KEY", "test-key")
+    import app.services.pexels_service as ps
+    importlib.reload(ps)
+
+    empty_resp = MagicMock()
+    empty_resp.json.return_value = {"videos": []}
+    empty_resp.raise_for_status = MagicMock()
+
+    match_resp = MagicMock()
+    match_resp.json.return_value = {"videos": [_make_video(25.0)]}
+    match_resp.raise_for_status = MagicMock()
+
+    seen_queries = []
+
+    def side_effect(url, **kwargs):
+        if "api.pexels.com" in url:
+            query = kwargs["params"]["query"]
+            seen_queries.append(query)
+            return match_resp if query == ps._CATEGORY_FALLBACKS["artificial intelligence"] else empty_resp
+        return _mock_download(url)
+
+    with patch("app.services.pexels_service.requests.get", side_effect=side_effect):
+        result = ps.fetch_clip(
+            "one two three four five specific words",
+            20.0,
+            scene_idx=3,
+            category="Artificial Intelligence",
+            temp_dir=str(tmp_path),
+        )
+
+    assert result == str(tmp_path / "pexels_3.mp4")
+    assert ps._CATEGORY_FALLBACKS["artificial intelligence"] in seen_queries
+
+
 # --- fetch_clips_for_scene tests ---
 
 def test_fetch_clips_for_scene_returns_multiple_clips(tmp_path, monkeypatch):
