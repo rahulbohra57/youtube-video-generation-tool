@@ -101,9 +101,10 @@ video_service.create_video()
 - `fetch_clip()`: on total exhaustion of the portrait fallback chain
   (exact query -> broad query -> category fallback -> generic), retry the
   same chain once more with `orientation="landscape"` (a downstream crop
-  step handles portrait conversion of that footage). Only if that also
-  fully exhausts does it return `""` (-> `generate_fallback_image()` text
-  card, matching today's total-Imagen-failure behavior).
+  step in `video_service.py` handles portrait conversion of that footage).
+  Only if that also fully exhausts does it return `""`, same sentinel
+  behavior as today for the long-format caller — `generator_agent.py`
+  turns that into a scene failure (see Error Handling below).
 - `_CATEGORY_FALLBACKS`: add News domains — `artificial intelligence`,
   `technology`, `current affairs`, `science`, `health`, `business`,
   `sports`, `entertainment`, `environment` — mapped to reasonable
@@ -128,29 +129,43 @@ video_service.create_video()
 
 ## Error Handling / Fallback
 
+**Correction from initial design pass:** `image_service.generate_fallback_image()`
+(the gradient+text-card frame) is not actually wired into any per-scene
+failure path in `generator_agent.py` today — it's unused in production,
+exercised only by one direct unit test. A scene that fully fails today
+(all Imagen retries exhausted) simply increments `image_failures` and
+counts against the existing `MIN_CLIPS` threshold; it does not get a
+generated fallback frame. The News/Pexels error handling below matches
+that actual behavior rather than inventing a new fallback-card path.
+
 - **Per-scene fetch chain** (already built into `pexels_service.fetch_clip`):
   exact `visual_query` -> broad query (first two words) -> category
-  fallback -> generic `"news current events"` term, each tried at
-  `orientation="portrait"`, then the same chain again at
-  `orientation="landscape"` (cropped to portrait after download). Only if
-  all of that is exhausted does the scene fall back to
-  `generate_fallback_image()`'s existing gradient+text card.
+  fallback -> generic term, each tried at `orientation="portrait"`, then
+  the same chain again at `orientation="landscape"` (cropped to portrait
+  after download by `video_service`). If that is *also* fully exhausted,
+  `fetch_clip` returns `""` as it does today for the long-format caller.
+- **Empty-string result is treated as a scene failure**: `generator_agent.py`'s
+  news branch raises an exception when `fetch_clip` returns `""`, which
+  flows into the exact same existing failure handling as an Imagen
+  exception today — increments `image_failures`, marks the scene
+  checkpoint `"failed"`, and (if too many scenes fail) triggers the
+  existing `MIN_CLIPS` / "all scenes failed" abort path. No new fallback
+  frame behavior is introduced.
 - **Network/HTTP errors** (timeouts, Pexels 5xx): caught per-attempt inside
-  the existing fallback chain, logged, chain continues to the next
-  fallback. No outer retry/backoff layer — Pexels has no documented
-  quota-window behavior comparable to Imagen's 429s, so a plain
-  per-request timeout is sufficient.
+  the existing fallback chain in `pexels_service.py`, logged, chain
+  continues to the next fallback. No outer retry/backoff layer — Pexels
+  has no documented quota-window behavior comparable to Imagen's 429s, so
+  a plain per-request timeout is sufficient.
 - **Rate limiting (429 from Pexels)**: treated as just another exception in
   the fallback chain (falls through to the next query/category) rather
   than a sleep-and-retry. Pexels' free-tier limit is per-hour, so
   same-run retries are unlikely to help within a single ~2-3 minute
   video-generation job; falling through to a different query lets the
   *next* run succeed instead.
-- **Scene-level outcome**: unchanged — `MIN_CLIPS = 2` still governs
-  whether a video proceeds to assembly. Fewer than 2 real clips still means
-  `status="failed"`, Telegram notification, no upload. A scene that falls
-  back to the gradient text card still counts as a scene "success," same
-  as today's Imagen path.
+- **Scene-level outcome**: unchanged — `MIN_CLIPS` (`max(1, MAX_SCENES - 1)`)
+  still governs whether a video proceeds to assembly. Fewer than that many
+  real clips still means `status="failed"`, Telegram notification, no
+  upload.
 - **No safety-filter equivalent**: `SAFETY_FILTER_ERROR_PREFIX` /
   content-policy short-circuit logic is Imagen-specific and isn't
   triggered on the news branch (dead code path for that branch; not
