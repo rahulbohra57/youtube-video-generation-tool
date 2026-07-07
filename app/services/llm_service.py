@@ -541,6 +541,8 @@ def fact_check_scenes(topic: str, scenes: list[dict], language: str = "en", cont
     if not scenes:
         return scenes
 
+    visual_key = "visual_query" if any("visual_query" in s for s in scenes) else "visual"
+
     from datetime import date
     today_str = date.today().isoformat()
     lang_instruction = _LANG_INSTRUCTIONS.get(language, _LANG_INSTRUCTIONS["en"])
@@ -548,6 +550,11 @@ def fact_check_scenes(topic: str, scenes: list[dict], language: str = "en", cont
         f"\nSOURCE CONTEXT (authoritative — all dates/years must match this):\n{context.strip()}\n"
         if context and context.strip()
         else ""
+    )
+    visual_check_rule = (
+        "6) Keep visuals contain zero readable text and remove risky copyright/trademark references."
+        if visual_key == "visual"
+        else "6) Keep visual_query phrases in English and remove risky copyright/trademark references."
     )
     prompt = f"""
 You are a strict fact-check and policy safety editor for short educational videos.
@@ -560,14 +567,13 @@ Task:
 3) CRITICAL — YEAR HALLUCINATION CHECK: Identify every specific year mentioned in the narrations. For each year, verify it is explicitly present in the SOURCE CONTEXT above. If a year appears in the narration but NOT in the source context, it was fabricated from training-data knowledge — remove it or replace with "recently". Training data often contains outdated planned/scheduled dates for ongoing events (e.g. a mission planned for 2025 that actually launched in 2026); the source context is always authoritative.
 4) Replace fabricated or unverifiable specific dates/numbers with hedged language ("reportedly", "as of [year]", "estimated"). Remove them entirely if they add no value.
 5) Keep same number of scenes and same `scene` numbers.
-6) Keep visual prompts in English and remove risky copyright/trademark references.
+{visual_check_rule}
 7) Remove profanity and offensive wording.
-8) Ensure visuals contain zero readable text.
 
 Topic: {topic}
 Language rule: {lang_instruction}
 
-Return ONLY valid JSON array with objects: scene, narration, visual.
+Return ONLY valid JSON array with objects: scene, narration, {visual_key}.
 
 Input scenes:
 {_scene_list_to_json_prompt(scenes)}
@@ -595,15 +601,25 @@ def apply_quality_controls(topic: str, scenes: list[dict], language: str = "en",
         narration = strip_markdown_formatting(str(s.get("narration", "")))
         narration = sanitize_profanity(narration)
         narration = sanitize_copyright_risks(narration)
-        visual = sanitize_copyright_risks(str(s.get("visual", "")))
-        visual = sanitize_visual_prompt_no_text(visual)
-        cleaned.append(
-            {
-                "scene": s.get("scene"),
-                "narration": narration.strip(),
-                "visual": visual.strip(),
-            }
-        )
+        if "visual_query" in s:
+            visual_query = sanitize_copyright_risks(str(s.get("visual_query", "")))
+            cleaned.append(
+                {
+                    "scene": s.get("scene"),
+                    "narration": narration.strip(),
+                    "visual_query": visual_query.strip(),
+                }
+            )
+        else:
+            visual = sanitize_copyright_risks(str(s.get("visual", "")))
+            visual = sanitize_visual_prompt_no_text(visual)
+            cleaned.append(
+                {
+                    "scene": s.get("scene"),
+                    "narration": narration.strip(),
+                    "visual": visual.strip(),
+                }
+            )
     return cleaned
 
 

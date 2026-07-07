@@ -122,6 +122,32 @@ def test_apply_quality_controls_sanitizes_profanity_and_copyright():
     assert "generic public-domain style" in cleaned[0]["visual"]
 
 
+def test_apply_quality_controls_preserves_visual_query_key():
+    """News scenes (visual_query) must not be force-converted to visual, and must skip
+    the Imagen-specific 'no embedded text' sanitizer."""
+    from app.services import llm_service
+    scenes = [
+        {"scene": 1, "narration": "This is fucking wild", "visual_query": "newspaper headline text closeup"}
+    ]
+    with patch("app.services.llm_service.fact_check_scenes", return_value=scenes):
+        cleaned = llm_service.apply_quality_controls("topic", scenes, language="en")
+    assert "[censored]" in cleaned[0]["narration"]
+    assert "visual_query" in cleaned[0]
+    assert "visual" not in cleaned[0]
+    # sanitize_visual_prompt_no_text is Imagen-specific and must not run on visual_query
+    assert "no text" not in cleaned[0]["visual_query"].lower()
+
+
+def test_fact_check_scenes_prompt_requests_visual_query_field_when_present():
+    from app.services import llm_service
+    mock = _make_model_mock('[{"scene":1,"narration":"n","visual_query":"q"}]')
+    scenes = [{"scene": 1, "narration": "n", "visual_query": "city skyline"}]
+    with patch("app.services.llm_service._get_model", mock):
+        llm_service.fact_check_scenes("topic", scenes, language="en")
+    prompt_used = mock.return_value.generate_content.call_args[0][0]
+    assert "scene, narration, visual_query" in prompt_used
+
+
 # ── generate_script_with_search visual_query tests ───────────────────────────
 
 def test_generate_script_with_search_news_mode_uses_visual_query():
