@@ -1,0 +1,62 @@
+name: Diag Imagen Access
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install google-cloud-aiplatform
+
+      - name: Set up GCP credentials
+        run: |
+          echo '${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}' > /tmp/gcp_key.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp_key.json" >> $GITHUB_ENV
+
+      - name: Check Imagen model access
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          python - <<'EOF'
+          import os
+          import vertexai
+          from vertexai.preview.vision_models import ImageGenerationModel
+
+          project = os.environ["GCP_PROJECT_ID"]
+          print(f"Project: {project}")
+          vertexai.init(project=project, location="us-central1")
+
+          candidates = [
+              "imagen-3.0-generate-002",
+              "imagen-3.0-generate-001",
+              "imagen-3.0-fast-generate-001",
+              "imagen-4.0-generate-001",
+              "imagen-4.0-fast-generate-001",
+              "imagegeneration@006",
+              "imagegeneration@005",
+              "imagegeneration@002",
+          ]
+
+          for name in candidates:
+              try:
+                  model = ImageGenerationModel.from_pretrained(name)
+                  images = model.generate_images(
+                      prompt="a red apple on a white table, photorealistic",
+                      number_of_images=1,
+                  )
+                  ok = images is not None and len(images) > 0
+                  print(f"OK   {name}: generated={ok}")
+              except Exception as e:
+                  print(f"FAIL {name}: {e}")
+          EOF
