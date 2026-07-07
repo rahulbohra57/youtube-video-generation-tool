@@ -21,6 +21,7 @@ from app.services.llm_service import (
 )
 from app.services.tts_service import generate_audio, choose_voice_for_video
 from app.services.image_service import generate_image
+from app.services.pexels_service import fetch_clip as fetch_pexels_clip
 from app.services.video_service import create_video
 from app.services.telegram_service import send_message
 from app.utils.helpers import extract_json, ensure_dir, cleanup_files_older_than
@@ -137,6 +138,24 @@ def _is_quota_error(exc: Exception) -> bool:
 def _is_safety_filter_error(exc: Exception) -> bool:
     from app.services.image_service import SAFETY_FILTER_ERROR_PREFIX
     return str(exc).startswith(SAFETY_FILTER_ERROR_PREFIX)
+
+
+def _audio_duration(path: str) -> float:
+    try:
+        from moviepy import AudioFileClip
+    except Exception:
+        from moviepy.editor import AudioFileClip
+    clip = AudioFileClip(path)
+    duration = clip.duration
+    clip.close()
+    return duration
+
+
+def _fetch_pexels_clip_or_raise(query: str, audio_duration: float, scene_idx: int, category: str = "") -> str:
+    path = fetch_pexels_clip(query, audio_duration, scene_idx, category=category, orientation="portrait")
+    if not path:
+        raise RuntimeError(f"Pexels exhausted all fallback queries for scene {scene_idx}")
+    return path
 
 
 def _run_with_backoff(fn: Callable[[], Any], max_retries: int = SCENE_MAX_RETRIES):
@@ -423,7 +442,7 @@ def run(
                     )
                 return
             narration = scene.get("narration")
-            visual = scene.get("visual")
+            visual = scene.get("visual_query") or scene.get("visual")
             if not narration or not visual:
                 continue
 
@@ -464,9 +483,17 @@ def run(
                     retries_audio=audio_retries,
                 )
 
-                image_path, image_retries = _run_with_backoff(
-                    lambda v=visual, idx=i: generate_image(v, idx, aspect_ratio="9:16")
-                )
+                if channel_id == "news":
+                    scene_audio_duration = _audio_duration(audio_path)
+                    image_path, image_retries = _run_with_backoff(
+                        lambda q=visual, idx=i, dur=scene_audio_duration: _fetch_pexels_clip_or_raise(
+                            q, dur, idx, category=genre
+                        )
+                    )
+                else:
+                    image_path, image_retries = _run_with_backoff(
+                        lambda v=visual, idx=i: generate_image(v, idx, aspect_ratio="9:16")
+                    )
                 firestore_service.record_quota_event("image_success")
                 firestore_service.mark_scene_checkpoint(
                     effective_job_id,

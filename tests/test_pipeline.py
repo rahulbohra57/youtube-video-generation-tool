@@ -877,6 +877,8 @@ def test_handle_reply_force_create_bypasses_duplicate_status(mock_fs, mock_teleg
     },
 )
 @patch("app.agents.generator_agent.create_video")
+@patch("app.agents.generator_agent.fetch_pexels_clip", return_value="/tmp/pexels_TECH01_0.mp4")
+@patch("app.agents.generator_agent._audio_duration", return_value=10.0)
 @patch("app.agents.generator_agent.generate_image", return_value="/tmp/scene_TECH01_0.png")
 @patch("app.agents.generator_agent.generate_audio")
 @patch("app.agents.generator_agent.classify_music_genre", return_value="News Bulletin")
@@ -888,7 +890,7 @@ def test_handle_reply_force_create_bypasses_duplicate_status(mock_fs, mock_teleg
 def test_generator_agent_run_calls_social_media_agent(
     mock_acquire_lock, mock_release_lock, mock_send_message,
     mock_extract, mock_script, mock_music, mock_audio,
-    mock_image, mock_video, mock_review, mock_social_post
+    mock_image, mock_audio_duration, mock_fetch_pexels, mock_video, mock_review, mock_social_post
 ):
     mock_script.return_value = "[]"
     mock_extract.return_value = [
