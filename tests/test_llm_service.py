@@ -120,3 +120,31 @@ def test_apply_quality_controls_sanitizes_profanity_and_copyright():
         cleaned = llm_service.apply_quality_controls("topic", scenes, language="en")
     assert "[censored]" in cleaned[0]["narration"]
     assert "generic public-domain style" in cleaned[0]["visual"]
+
+
+# ── generate_script_with_search visual_query tests ───────────────────────────
+
+def test_generate_script_with_search_news_mode_uses_visual_query():
+    """Default (news) script_mode prompt asks for visual_query, not visual."""
+    mock = _make_model_mock('[{"scene":1,"narration":"hi","visual_query":"city skyline sunrise"}]')
+    with patch("app.services.llm_service._get_search_model", return_value=mock.return_value), \
+         patch("app.services.llm_service._SEARCH_MODEL_CANDIDATES", ("gemini-2.5-flash",)):
+        from app.services.llm_service import generate_script_with_search
+        generate_script_with_search("AI update", language="en", aspect_ratio="9:16")
+    prompt_used = mock.return_value.generate_content.call_args[0][0]
+    assert '"visual_query"' in prompt_used
+    assert "VISUAL_QUERY RULES" in prompt_used
+    assert "Pexels" in prompt_used
+
+
+def test_generate_script_with_search_facts_mode_still_uses_visual():
+    """script_mode='facts' (Tell Me Why) keeps the Imagen-style visual field unchanged."""
+    mock = _make_model_mock('[{"scene":1,"narration":"hi","visual":"storybook illustration"}]')
+    with patch("app.services.llm_service._get_search_model", return_value=mock.return_value), \
+         patch("app.services.llm_service._SEARCH_MODEL_CANDIDATES", ("gemini-2.5-flash",)):
+        from app.services.llm_service import generate_script_with_search
+        generate_script_with_search("bananas radioactive", script_mode="facts")
+    prompt_used = mock.return_value.generate_content.call_args[0][0]
+    assert '"visual"' in prompt_used
+    assert "VISUAL PROMPT RULES" in prompt_used
+    assert "Imagen" in prompt_used
