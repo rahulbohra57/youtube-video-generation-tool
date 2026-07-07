@@ -89,7 +89,7 @@ def _fact_visual_style(category: str) -> str:
     return _TMW_VISUAL_STYLE
 
 
-def generate_script(topic: str, language: str = "en", aspect_ratio: str = "16:9", context: str = ""):
+def generate_script(topic: str, language: str = "en", aspect_ratio: str = "16:9", context: str = "", script_mode: str = "facts"):
     from datetime import date
     today_str = date.today().isoformat()
     lang_instruction = _LANG_INSTRUCTIONS.get(language, _LANG_INSTRUCTIONS["en"])
@@ -113,6 +113,36 @@ def generate_script(topic: str, language: str = "en", aspect_ratio: str = "16:9"
     context_block = f"\nNEWS CONTEXT — primary source of truth. The script MUST cover ALL angles and facts below. Do not omit any element:\n{context.strip()}\n" if context and context.strip() else ""
     video_style = random.choice(_VISUAL_STYLE_POOL)
 
+    if script_mode == "news":
+        visual_field = "visual_query"
+        visual_schema_hint = "3-7 word Pexels search phrase in English (see rules below)"
+        visual_rules_block = """VISUAL_QUERY RULES:
+- 3-7 plain English words for a Pexels stock video search.
+- Describe a concrete, real-world scene tied to the story — not an abstract concept or a single-word topic.
+- Good: "scientist adjusting microscope lab", "stock traders watching screens", "journalist interviewing official podium", "researcher presenting data conference"
+- Bad: "science", "technology progress", "breaking news", "politics"
+- This is a search phrase for real stock footage, not an image-generation prompt — no style, lighting, or camera-angle jargon needed, just the concrete subject and action.
+- Avoid graphic violence/harm terms — stock footage libraries return low-quality or irrelevant results for those anyway; prefer neutral scene descriptions (e.g. "courtroom gavel" instead of describing an assault).
+- Always in English regardless of narration language.
+
+Example visual_query:
+"engineer testing robotic arm factory\""""
+    else:
+        visual_field = "visual"
+        visual_schema_hint = "VERY DETAILED image generation prompt in English"
+        visual_rules_block = f"""VISUAL PROMPT RULES:
+- Always write visual prompts in English, regardless of narration language.
+- Every visual prompt MUST begin with this exact style prefix to keep all scenes visually consistent: "{video_style} — ". Apply it to every scene without exception.
+- Real people (politicians, celebrities, journalists, public figures) ARE allowed and encouraged — describe them by name and role for Imagen to render a realistic portrait (e.g. "photorealistic portrait of a scientist presenting findings in a lab").
+- Do NOT request company logos, brand marks, app icons, or any readable text in the image — Imagen cannot render text or logos accurately. Use abstract or thematic imagery instead (e.g. instead of "Google logo", use "a colourful abstract search interface on a glowing screen").
+- STRICT: Avoid text-bearing compositions like newspaper front pages, posters, billboards, screenshots, UI panels, signs, or subtitles.
+- Be highly specific: lighting, composition, mood, style, camera angle.
+- Avoid copyrighted fictional characters/franchises (e.g., superheroes, movie/cartoon characters, game mascots), trademarked logos, or branded products.
+- CRITICAL — VISUAL SAFETY: Visual prompts must NEVER depict violence, weapons, blood, physical harm, or injury, even for news stories about such events. Use symbolic or abstract representations instead — for example: a broken chain for conflict, a gavel for law/justice, a city skyline for politics, a shield for protection, a first-aid cross for medical events. Imagen will reject prompts containing violent or harmful imagery.
+
+Example visual prompt:
+"Wide-angle cinematic shot of a modern data centre with rows of glowing blue server racks, cool blue-white lighting, shallow depth of field, photorealistic 3D render style\""""
+
     prompt = f"""
 You are an expert scriptwriter for educational YouTube videos. Write a factually accurate video script on the headline below. The script must faithfully represent ALL angles in the headline and news context. Do NOT substitute your own interpretation of the topic or use general knowledge to override the provided context.
 
@@ -123,7 +153,7 @@ Return ONLY a valid JSON array. No markdown, no explanation, no code fences.
 Each scene object must have:
 - "scene": integer
 - "narration": substantive narration text in the required language
-- "visual": VERY DETAILED image generation prompt in English
+- "{visual_field}": {visual_schema_hint}
 
 NARRATION RULES — follow strictly:
 - SCENE 1 HOOK (CRITICAL): The very first sentence of scene 1 must be 12 words or fewer. Open with a specific number, a named person doing something surprising, or a direct question. No scene-setting, no context-building — the viewer decides to stay or swipe in the first 2 seconds.
@@ -136,15 +166,7 @@ NARRATION RULES — follow strictly:
 - Cover ALL key angles from the headline and news context. If the headline mentions multiple story elements (e.g. a main event AND a secondary detail), every element must appear somewhere in the script — typically scene 1 (hook) introduces the main angle and scene 3–4 covers the secondary detail.
 - {lang_instruction}
 
-VISUAL PROMPT RULES:
-- Always write visual prompts in English, regardless of narration language.
-- Every visual prompt MUST begin with this exact style prefix to keep all scenes visually consistent: "{video_style} — ". Apply it to every scene without exception.
-- Real people (politicians, celebrities, journalists, public figures) ARE allowed and encouraged — describe them by name and role for Imagen to render a realistic portrait (e.g. "photorealistic portrait of a scientist presenting findings in a lab").
-- Do NOT request company logos, brand marks, app icons, or any readable text in the image — Imagen cannot render text or logos accurately. Use abstract or thematic imagery instead (e.g. instead of "Google logo", use "a colourful abstract search interface on a glowing screen").
-- STRICT: Avoid text-bearing compositions like newspaper front pages, posters, billboards, screenshots, UI panels, signs, or subtitles.
-- Be highly specific: lighting, composition, mood, style, camera angle.
-- Avoid copyrighted fictional characters/franchises (e.g., superheroes, movie/cartoon characters, game mascots), trademarked logos, or branded products.
-- CRITICAL — VISUAL SAFETY: Visual prompts must NEVER depict violence, weapons, blood, physical harm, or injury, even for news stories about such events. Use symbolic or abstract representations instead — for example: a broken chain for conflict, a gavel for law/justice, a city skyline for politics, a shield for protection, a first-aid cross for medical events. Imagen will reject prompts containing violent or harmful imagery.
+{visual_rules_block}
 
 FACTUAL / COPYRIGHT SAFETY:
 - TODAY'S DATE: {today_str}. Use this to determine verb tense. Events that occurred before today MUST be written in past tense ("launched", "announced", "was approved"). Do NOT write "will", "is expected to", "is set to", or "is scheduled to" for any event that has already taken place as of {today_str}. If uncertain whether an event has occurred, hedge with "reportedly" or "as of [date]" — never assume it is still upcoming.
@@ -154,15 +176,12 @@ FACTUAL / COPYRIGHT SAFETY:
 - Do not include direct quotes longer than 8 words from songs, books, movies, or articles.
 - Do not include song lyrics.
 
-Example visual prompt:
-"Wide-angle cinematic shot of a modern data centre with rows of glowing blue server racks, cool blue-white lighting, shallow depth of field, photorealistic 3D render style"
-
 Format:
 [
   {{
     "scene": 1,
     "narration": "...",
-    "visual": "..."
+    "{visual_field}": "..."
   }}
 ]
 

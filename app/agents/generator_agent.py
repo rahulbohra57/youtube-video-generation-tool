@@ -372,7 +372,7 @@ def run(
                 raw_script = generate_script_with_search(headline, language="en", aspect_ratio="9:16", context=details or "")
             except SearchGroundingUnavailable:
                 logger.info("Search grounding unavailable for %s, using standard generation", public_id or effective_job_id)
-                raw_script = generate_script(headline, language="en", aspect_ratio="9:16", context=details or "")
+                raw_script = generate_script(headline, language="en", aspect_ratio="9:16", context=details or "", script_mode="news")
             except Exception as _search_exc:
                 logger.warning("Search-grounded script generation failed (%s), falling back to standard", _search_exc)
                 send_message(
@@ -382,7 +382,7 @@ def run(
                     f"Reason: {str(_search_exc)[:200]}",
                     channel_id=channel_id,
                 )
-                raw_script = generate_script(headline, language="en", aspect_ratio="9:16", context=details or "")
+                raw_script = generate_script(headline, language="en", aspect_ratio="9:16", context=details or "", script_mode="news")
         try:
             scenes = extract_json(raw_script)
         except Exception:

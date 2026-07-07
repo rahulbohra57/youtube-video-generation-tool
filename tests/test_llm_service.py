@@ -148,3 +148,27 @@ def test_generate_script_with_search_facts_mode_still_uses_visual():
     assert '"visual"' in prompt_used
     assert "VISUAL PROMPT RULES" in prompt_used
     assert "Imagen" in prompt_used
+
+
+# ── generate_script (fallback) script_mode tests ─────────────────────────────
+
+def test_generate_script_default_mode_still_uses_visual():
+    """Default script_mode (no arg passed) preserves existing Imagen-style behavior for
+    every caller that doesn't know about the new mode (routes/generate.py, facts fallback)."""
+    mock = _make_model_mock('[{"scene":1,"narration":"hi","visual":"img"}]')
+    with patch("app.services.llm_service._get_model", mock):
+        from app.services.llm_service import generate_script
+        generate_script("black holes", language="en")
+    prompt_used = mock.return_value.generate_content.call_args[0][0]
+    assert '"visual"' in prompt_used
+    assert "VISUAL PROMPT RULES" in prompt_used
+
+
+def test_generate_script_news_mode_uses_visual_query():
+    mock = _make_model_mock('[{"scene":1,"narration":"hi","visual_query":"city skyline"}]')
+    with patch("app.services.llm_service._get_model", mock):
+        from app.services.llm_service import generate_script
+        generate_script("AI update", language="en", aspect_ratio="9:16", script_mode="news")
+    prompt_used = mock.return_value.generate_content.call_args[0][0]
+    assert '"visual_query"' in prompt_used
+    assert "VISUAL_QUERY RULES" in prompt_used
