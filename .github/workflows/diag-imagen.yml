@@ -59,4 +59,13 @@ jobs:
                   print(f"OK   {name}: generated={ok}")
               except Exception as e:
                   print(f"FAIL {name}: {e}")
+
+          print("--- Gemini check ---")
+          from vertexai.generative_models import GenerativeModel
+          try:
+              gm = GenerativeModel("gemini-2.5-flash")
+              resp = gm.generate_content("Say OK")
+              print(f"OK   gemini-2.5-flash: {resp.text.strip()[:50]}")
+          except Exception as e:
+              print(f"FAIL gemini-2.5-flash: {e}")
           EOF
