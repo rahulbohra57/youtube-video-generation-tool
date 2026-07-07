@@ -1,9 +1,9 @@
 # app/services/video_service.py
 
 try:
-    from moviepy import ImageClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip, CompositeAudioClip
+    from moviepy import ImageClip, AudioFileClip, VideoFileClip, concatenate_videoclips, CompositeVideoClip, CompositeAudioClip
 except Exception:
-    from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip, CompositeAudioClip
+    from moviepy.editor import ImageClip, AudioFileClip, VideoFileClip, concatenate_videoclips, CompositeVideoClip, CompositeAudioClip
 try:
     from moviepy.audio.fx import AudioFadeIn, AudioFadeOut, AudioLoop, MultiplyVolume
     _AUDIO_FX_MODE = "v2"
@@ -392,6 +392,11 @@ def _fit_cover(clip, target_w: int, target_h: int):
     y1 = int(max(0, (resized.h - target_h) // 2))
     return _crop_center(resized, x1=x1, y1=y1, x2=x1 + target_w, y2=y1 + target_h)
 
+
+def _is_video_asset(path: str) -> bool:
+    return path.lower().endswith((".mp4", ".mov", ".webm"))
+
+
 def _tracks_in(directory: str) -> list[str]:
     if directory not in _music_cache:
         _music_cache[directory] = [
@@ -453,8 +458,8 @@ def create_video(
     video_clips = []
 
     normalized = [_normalize_clip_item(c) for c in clips]
-    target_w = 1080 if channel_id == "stories" else 0
-    target_h = 1920 if channel_id == "stories" else 0
+    target_w = 1080 if channel_id in ("stories", "news") else 0
+    target_h = 1920 if channel_id in ("stories", "news") else 0
 
     # Phase-2 scaffold: when enabled and virality is high enough, this gate can
     # route selected scenes to an AI video/B-roll provider. V1 keeps 2.5D motion.
@@ -474,26 +479,37 @@ def create_video(
         audio = _audio_fade_in(audio, AUDIO_FADE_IN)
         audio = _audio_fade_out(audio, AUDIO_FADE_OUT)
 
-        use_animation = (
-            channel_id == "stories"
-            and STORIES_ANIMATION_ENABLED
-            and idx < max(0, STORIES_MAX_SCENES_ANIMATED)
-        )
-        if use_animation:
-            try:
-                hint = resolve_motion_hint(item, idx, genre=story_genre, profile=STORIES_ANIMATION_PROFILE)
-                base = create_animated_scene_clip(
-                    image_path=image_path,
-                    duration=audio.duration,
-                    motion_hint=hint,
-                    profile=STORIES_ANIMATION_PROFILE,
-                )
-                base = _clip_audio(base, audio)
-            except Exception as anim_err:
-                print(f"⚠️ Animation failed for scene {idx}, falling back to static: {anim_err}")
-                base = _clip_audio(_clip_duration(ImageClip(image_path), audio.duration), audio)
+        use_animation = False
+        if _is_video_asset(image_path):
+            raw = VideoFileClip(image_path)
+            if raw.duration >= audio.duration:
+                base = _subclip(raw, 0, audio.duration)
+            else:
+                loops_needed = int(audio.duration / raw.duration) + 1
+                looped = concatenate_videoclips([raw] * loops_needed)
+                base = _subclip(looped, 0, audio.duration)
+            base = _clip_audio(base, audio)
         else:
-            base = _clip_audio(_clip_duration(ImageClip(image_path), audio.duration), audio)
+            use_animation = (
+                channel_id == "stories"
+                and STORIES_ANIMATION_ENABLED
+                and idx < max(0, STORIES_MAX_SCENES_ANIMATED)
+            )
+            if use_animation:
+                try:
+                    hint = resolve_motion_hint(item, idx, genre=story_genre, profile=STORIES_ANIMATION_PROFILE)
+                    base = create_animated_scene_clip(
+                        image_path=image_path,
+                        duration=audio.duration,
+                        motion_hint=hint,
+                        profile=STORIES_ANIMATION_PROFILE,
+                    )
+                    base = _clip_audio(base, audio)
+                except Exception as anim_err:
+                    print(f"⚠️ Animation failed for scene {idx}, falling back to static: {anim_err}")
+                    base = _clip_audio(_clip_duration(ImageClip(image_path), audio.duration), audio)
+            else:
+                base = _clip_audio(_clip_duration(ImageClip(image_path), audio.duration), audio)
 
         # Enforce full-frame output so every scene fills Shorts frame edge-to-edge.
         if target_w <= 0 or target_h <= 0:
