@@ -1240,6 +1240,12 @@ def review_script_with_senior_reviewer(
     max_seconds: int = 58,
 ) -> list[dict]:
     lang_instruction = _LANG_INSTRUCTIONS.get(language, _LANG_INSTRUCTIONS["en"])
+    visual_key = "visual_query" if any("visual_query" in s for s in scenes) else "visual"
+    visual_field_instruction = (
+        "Visual prompts must remain in English."
+        if visual_key == "visual"
+        else "Visual_query values must remain in English — keep them as short 3-7 word Pexels search phrases, do NOT rewrite them into full descriptive sentences."
+    )
     prompt = f"""
 You are a senior script reviewer for short videos.
 Review and rewrite the script to be:
@@ -1251,8 +1257,8 @@ Review and rewrite the script to be:
 
 Rules:
 - Keep output as a JSON array only.
-- Keep each object fields: scene, narration, visual.
-- Visual prompts must remain in English.
+- Keep each object fields: scene, narration, {visual_key}.
+- {visual_field_instruction}
 - Voiceover total duration must be between {min_seconds} and {max_seconds} seconds.
 - Keep script natural for narration and captions to stay in sync.
 - Avoid overly complex words.

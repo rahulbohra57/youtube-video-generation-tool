@@ -44,11 +44,12 @@ def _tighten_if_too_long(scenes: list[dict], max_seconds: int) -> list[dict]:
         narration = str(s.get("narration", ""))
         word_count = len(narration.split())
         keep = max(8, int(word_count * scale))
+        visual_key = "visual_query" if "visual_query" in s else "visual"
         out.append(
             {
                 "scene": s.get("scene"),
                 "narration": _truncate_at_sentence(narration, keep),
-                "visual": s.get("visual", ""),
+                visual_key: s.get(visual_key, ""),
             }
         )
     return out
