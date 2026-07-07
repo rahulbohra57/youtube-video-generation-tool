@@ -1,0 +1,83 @@
+name: Diag Gemini Image API
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install google-genai SDK
+        run: pip install -U google-genai
+
+      - name: Test Gemini image models (Developer API, API key auth)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python - <<'EOF'
+          import os
+          from google import genai
+          from google.genai import types
+
+          client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+
+          gemini_image_models = [
+              "gemini-3.1-flash-lite-image",
+              "gemini-2.5-flash-image",
+          ]
+
+          for model in gemini_image_models:
+              try:
+                  response = client.models.generate_content(
+                      model=model,
+                      contents="a red apple on a white table, photorealistic",
+                      config=types.GenerateContentConfig(
+                          response_modalities=["IMAGE"],
+                          image_config=types.ImageConfig(aspect_ratio="9:16"),
+                      ),
+                  )
+                  saved = False
+                  for part in response.parts:
+                      if part.inline_data:
+                          img = part.as_image()
+                          path = f"/tmp/test_{model.replace('.', '_')}.png"
+                          img.save(path)
+                          print(f"OK   {model}: wrote {os.path.getsize(path)} bytes to {path}")
+                          saved = True
+                          break
+                  if not saved:
+                      print(f"FAIL {model}: no inline_data in response parts")
+              except Exception as e:
+                  print(f"FAIL {model}: {type(e).__name__}: {e}")
+
+          imagen_models = [
+              "imagen-4.0-generate-001",
+              "imagen-3.0-generate-002",
+          ]
+
+          for model in imagen_models:
+              try:
+                  response = client.models.generate_images(
+                      model=model,
+                      prompt="a red apple on a white table, photorealistic",
+                      config=types.GenerateImagesConfig(
+                          number_of_images=1,
+                          aspect_ratio="9:16",
+                      ),
+                  )
+                  img = response.generated_images[0].image
+                  path = f"/tmp/test_{model.replace('.', '_')}.png"
+                  img.save(path)
+                  print(f"OK   {model}: wrote {os.path.getsize(path)} bytes to {path}")
+              except Exception as e:
+                  print(f"FAIL {model}: {type(e).__name__}: {e}")
+          EOF
