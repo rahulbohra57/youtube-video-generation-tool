@@ -163,17 +163,17 @@ def test_generate_script_with_search_news_mode_uses_visual_query():
     assert "Pexels" in prompt_used
 
 
-def test_generate_script_with_search_facts_mode_still_uses_visual():
-    """script_mode='facts' (Tell Me Why) keeps the Imagen-style visual field unchanged."""
-    mock = _make_model_mock('[{"scene":1,"narration":"hi","visual":"storybook illustration"}]')
+def test_generate_script_with_search_facts_mode_uses_visual_query():
+    """script_mode='facts' (Tell Me Why) now emits a Pexels visual_query, not an Imagen prompt."""
+    mock = _make_model_mock('[{"scene":1,"narration":"hi","visual_query":"tiny bacteria crowd microscope"}]')
     with patch("app.services.llm_service._get_search_model", return_value=mock.return_value), \
          patch("app.services.llm_service._SEARCH_MODEL_CANDIDATES", ("gemini-2.5-flash",)):
         from app.services.llm_service import generate_script_with_search
         generate_script_with_search("bananas radioactive", script_mode="facts")
     prompt_used = mock.return_value.generate_content.call_args[0][0]
-    assert '"visual"' in prompt_used
-    assert "VISUAL PROMPT RULES" in prompt_used
-    assert "Imagen" in prompt_used
+    assert '"visual_query"' in prompt_used
+    assert "VISUAL_QUERY RULES" in prompt_used
+    assert "Pexels" in prompt_used
 
 
 # ── generate_script (fallback) script_mode tests ─────────────────────────────

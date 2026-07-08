@@ -307,20 +307,18 @@ def generate_script_with_search(topic: str, language: str = "en", aspect_ratio: 
             f"TODAY'S DATE is {today_str}. Verify facts via Google Search — "
             "prefer the most current, peer-reviewed information available."
         )
-        visual_field = "visual"
-        visual_schema_hint = "VERY DETAILED image generation prompt in English"
-        visual_rules_block = f"""VISUAL PROMPT RULES:
-- Always write visual prompts in English, regardless of narration language.
-- Every visual prompt MUST begin with this exact style prefix to keep all scenes visually consistent: "{video_style} — ". Apply it to every scene without exception.
-- Real people (politicians, celebrities, journalists, public figures) ARE allowed and encouraged — describe them by name and role for Imagen to render a realistic portrait (e.g. "photorealistic portrait of a scientist presenting findings in a lab").
-- Do NOT request company logos, brand marks, app icons, or any readable text in the image — Imagen cannot render text or logos accurately. Use abstract or thematic imagery instead (e.g. instead of "Google logo", use "a colourful abstract search interface on a glowing screen").
-- STRICT: Avoid text-bearing compositions like newspaper front pages, posters, billboards, screenshots, UI panels, signs, or subtitles.
-- Be highly specific: lighting, composition, mood, style, camera angle.
-- Avoid copyrighted fictional characters/franchises (e.g., superheroes, movie/cartoon characters, game mascots), trademarked logos, or branded products.
-- CRITICAL — VISUAL SAFETY: Visual prompts must NEVER depict violence, weapons, blood, physical harm, or injury, even for news stories about such events. Use symbolic or abstract representations instead — for example: a broken chain for conflict, a gavel for law/justice, a city skyline for politics, a shield for protection, a first-aid cross for medical events. Imagen will reject prompts containing violent or harmful imagery.
+        visual_field = "visual_query"
+        visual_schema_hint = "3-7 word Pexels search phrase in English (see rules below)"
+        visual_rules_block = """VISUAL_QUERY RULES:
+- 3-7 plain English words for a Pexels stock video search.
+- Describe the fact's real-world subject concretely — not an illustrated or cartoon interpretation of it.
+- Good: "bacteria colony microscope closeup", "octopus camouflage reef", "astronaut floating space station", "ancient ruins aerial drone"
+- Bad: "bacteria", "surprising fact", "science", "mind blown"
+- This is a search phrase for real stock footage, not an image-generation prompt — no style, illustration, or cartoon language needed, just the concrete subject and action.
+- Always in English regardless of narration language.
 
-Example visual prompt:
-"Wide-angle cinematic shot of a modern data centre with rows of glowing blue server racks, cool blue-white lighting, shallow depth of field, photorealistic 3D render style\""""
+Example visual_query:
+"deep sea creature bioluminescent glow\""""
     else:
         system_instruction = (
             "You are an expert scriptwriter for educational YouTube videos. Use your Google Search "
