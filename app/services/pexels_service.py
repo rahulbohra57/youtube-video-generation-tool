@@ -11,6 +11,7 @@ from app.utils.helpers import ensure_dir
 logger = logging.getLogger(__name__)
 
 _VIDEOS_SEARCH_URL = "https://api.pexels.com/videos/search"
+_PHOTOS_SEARCH_URL = "https://api.pexels.com/v1/search"
 
 # Clip duration targets for long-format B-roll assembly
 _SHORT_CLIP_RANGE = (5.0, 10.0)   # most clips
@@ -231,3 +232,52 @@ def fetch_clips_for_scene(
         clip_num += 1
 
     return result or [{"video_path": "", "clip_duration": audio_duration}]
+
+
+def fetch_photo(query: str, category: str = "", dest_path: str = "") -> str:
+    """Search Pexels for a landscape photo, download it, return local path.
+
+    Free (no per-call cost) alternative background source for thumbnails when
+    Imagen is unavailable. Falls back through: query -> broad query ->
+    category keyword -> generic. Returns "" if every attempt fails.
+    """
+    api_key = os.getenv("PEXELS_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("PEXELS_API_KEY env var is not set")
+
+    words = query.split()
+    broad = " ".join(words[:2]) if len(words) > 2 else None
+    category_fallback = _CATEGORY_FALLBACKS.get((category or "").lower().strip())
+    fallback_chain = [q for q in [query, broad, category_fallback, "knowledge learning education"] if q]
+
+    ensure_dir(TEMP_DIR)
+    out = dest_path or os.path.join(TEMP_DIR, "pexels_thumbnail.jpg")
+
+    for attempt_query in fallback_chain:
+        try:
+            resp = requests.get(
+                _PHOTOS_SEARCH_URL,
+                headers={"Authorization": api_key},
+                params={"query": attempt_query, "orientation": "landscape", "size": "large", "per_page": 8},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            photos = resp.json().get("photos", [])
+            if not photos:
+                continue
+            photo = random.choice(photos)
+            src = photo.get("src", {})
+            url = src.get("large2x") or src.get("original") or src.get("large")
+            if not url:
+                continue
+            img_resp = requests.get(url, timeout=30)
+            img_resp.raise_for_status()
+            with open(out, "wb") as f:
+                f.write(img_resp.content)
+            logger.info("[Pexels] thumbnail photo query=%r", attempt_query)
+            return out
+        except Exception as exc:
+            logger.warning("[Pexels] thumbnail photo query=%r failed: %s", attempt_query, exc)
+
+    logger.warning("[Pexels] thumbnail photo: all fallbacks exhausted for query=%r", query)
+    return ""

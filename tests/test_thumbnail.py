@@ -1,6 +1,32 @@
 # tests/test_thumbnail.py
 import pytest
 from unittest.mock import MagicMock, patch
+from PIL import Image
+
+
+def test_generate_thumbnail_falls_back_to_pexels_when_imagen_unavailable(tmp_path):
+    """Both imagen-3.0-generate-002 and -001 return 403 (no Vertex Imagen entitlement) —
+    thumbnail generation should fall back to a free Pexels photo instead of failing."""
+    photo_path = tmp_path / "photo.jpg"
+    Image.new("RGB", (1920, 1080), color="blue").save(photo_path)
+
+    mock_model = MagicMock()
+    mock_model.generate_images.side_effect = Exception(
+        "403 Publisher Model publishers/google/models/imagen-3.0-generate-001 "
+        "is not visible to the current project 0."
+    )
+
+    with patch("app.services.image_service._get_model", return_value=mock_model), \
+         patch("app.services.image_service._use_fallback", True), \
+         patch("app.services.image_service.TEMP_DIR", str(tmp_path)), \
+         patch("app.services.pexels_service.fetch_photo", return_value=str(photo_path)) as mock_fetch:
+        from app.services.image_service import generate_thumbnail
+        result = generate_thumbnail("A scientist with a glowing brain", "TEST02", category="science & space")
+
+    assert result.endswith("thumbnail_TEST02.png")
+    mock_fetch.assert_called_once()
+    with Image.open(result) as img:
+        assert img.size[0] > 0 and img.size[1] > 0
 
 
 def test_generate_thumbnail_returns_png_path(tmp_path):

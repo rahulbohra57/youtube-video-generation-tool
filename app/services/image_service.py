@@ -355,6 +355,22 @@ _EMOTION_FACE_MAP: dict[str, str] = {
 _DEFAULT_FACE_EMOTION = "wide-eyed curiosity, slight open mouth"
 
 
+def _crop_to_aspect(img: Image.Image, target_ratio: float) -> Image.Image:
+    """Center-crop a PIL image to the given width/height ratio."""
+    img = img.convert("RGB")
+    w, h = img.size
+    current_ratio = w / h
+    if current_ratio > target_ratio:
+        new_w = int(h * target_ratio)
+        left = (w - new_w) // 2
+        return img.crop((left, 0, left + new_w, h))
+    elif current_ratio < target_ratio:
+        new_h = int(w / target_ratio)
+        top = (h - new_h) // 2
+        return img.crop((0, top, w, top + new_h))
+    return img
+
+
 def _add_thumbnail_border(image_path: str, color: tuple[int, int, int] = _DEFAULT_BORDER_COLOR, thickness: int = 8) -> None:
     """Draw a thin coloured border around the entire thumbnail in-place."""
     img = Image.open(image_path).convert("RGB")
@@ -395,6 +411,10 @@ def generate_thumbnail(
     Generates 2 variants and picks the more vivid one (highest pixel std-dev).
     Applies a category-coloured border and overlays hook_text with bottom-anchored
     bold text using black stroke (no bg patch).
+
+    If Imagen (both the primary and fallback model) is inaccessible to this GCP
+    project, or fails outright on the first variant, falls back to a free Pexels
+    stock photo as the background instead of failing the thumbnail entirely.
     """
     ensure_dir(TEMP_DIR)
     output_path = os.path.join(TEMP_DIR, f"thumbnail_{code}.png")
@@ -413,6 +433,7 @@ def generate_thumbnail(
 
     best_path = output_path
     best_score = -1.0
+    imagen_failed = False
 
     for variant_idx in range(2):
         variant_path = os.path.join(TEMP_DIR, f"thumbnail_{code}_v{variant_idx}.png")
@@ -448,20 +469,36 @@ def generate_thumbnail(
                         _logger.warning("[Thumbnail] %s returned 403 — switching to %s", MODEL_NAME, _FALLBACK_MODEL_NAME)
                         continue  # retry immediately with fallback model
                     elif variant_idx == 0:
-                        raise
+                        # Both the primary and fallback Imagen models are inaccessible
+                        # to this project (no Vertex Imagen entitlement) — stop trying
+                        # Imagen and use a free Pexels photo background instead.
+                        imagen_failed = True
+                        break
                     else:
                         break
                 if delay is None:
                     if variant_idx == 0:
-                        raise
-                    break  # second variant failed — keep first
+                        imagen_failed = True
+                    break  # second variant failed — keep first (or fall back below)
                 if any(kw in err for kw in ("quota", "429", "resource_exhausted")):
                     _logger.warning("[Thumbnail] Quota error, waiting %ds: %s", delay, exc)
                     time.sleep(delay)
                 else:
                     if variant_idx == 0:
-                        raise
+                        imagen_failed = True
                     break
+        if imagen_failed:
+            break
+
+    if imagen_failed:
+        _logger.warning("[Thumbnail] Imagen unavailable — falling back to Pexels photo for %s", code)
+        from app.services.pexels_service import fetch_photo
+        photo_path = fetch_photo(topic, category=category, dest_path=output_path.replace(".png", "_pexels.jpg"))
+        if not photo_path:
+            raise RuntimeError("Imagen unavailable and Pexels fallback found no photo for thumbnail")
+        with Image.open(photo_path) as photo:
+            best_path = output_path
+            _crop_to_aspect(photo, 16 / 9).save(best_path, "PNG")
 
     if best_path != output_path:
         import shutil
