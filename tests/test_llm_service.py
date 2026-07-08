@@ -190,6 +190,17 @@ def test_generate_script_default_mode_still_uses_visual():
     assert "VISUAL PROMPT RULES" in prompt_used
 
 
+def test_generate_script_facts_mode_uses_visual_query():
+    """Explicit script_mode='facts' now uses the Pexels visual_query schema."""
+    mock = _make_model_mock('[{"scene":1,"narration":"hi","visual_query":"tiny bacteria crowd"}]')
+    with patch("app.services.llm_service._get_model", mock):
+        from app.services.llm_service import generate_script
+        generate_script("bananas radioactive", language="en", script_mode="facts")
+    prompt_used = mock.return_value.generate_content.call_args[0][0]
+    assert '"visual_query"' in prompt_used
+    assert "VISUAL_QUERY RULES" in prompt_used
+
+
 def test_generate_script_news_mode_uses_visual_query():
     mock = _make_model_mock('[{"scene":1,"narration":"hi","visual_query":"city skyline"}]')
     with patch("app.services.llm_service._get_model", mock):

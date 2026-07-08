@@ -89,7 +89,7 @@ def _fact_visual_style(category: str) -> str:
     return _TMW_VISUAL_STYLE
 
 
-def generate_script(topic: str, language: str = "en", aspect_ratio: str = "16:9", context: str = "", script_mode: str = "facts"):
+def generate_script(topic: str, language: str = "en", aspect_ratio: str = "16:9", context: str = "", script_mode: str = "legacy"):
     from datetime import date
     today_str = date.today().isoformat()
     lang_instruction = _LANG_INSTRUCTIONS.get(language, _LANG_INSTRUCTIONS["en"])
@@ -127,6 +127,19 @@ def generate_script(topic: str, language: str = "en", aspect_ratio: str = "16:9"
 
 Example visual_query:
 "engineer testing robotic arm factory\""""
+    elif script_mode == "facts":
+        visual_field = "visual_query"
+        visual_schema_hint = "3-7 word Pexels search phrase in English (see rules below)"
+        visual_rules_block = """VISUAL_QUERY RULES:
+- 3-7 plain English words for a Pexels stock video search.
+- Describe the fact's real-world subject concretely — not an illustrated or cartoon interpretation of it.
+- Good: "bacteria colony microscope closeup", "octopus camouflage reef", "astronaut floating space station", "ancient ruins aerial drone"
+- Bad: "bacteria", "surprising fact", "science", "mind blown"
+- This is a search phrase for real stock footage, not an image-generation prompt — no style, illustration, or cartoon language needed, just the concrete subject and action.
+- Always in English regardless of narration language.
+
+Example visual_query:
+"deep sea creature bioluminescent glow\""""
     else:
         visual_field = "visual"
         visual_schema_hint = "VERY DETAILED image generation prompt in English"
