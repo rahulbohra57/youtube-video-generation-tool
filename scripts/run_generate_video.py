@@ -4,10 +4,13 @@ Reads the full job payload from the GENERATE_PAYLOAD env var (JSON string set
 by the workflow from the workflow_dispatch input) and calls generator_agent.run().
 """
 import json
+import logging
 import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+logging.basicConfig(level=logging.INFO)
 
 from app.agents import generator_agent
 
