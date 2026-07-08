@@ -374,7 +374,7 @@ def run(
                 )
             except SearchGroundingUnavailable:
                 logger.info("Search grounding unavailable for %s, using standard generation", public_id or effective_job_id)
-                raw_script = generate_script(headline, language="en", aspect_ratio="9:16", context=details or "")
+                raw_script = generate_script(headline, language="en", aspect_ratio="9:16", context=details or "", script_mode="facts")
             except Exception as _search_exc:
                 logger.warning("Search-grounded facts script generation failed (%s), falling back to standard", _search_exc)
                 send_message(
@@ -383,7 +383,7 @@ def run(
                     f"falling back to standard generation.\nReason: {str(_search_exc)[:200]}",
                     channel_id=channel_id,
                 )
-                raw_script = generate_script(headline, language="en", aspect_ratio="9:16", context=details or "")
+                raw_script = generate_script(headline, language="en", aspect_ratio="9:16", context=details or "", script_mode="facts")
         else:
             # News: search-grounded script generation in English
             language = "en"
@@ -483,7 +483,7 @@ def run(
                     retries_audio=audio_retries,
                 )
 
-                if channel_id == "news":
+                if channel_id == "news" or script_type == "facts":
                     scene_audio_duration = _audio_duration(audio_path)
                     image_path, image_retries = _run_with_backoff(
                         lambda q=visual, idx=i, dur=scene_audio_duration: _fetch_pexels_clip_or_raise(
