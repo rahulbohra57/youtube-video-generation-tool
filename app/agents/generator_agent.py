@@ -63,69 +63,69 @@ _STORY_GENRE_SAFE_PROMPTS = {
 }
 
 
-# Safe fallback prompts for Tell Me Why (English facts) channel — FIFA World Cup 2026 themed.
-# Keyed by the 12 FIFA categories used in story_researcher._FACT_CATEGORIES.
+# Safe fallback prompts for Tell Me Why (English facts) channel.
+# Keyed by the 12 fact categories used in story_researcher._FACT_CATEGORIES.
 # Used when an image prompt is rejected by Imagen's safety filter.
 _STORY_GENRE_SAFE_PROMPTS_EN = {
-    "rules & refereeing": (
-        "Bright flat digital illustration, thick bold outlines, red and yellow card palette — "
-        "a cartoonish referee holding an oversized yellow card with an exaggerated shocked expression, "
-        "a tiny football player with wide eyes below, playful and quirky, clean white background, no text, no words"
-    ),
-    "world cup history & legacy": (
-        "Bright flat digital illustration, thick bold outlines, gold and blue palette — "
-        "a cartoon World Cup trophy with a glowing aura surrounded by tiny cheering figures from different eras, "
-        "slightly surreal and celebratory, clean white background, no text, no words"
-    ),
-    "iconic players & legends": (
-        "Bright flat digital illustration, thick bold outlines, electric blue and gold palette — "
-        "a cartoonish football legend with exaggerated oversized boots and a giant glowing number on their jersey, "
-        "heroic and playful pose, clean gradient background, no text, no words"
-    ),
-    "team & squad selection": (
+    "science & space": (
         "Bright flat digital illustration, thick bold outlines, electric blue and warm yellow palette — "
-        "a cartoonish coach holding an enormous clipboard with tiny player figures arranged in a formation, "
-        "exaggerated wide eyes, slightly surreal, clean white background, no text, no words"
+        "a cartoon astronaut floating beside an oversized glowing planet with exaggerated wide eyes, "
+        "playful and quirky composition, clean white background, no text, no words"
     ),
-    "host countries & venues 2026": (
-        "Bright flat digital illustration, thick bold outlines, red white and blue palette — "
-        "a cartoon stadium with an oversized glowing football hovering above it and tiny flags of USA Canada Mexico, "
-        "festive and vibrant, clean white background, no text, no words"
-    ),
-    "records & statistics": (
+    "history & civilizations": (
         "Bright flat digital illustration, thick bold outlines, coral red and warm yellow palette — "
-        "a cartoonish figure surfing on an oversized rising bar chart shaped like a football net, "
-        "exaggerated shocked expression, slightly surreal, clean gradient background, no text, no words"
+        "a cartoonish ancient explorer holding an oversized map with a look of total surprise, "
+        "slightly surreal composition, clean white background, no text, no words"
     ),
-    "memorable upsets & moments": (
+    "human body & biology": (
         "Bright flat digital illustration, thick bold outlines, electric blue and coral red palette — "
-        "a cartoonish underdog player with a tiny flag leaping over a giant surprised opponent, "
-        "dramatic and playful, confetti everywhere, clean white background, no text, no words"
+        "a cartoon human silhouette with exaggeratedly large glowing organs and tiny cartoon cells "
+        "waving flags inside, playful and quirky, clean white background, no text, no words"
     ),
-    "football culture & traditions": (
-        "Bright flat digital illustration, thick bold outlines, electric blue and coral red palette — "
-        "a group of cartoonish fans from different countries each waving an oversized flag and wearing face paint, "
-        "joyful mosaic composition, clean white background, no text, no words"
-    ),
-    "world cup 2026 teams": (
+    "technology & ai": (
         "Bright flat digital illustration, thick bold outlines, electric blue and warm yellow palette — "
-        "a cartoon world map with tiny football figures representing different nations standing on their countries, "
-        "playful and vibrant, clean white background, no text, no words"
+        "a cartoonish robot with a giant lightbulb head wearing a graduation cap, exaggerated surprised "
+        "expression, slightly surreal, clean gradient background, no text, no words"
     ),
-    "football fitness & science": (
-        "Bright flat digital illustration, thick bold outlines, electric blue and warm yellow palette — "
-        "a cartoonish athlete mid-sprint with exaggerated oversized legs and tiny sweat drops forming a football shape, "
-        "energetic and quirky, clean white background, no text, no words"
-    ),
-    "tactical evolution": (
-        "Bright flat digital illustration, thick bold outlines, electric blue and coral red palette — "
-        "a cartoon chalkboard showing an absurdly complex formation diagram with tiny player dots and curved arrows everywhere, "
-        "a baffled cartoon coach pointing at it, clean white background, no text, no words"
-    ),
-    "football economics": (
+    "health & fitness": (
         "Bright flat digital illustration, thick bold outlines, coral red and warm yellow palette — "
-        "a cartoonish player standing on a giant coin stack with a price tag dangling from their boot, "
-        "exaggerated wide eyes, slightly surreal, clean gradient background, no text, no words"
+        "a cartoonish character doing an exaggerated stretch with tiny sweat drops flying everywhere, "
+        "cheerful and quirky, clean white background, no text, no words"
+    ),
+    "psychology & dark psychology": (
+        "Bright flat digital illustration, thick bold outlines, electric blue and coral red palette — "
+        "a cartoon brain wearing sunglasses and smugly ignoring an oversized nose in the corner, "
+        "absurd and playful composition, clean gradient background, no text, no words"
+    ),
+    "relationships & dating": (
+        "Bright flat digital illustration, thick bold outlines, warm yellow and coral red palette — "
+        "two cartoonish figures with exaggerated heart-eyes accidentally walking into each other, "
+        "slightly surreal and funny, clean white background, no text, no words"
+    ),
+    "self-improvement & habits": (
+        "Bright flat digital illustration, thick bold outlines, electric blue and warm yellow palette — "
+        "a cartoon character planting a giant glowing seedling while standing on a stack of books, "
+        "playful and quirky, clean white background, no text, no words"
+    ),
+    "business & finance": (
+        "Bright flat digital illustration, thick bold outlines, coral red and warm yellow palette — "
+        "a cartoonish figure surfing on an oversized rising graph with an exaggeratedly shocked "
+        "expression, slightly surreal, clean gradient background, no text, no words"
+    ),
+    "culture & society": (
+        "Bright flat digital illustration, thick bold outlines, electric blue and coral red palette — "
+        "a group of cartoonish figures from different backgrounds each holding an oversized object "
+        "representing their culture, playful mosaic composition, clean white background, no text, no words"
+    ),
+    "philosophy & life": (
+        "Bright flat digital illustration, thick bold outlines, warm yellow and electric blue palette — "
+        "a tiny cartoon figure sitting cross-legged on top of a giant question mark with a contemplative "
+        "expression, slightly surreal, clean gradient background, no text, no words"
+    ),
+    "mysteries & unexplained": (
+        "Bright flat digital illustration, thick bold outlines, electric blue and coral red palette — "
+        "a cartoonish explorer shining a comically tiny flashlight at an enormous glowing door with "
+        "exaggerated wide eyes, slightly surreal and quirky, clean dark gradient background, no text, no words"
     ),
 }
 

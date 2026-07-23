@@ -20,33 +20,32 @@ logger = logging.getLogger(__name__)
 
 _FACT_DEDUP_DAYS = 365
 
-# FIFA World Cup 2026 themed categories — all content focused on WC2026 education,
-# rules, legacy, teams, players, and football culture.
 _FACT_CATEGORIES = [
-    "rules & refereeing",
-    "world cup history & legacy",
-    "iconic players & legends",
-    "team & squad selection",
-    "host countries & venues 2026",
-    "records & statistics",
-    "memorable upsets & moments",
-    "football culture & traditions",
-    "world cup 2026 teams",
-    "football fitness & science",
-    "tactical evolution",
-    "football economics",
+    "science & space",
+    "history & civilizations",
+    "human body & biology",
+    "technology & ai",
+    "health & fitness",
+    "psychology & dark psychology",
+    "relationships & dating",
+    "self-improvement & habits",
+    "business & finance",
+    "culture & society",
+    "philosophy & life",
+    "mysteries & unexplained",
 ]
-
-_FIFA_THEME = "FIFA World Cup 2026"
 
 # Slot hours matching stories-run.yml cron: 3am, 7am, 11am, 3pm, 7pm, 11pm IST
 # Offset by 1h from news channel (2am/8am/2pm/8pm) to avoid shared concurrency group clashes
 _SLOT_HOURS = [3, 7, 11, 15, 19, 23]
 
 # Categories that perform better at each time of day (used as a 2x weight boost).
-_EVENING_PREFERRED = {"iconic players & legends", "memorable upsets & moments", "football culture & traditions", "world cup history & legacy"}
-_MORNING_PREFERRED = {"rules & refereeing", "host countries & venues 2026", "football fitness & science"}
-_MIDDAY_PREFERRED = {"team & squad selection", "records & statistics", "world cup 2026 teams", "tactical evolution", "football economics"}
+# Evening: introspective/emotional categories — viewers scroll more and linger longer.
+# Morning: discovery/learning categories — viewers are fresh and curious.
+# Midday: practical/actionable categories — viewers want useful insights during breaks.
+_EVENING_PREFERRED = {"psychology & dark psychology", "relationships & dating", "mysteries & unexplained", "philosophy & life"}
+_MORNING_PREFERRED = {"science & space", "history & civilizations", "human body & biology"}
+_MIDDAY_PREFERRED = {"self-improvement & habits", "business & finance", "technology & ai", "health & fitness"}
 
 
 def _is_topic_already_used(title: str) -> bool:
@@ -175,7 +174,6 @@ def run() -> str | None:
         idea = generate_fact_topic(
             category=target_category,
             recently_used_titles=recently_used,
-            theme=_FIFA_THEME,
         )
     except Exception as e:
         logger.exception(f"Fact topic generation failed: {e}")

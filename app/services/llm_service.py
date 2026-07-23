@@ -1388,10 +1388,10 @@ def generate_long_facts_script(topic: str, category: str = "", premise: str = ""
     category_block = f"\nCategory: {category}\n" if category else ""
     premise_block = f"\nPremise: {premise.strip()}\n" if premise and premise.strip() else ""
 
-    prompt = f"""You are a scriptwriter for 'Tell Me Why', a YouTube educational channel focused on FIFA World Cup 2026 — educating viewers about football rules, history, teams, players, records, and the culture of the World Cup. Write a long-form video script (5–7 minutes, 24 scenes) on the topic below. Verify all facts carefully before writing; use Google Search to confirm current World Cup 2026 teams, results, and player details.
+    prompt = f"""You are a scriptwriter for 'Tell Me Why', a YouTube educational channel. Write a long-form video script (5–7 minutes, 24 scenes) on the topic below. Verify all facts carefully before writing.
 
 Topic: {topic}{category_block}{premise_block}
-TODAY'S DATE: {today_str}. The FIFA World Cup 2026 is currently underway or imminent — incorporate accurate, up-to-date information about participating teams and players where relevant.
+TODAY'S DATE: {today_str}.
 
 Return ONLY a valid JSON array — no markdown, no explanation, no code fences.
 

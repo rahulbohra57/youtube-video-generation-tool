@@ -16,7 +16,7 @@ from datetime import datetime, timezone, timedelta
 from app.services import firestore_service
 from app.services.llm_service import generate_fact_topic
 from app.services.telegram_service import send_message
-from app.agents.story_researcher import _select_category, _recently_used_titles, _FIFA_THEME
+from app.agents.story_researcher import _select_category, _recently_used_titles
 from app.agents.github_dispatch import dispatch_long_video_generation
 from app.config import STORIES_CHAT_ID
 
@@ -62,7 +62,7 @@ def run() -> str | None:
     category = _select_category()
 
     try:
-        idea = generate_fact_topic(category=category, recently_used_titles=recently_used, theme=_FIFA_THEME)
+        idea = generate_fact_topic(category=category, recently_used_titles=recently_used)
     except Exception as exc:
         logger.exception("Fact topic generation failed: %s", exc)
         send_message(STORIES_CHAT_ID, f"⚠️ Long video topic generation failed: {exc}", channel_id="stories")
