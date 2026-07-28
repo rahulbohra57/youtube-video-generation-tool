@@ -1,8 +1,8 @@
 name: Tell Me Why Run
 
 on:
-  schedule:
-    - cron: "30 21,1,5,9,13,17 * * *"  # 3:00am, 7:00am, 11:00am, 3:00pm, 7:00pm, 11:00pm IST (offset from news: 2am/8am/2pm/8pm)
+  # schedule disabled — Tell Me Why posting paused (2026-07-28)
+  # - cron: "30 21,1,5,9,13,17 * * *"  # 3:00am, 7:00am, 11:00am, 3:00pm, 7:00pm, 11:00pm IST (offset from news: 2am/8am/2pm/8pm)
   workflow_dispatch:
 
 permissions:
