@@ -1,8 +1,8 @@
 name: Update Analytics
 
 on:
-  schedule:
-    - cron: "30 16 * * *"  # 10:00pm IST
+  # schedule disabled — was failing all jobs (2026-08-27)
+  # - cron: "30 16 * * *"  # 10:00pm IST
   workflow_dispatch:
 
 jobs:
